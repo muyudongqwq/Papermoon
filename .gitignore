@@ -1,0 +1,24 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local editing projects, manual runs and generated acceptance reports
+/userdata/
+/test_examples/results/
+
+# Personal notes are outside the current source upload
+/todo/
+
+# Build output and local configuration
+/build/
+/dist/
+*.log
+.env
+.env.*
+!.env.example

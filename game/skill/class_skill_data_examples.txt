@@ -1,0 +1,213 @@
+Papermoon 职介技能数据示例
+===========================
+
+本文件保留三种具有代表性的职介技能写法：
+
+1. 对魔力：单一被动数值Modifier。
+2. 单独行动：事件触发后同时施加两个Modifier。
+3. 狂化：一个被动组件同时施加多个属性修正和status。
+
+这些示例采用effect验证器接受的标准格式。实际数据位于
+skill/class_skill_data.py。
+
+
+一、Rank容器
+============
+
+职介技能仓库的外层结构固定为：
+
+{
+    "技能名": {
+        "C": [component, ...],
+        "B": [component, ...],
+        "A": [component, ...],
+    }
+}
+
+每个非空Rank至少包含一个component。同一Rank内的component_id不能重复。
+
+
+二、对魔力：单一被动数值Modifier
+================================
+
+{
+    "component_id": "passive_magic_resistance",
+    "type": "passive",
+    "target": "self",
+    "effects": [
+        {
+            "effect_type": "magic_resistance",
+            "effect_data": {
+                "value": 0.1
+            }
+        }
+    ]
+}
+
+说明：
+
+- passive组件会在职介技能装载时自动生效。
+- target="self"表示效果施加给技能持有者。
+- magic_resistance.value是对魔力比例增量。
+- C、B、A级目前分别填写0.1、0.2、0.3。
+- 未提供duration表示永久持续。
+
+
+三、单独行动：触发型复合Modifier
+================================
+
+以下为C级结构；B级将临时免除持续时间改为36，A级不提供duration，
+因此永久免除失去御主后的MP消耗。
+
+{
+    "component_id": "on_master_lost",
+    "type": "trigger",
+    "trigger_event": "master_lost",
+    "target": "self",
+    "condition": {
+        "value": "master_is_none"
+    },
+    "effects": [
+        {
+            "modifier_id": "independent_action_discount",
+            "effect_type": "cost_modifier",
+            "polarity": "buff",
+            "purifiable": false,
+            "stacking": {
+                "stack_group": "independent_action_discount",
+                "stack_scope": "same_source",
+                "stacking_rule": "refresh"
+            },
+            "effect_data": {
+                "resource": "mp",
+                "cost_id": "masterless_upkeep",
+                "calculation": "multiplier",
+                "value": 0.5
+            }
+        },
+        {
+            "modifier_id": "independent_action_free_upkeep",
+            "effect_type": "cost_modifier",
+            "polarity": "buff",
+            "purifiable": false,
+            "duration": 12,
+            "duration_timing": "masterless_upkeep_end",
+            "stacking": {
+                "stack_group": "independent_action_free_upkeep",
+                "stack_scope": "same_source",
+                "stacking_rule": "refresh",
+                "duration_refresh_rule": "reset"
+            },
+            "effect_data": {
+                "resource": "mp",
+                "cost_id": "masterless_upkeep",
+                "calculation": "override",
+                "value": 0
+            }
+        }
+    ]
+}
+
+说明：
+
+- trigger_event="master_lost"表示只在失去御主事件发生时结算。
+- condition再次确认角色当前确实没有御主。
+- 第一个cost_modifier永久把90MP消耗乘以0.5，即降为45MP。
+- 第二个cost_modifier在12次masterless_upkeep_end前将消耗覆盖为0。
+- 再次失去御主时，refresh与reset会重置持续时间。
+- duration等生命周期字段必须写在effect顶层，不能写进effect_data。
+
+
+四、狂化：多属性与多status的被动组件
+=====================================
+
+以下为A级结构：
+
+{
+    "component_id": "passive_mad_enhancement",
+    "type": "passive",
+    "target": "self",
+    "effects": [
+        {
+            "effect_type": "attribute_bonus",
+            "effect_data": {
+                "effect_target": "strength",
+                "value": 1
+            }
+        },
+        {
+            "effect_type": "attribute_bonus",
+            "effect_data": {
+                "effect_target": "flexibility",
+                "value": 1
+            }
+        },
+        {
+            "effect_type": "attribute_bonus",
+            "effect_data": {
+                "effect_target": "endurance",
+                "value": 1
+            }
+        },
+        {
+            "effect_type": "attribute_bonus",
+            "effect_data": {
+                "effect_target": "magic",
+                "value": 1
+            }
+        },
+        {
+            "effect_type": "attribute_bonus",
+            "effect_data": {
+                "effect_target": "fortune",
+                "value": 1
+            }
+        },
+        {
+            "effect_type": "add_status",
+            "polarity": "debuff",
+            "purifiable": false,
+            "effect_data": {
+                "value": "cannot_investigate"
+            }
+        },
+        {
+            "effect_type": "add_status",
+            "polarity": "debuff",
+            "purifiable": false,
+            "effect_data": {
+                "value": "cannot_escape"
+            }
+        },
+        {
+            "effect_type": "add_status",
+            "polarity": "debuff",
+            "purifiable": false,
+            "effect_data": {
+                "value": "random_defense"
+            }
+        }
+    ]
+}
+
+说明：
+
+- 一个component可以依次结算任意数量的effects。
+- attribute_bonus修改AttributeRank，并同步对应派生数值。
+- 狂化产生的限制属于不可净化debuff，因此明确填写purifiable=false。
+- C级只强化筋力、敏捷、耐久，并禁止调查。
+- B级强化五项属性，并禁止调查和撤退。
+- A级在B级基础上增加random_defense。
+
+
+五、三种结构的用途
+==================
+
+对魔力模板
+    用于永久、单一、无条件的数值被动技能。
+
+单独行动模板
+    用于事件发生后施加多个具有独立持续时间和叠加规则的效果。
+
+狂化模板
+    用于一个被动来源同时产生多项数值变化和多个状态标签。

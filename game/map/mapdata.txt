@@ -1,0 +1,13 @@
+#要引入地图请使用txt格式
+#格式：
+#[location]
+#name:
+#high_level:（True/False，是否具有高层）
+#connect:（相邻地点）
+
+#example
+[location]
+name: MareOrigo宫殿
+high_level: False
+connect: 混沌之海，SE.RA.PH
+

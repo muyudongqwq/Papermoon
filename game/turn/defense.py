@@ -1,0 +1,747 @@
+"""Defense selection and resolution for dodge, block, and offset."""
+
+import math
+import random
+from dataclasses import dataclass
+from itertools import chain
+
+from game.action.action import Action
+from game.skill.casting import (
+    component_casting_requirement,
+    get_base_casting_mp_cost,
+    get_casting_config,
+)
+from game.skill.skill_runtime import (
+    SkillUnavailableError,
+    _SKILL_APPLICATION_SEQUENCE,
+    _available_resource,
+    _collect_component_costs,
+    _pay_component_costs,
+    _resolved_cost,
+    apply_skill_effect,
+    build_attack_profile_from_effect,
+    iter_character_skills,
+    select_skill_choices,
+)
+from game.turn.damage import DamageEvent, DamageResolver, report_discarded_attacks
+from game.turn.roll import RollResolver
+from game.action.action_rules import condition_matches
+from game.skill.component_runtime import component_runtime_reasons, record_component_use
+
+
+@dataclass
+class OffsetAttackOption:
+    option_id: str
+    name: str
+    resolution_channel: str
+    kind: str
+    skill: object = None
+    component: dict = None
+
+
+@dataclass
+class OffsetAttempt:
+    """One targetless attack used to reduce one incoming attack."""
+
+    defender: object
+    incoming_attack: object
+    attack_profiles: list
+    roll_result: object
+    success: bool
+    reduction: int
+    incoming_damage_before_offset: int = 0
+    incoming_damage_after_offset: int = 0
+    remaining_hit_segments: int = 0
+
+    @property
+    def total_power(self):
+        return sum(profile.offset_power for profile in self.attack_profiles)
+
+
+def _all_component_effects(component):
+    yield from component.get("effects", [])
+    for option in component.get("choices", {}).get("options", []):
+        yield from option.get("effects", [])
+
+
+def attack_effect_is_targetless(effect):
+    if effect.get("effect_type") != "create_attack_event":
+        return False
+    data = effect.get("effect_data", {})
+    return data.get("value_source") != "target_attribute"
+
+
+def component_has_offset_attack(component):
+    return any(
+        attack_effect_is_targetless(effect)
+        for effect in _all_component_effects(component)
+    )
+
+
+def component_resolution_channel(skill, component):
+    explicit = component.get("resolution_channel")
+    if explicit is not None:
+        return explicit
+    if (
+        getattr(skill, "source_type", None) in {"magic", "noble_phantasm"}
+        or get_casting_config(skill)
+    ):
+        return "release"
+    return "attack"
+
+
+def _casting_component_ready(character, skill, component):
+    requirement = component_casting_requirement(component)
+    if requirement == 0:
+        return True
+    state = getattr(character, "casting_state", None)
+    return bool(
+        state is not None
+        and state.skill is skill
+        and state.layers >= requirement
+    )
+
+
+def _offset_component_available(character, skill, component, turn_number=None):
+    return (
+        skill.is_component_active(component["component_id"])
+        and not component_runtime_reasons(character, skill, component, turn_number=turn_number)
+        and condition_matches(component.get("condition"), character, {
+            "phase": "offset", "battle": character.current_battle,
+            "turn_number": character.current_global_turn if turn_number is None else turn_number,
+        })
+    )
+
+
+def _prospective_refund(character, skill):
+    state = getattr(character, "casting_state", None)
+    if state is None or state.skill is skill:
+        return 0
+    # Refunds return to their original payer. A dead or former master does
+    # not fund the replacement action, and ordinary MP cannot exceed mpmax.
+    accessible = {character}
+    master = getattr(character, "master", None)
+    if master is not None and master.is_alive():
+        accessible.add(master)
+    refunds = {}
+    for payment in state.payment_ledger:
+        payer = payment["payer"]
+        if payer not in accessible:
+            continue
+        key = (payer, payment.get("pool", "mp"))
+        refunds[key] = refunds.get(key, 0) + payment.get("amount", 0)
+    return sum(amount if pool == "temporary_mp" else min(amount, max(0, payer.mpmax - payer.mp))
+               for (payer, pool), amount in refunds.items())
+
+
+def _component_base_costs(character, skill, component):
+    costs = [
+        cost
+        for cost in component.get("cost", [])
+        if cost.get("resource") != "attack_phase_count"
+    ]
+    if component_resolution_channel(skill, component) != "release":
+        return costs
+    state = getattr(character, "casting_state", None)
+    prepaid = state is not None and state.skill is skill
+    if not prepaid:
+        costs.append({
+            "resource": "mp",
+            "value": get_base_casting_mp_cost(skill),
+            "cost_id": get_casting_config(skill).get(
+                "cost_id",
+                f"casting:{skill.skill_id}",
+            ),
+        })
+    return costs
+
+
+def _can_pay_costs(character, costs, skill, *, prospective_mp=0):
+    totals = {}
+    for cost in costs:
+        value = _resolved_cost(character, cost, skill)
+        resource = cost["resource"]
+        totals[resource] = totals.get(resource, 0) + value
+    for resource, required in totals.items():
+        available = _available_resource(character, resource)
+        if available is None:
+            return False
+        if resource == "mp":
+            available += prospective_mp
+        if available < required:
+            return False
+    return True
+
+
+def get_offset_attack_options(character, incoming_attack):
+    channel = incoming_attack.resolution_channel
+    options = []
+    allows_action = getattr(character, "allows_action", None)
+    if allows_action is not None and not allows_action("offset"):
+        return options
+    normal_attack_allowed = (
+        allows_action is None or allows_action("attack")
+    )
+    if channel == "attack" and normal_attack_allowed:
+        options.append(OffsetAttackOption(
+            option_id="normal_attack",
+            name="普通攻击",
+            resolution_channel="attack",
+            kind="normal_attack",
+        ))
+
+    for skill in iter_character_skills(character):
+        for component in skill.definitions:
+            if component.get("type") != "active":
+                continue
+            if not _offset_component_available(character, skill, component):
+                continue
+            action_id = f"skill:{skill.skill_id}:{component['component_id']}"
+            if allows_action is not None and not allows_action(
+                action_id,
+                skill_action=True,
+            ):
+                continue
+            if component_resolution_channel(skill, component) != channel:
+                continue
+            if not component_has_offset_attack(component):
+                continue
+            if channel == "attack" and "attack_phase" not in component.get(
+                "available_phases",
+                [],
+            ):
+                continue
+            if channel == "release" and not _casting_component_ready(
+                character,
+                skill,
+                component,
+            ):
+                continue
+            try:
+                costs = _component_base_costs(character, skill, component)
+            except (TypeError, ValueError):
+                continue
+            if not _can_pay_costs(
+                character,
+                costs,
+                skill,
+                prospective_mp=_prospective_refund(character, skill),
+            ):
+                continue
+            component_name = component.get("name")
+            name = (
+                f"{skill.name}：{component_name}"
+                if component_name
+                else skill.name
+            )
+            options.append(OffsetAttackOption(
+                option_id=action_id,
+                name=name,
+                resolution_channel=channel,
+                kind="skill",
+                skill=skill,
+                component=component,
+            ))
+    return options
+
+
+def _selected_effects(component, selected):
+    return list(chain(
+        component.get("effects", []),
+        *(option.get("effects", []) for option in selected),
+    ))
+
+
+def _effect_target_for_offset(effect, component, actor):
+    selector = effect.get("effect_target")
+    if selector == "self":
+        return actor
+    if selector == "attack_target":
+        return None
+    if component.get("target", "self") in {"self", "none"}:
+        return actor
+    return None
+
+
+def resolve_offset_attack_option(
+    character,
+    option,
+    decision_provider=None,
+    *,
+    turn_number=None,
+):
+    if turn_number is None:
+        turn_number = character.current_global_turn
+    if option.kind == "normal_attack":
+        profile = Action(character, "attack").build_attack_profile(
+            decision_provider,
+            for_offset=True,
+        )
+        if getattr(character, "casting_state", None) is not None:
+            character.interrupt_casting(reason="other_action:offset")
+        return {
+            "option": option,
+            "profiles": [profile],
+            "paid_costs": {},
+            "effect_results": [],
+        }
+
+    skill = option.skill
+    component = option.component
+    if (skill not in iter_character_skills(character)
+            or not _offset_component_available(character, skill, component, turn_number)
+            or not _casting_component_ready(character, skill, component)):
+        raise SkillUnavailableError("抵消组件已移除、次数耗尽、冷却中或条件不满足")
+    selected = select_skill_choices(
+        component,
+        character,
+        character,
+        decision_provider=decision_provider,
+        phase="抵消攻击效果选择",
+    )
+    effects = _selected_effects(component, selected)
+    attack_effects = [
+        effect for effect in effects if attack_effect_is_targetless(effect)
+    ]
+    if not attack_effects:
+        raise SkillUnavailableError("该行动没有可用于抵消的无目标攻击")
+
+    costs = _collect_component_costs(component, selected)
+    costs = [
+        cost
+        for cost in costs
+        if cost.get("resource") != "attack_phase_count"
+    ]
+    state = getattr(character, "casting_state", None)
+    casting_prepaid = bool(state is not None and state.skill is skill)
+    if option.resolution_channel == "release" and not casting_prepaid:
+        costs.append({
+            "resource": "mp",
+            "value": get_base_casting_mp_cost(skill),
+            "cost_id": get_casting_config(skill).get(
+                "cost_id",
+                f"casting:{skill.skill_id}",
+            ),
+        })
+
+    switching_cast = state is not None and state.skill is not skill
+    if not _can_pay_costs(
+        character,
+        costs,
+        skill,
+        prospective_mp=(
+            _prospective_refund(character, skill) if switching_cast else 0
+        ),
+    ):
+        raise SkillUnavailableError("抵消攻击的资源不足")
+    if switching_cast:
+        character.interrupt_casting(reason="other_action:offset")
+
+    paid = _pay_component_costs(character, costs, skill)
+    command_spell_bonus = character.consume_command_spell_damage()
+    profiles = []
+    for index, effect in enumerate(attack_effects):
+        profiles.append(build_attack_profile_from_effect(
+            effect,
+            skill,
+            actor=character,
+            decision_provider=decision_provider,
+            phase="offset",
+            action_id=option.option_id,
+            for_offset=True,
+            command_spell_damage_bonus=(
+                command_spell_bonus if index == 0 else 0
+            ),
+            command_spell_bonus_effect_id=id(effect),
+            resolution_channel=option.resolution_channel,
+        ))
+
+    effect_results = []
+    application_id = next(_SKILL_APPLICATION_SEQUENCE)
+    for effect in effects:
+        if effect.get("effect_type") == "create_attack_event":
+            continue
+        target = _effect_target_for_offset(effect, component, character)
+        if target is None:
+            effect_results.append({"effect": effect, "skipped": True})
+            continue
+        effect_results.append(apply_skill_effect(
+            effect,
+            target,
+            skill,
+            actor=character,
+            decision_provider=decision_provider,
+            turn_number=turn_number,
+            phase="offset",
+            paid_costs=paid,
+            actual_mp_cost=paid.get("mp", 0),
+            skill_application_id=application_id,
+            skill_component_id=component.get("component_id"),
+        ))
+
+    record_component_use(character, skill, component, turn_number=turn_number,
+                         battle=character.current_battle)
+    if casting_prepaid:
+        state.finish_release()
+    from game.rule_report import report_skill_use
+    report_skill_use(character, skill, component, [character], paid=paid, phase="offset")
+    return {
+        "option": option,
+        "profiles": profiles,
+        "paid_costs": paid,
+        "effect_results": effect_results,
+        "selected_choices": selected,
+    }
+
+
+class DefenseResolver:
+    VALID_DEFENSE_TYPES = {"dodge", "block", "offset"}
+
+    def resolve_phase(
+        self,
+        defender,
+        defense_type=None,
+        attacks=None,
+        decision_provider=None,
+    ):
+        attacks = (
+            defender.pending_attacks.copy()
+            if attacks is None
+            else list(attacks)
+        )
+        if (
+            not isinstance(defense_type, OffsetAttempt)
+            and defense_type not in self.VALID_DEFENSE_TYPES
+        ):
+            raise ValueError(f"未知的防御指令：{defense_type}")
+
+        attack_count = len(attacks)
+        hit_count = 0
+        total_damage = 0
+        for attack in attacks:
+            if not defender.is_alive():
+                break
+            result = self.resolve_attack(
+                defender,
+                attack,
+                defense_type,
+                decision_provider,
+            )
+            if result["hit"]:
+                hit_count += 1
+            total_damage += result["damage"]
+
+        defender.last_defense_attack_count = attack_count
+        defender.last_defense_hit_count = hit_count
+        defender.last_defense_total_damage = total_damage
+        for attack in attacks:
+            if attack in defender.pending_attacks:
+                report_discarded_attacks([attack], "defense_ended_without_resolution")
+                defender.pending_attacks.remove(attack)
+        defense_name = (
+            "offset"
+            if isinstance(defense_type, OffsetAttempt)
+            else defense_type
+        )
+        defense_contexts = [
+            {
+                "actor": defender,
+                "source": attack,
+                "target": attack.source,
+                "action_id": defense_name,
+                "skill_id": attack.skill_id,
+                "damage_type": attack.damage_type,
+                "tags": set(attack.source_tags)
+                | {"defense", defense_name},
+                "event": attack,
+            }
+            for attack in attacks
+        ]
+        defender.modifier_manager.consume_event(
+            "defense_committed",
+            defense_contexts,
+        )
+        return {
+            "attack_count": attack_count,
+            "hit_count": hit_count,
+            "total_damage": total_damage,
+        }
+
+    def resolve_attack(
+        self,
+        defender,
+        attack,
+        defense_type=None,
+        decision_provider=None,
+    ):
+        attack.defense_roll_started = True
+        attack.defense_type = "offset" if isinstance(defense_type, OffsetAttempt) else defense_type
+        if isinstance(defense_type, OffsetAttempt):
+            return self.resolve_offset_attempt(
+                defender,
+                attack,
+                defense_type,
+                decision_provider,
+            )
+        if defense_type == "dodge":
+            return self.resolve_dodge(defender, attack, decision_provider)
+        if defense_type == "block":
+            return self.resolve_block(defender, attack, decision_provider)
+        if defense_type == "offset":
+            return self.resolve_legacy_offset(
+                defender,
+                attack,
+                decision_provider,
+            )
+        raise ValueError(f"未知的防御指令：{defense_type}")
+
+    def resolve_offset_attempt(
+        self,
+        defender,
+        attack,
+        attempt,
+        decision_provider=None,
+    ):
+        if attempt.defender is not defender or attempt.incoming_attack is not attack:
+            raise ValueError("抵消记录与当前攻击不匹配")
+        attack.offset_attempt = attempt
+        damage_before_offset = self.preview_damage(defender, attack)
+        final_damage = self.preview_damage(
+            defender,
+            attack,
+            flat_modifiers=[-attempt.reduction],
+        )
+        attempt.incoming_damage_before_offset = damage_before_offset
+        attempt.incoming_damage_after_offset = final_damage
+        if final_damage <= 0 or damage_before_offset <= 0:
+            remaining_segments = 0
+        else:
+            per_segment_damage = (
+                damage_before_offset / max(1, attack.original_hit_segments)
+            )
+            remaining_segments = min(
+                attack.original_hit_segments,
+                math.ceil(final_damage / per_segment_damage),
+            )
+        attempt.remaining_hit_segments = remaining_segments
+        attack.final_hit_segments = remaining_segments
+        if final_damage <= 0:
+            return self.finish_attack(
+                defender,
+                attack,
+                hit=bool(getattr(attack, "counts_offset_as_hit", False)),
+                damage=0,
+                decision_provider=decision_provider,
+            )
+        return self.finish_attack(
+            defender,
+            attack,
+            hit=True,
+            flat_modifiers=[-attempt.reduction],
+            decision_provider=decision_provider,
+        )
+
+    def roll_defense(self, defender, defense_stat, decision_provider=None):
+        result = RollResolver().roll(
+            defender,
+            defense_stat,
+            decision_provider=decision_provider,
+            phase="防御—幸运",
+            initial_die=random.randint(1, 10),
+            roller=lambda: random.randint(1, 10),
+        )
+        defender.last_defense_roll_result = result
+        return result.die, result.total
+
+    def resolve_dodge(self, defender, attack, decision_provider=None):
+        dice, defense_roll = self.roll_defense(
+            defender,
+            "dodge",
+            decision_provider,
+        )
+        success = defense_roll >= attack.attack_roll
+        print(f"闪避骰 1d10 = {dice}")
+        if success:
+            return self.finish_attack(
+                defender,
+                attack,
+                hit=False,
+                damage=0,
+                decision_provider=decision_provider,
+            )
+        return self.finish_attack(
+            defender,
+            attack,
+            hit=True,
+            damage=attack.value,
+            decision_provider=decision_provider,
+        )
+
+    def resolve_block(self, defender, attack, decision_provider=None):
+        dice, defense_roll = self.roll_defense(
+            defender,
+            "block",
+            decision_provider,
+        )
+        success = defense_roll >= attack.attack_roll
+        print(f"格挡骰 1d10= {dice}")
+        if not success and not defender.has_status("retain_attack_phase_on_failed_defense"):
+            defender.attack_phase_count = 0
+        return self.finish_attack(
+            defender,
+            attack,
+            hit=True,
+            percentage_modifiers=([] if getattr(attack, "ignore_block", False)
+                                  else [-defender.block_resistance]),
+            decision_provider=decision_provider,
+        )
+
+    def resolve_legacy_offset(self, defender, attack, decision_provider=None):
+        """Compatibility path for callers which still pass the string offset."""
+        if defender.attack_phase_count <= 0:
+            print(f"{defender.name}没有可用的攻击阶段")
+            return self.finish_attack(
+                defender,
+                attack,
+                hit=True,
+                damage=attack.value,
+                decision_provider=decision_provider,
+            )
+        dice, defense_roll = self.roll_defense(
+            defender,
+            "offset",
+            decision_provider,
+        )
+        success = defense_roll >= attack.attack_roll
+        offset_damage = defender.atk
+        defender.attack_phase_count -= 1
+        print(f"抵消骰 1d10 ={dice}")
+        if success:
+            final_damage = self.preview_damage(
+                defender,
+                attack,
+                flat_modifiers=[-offset_damage],
+            )
+            if final_damage <= 0:
+                return self.finish_attack(
+                    defender,
+                    attack,
+                    hit=bool(getattr(attack, "counts_offset_as_hit", False)),
+                    damage=0,
+                    decision_provider=decision_provider,
+                )
+            return self.finish_attack(
+                defender,
+                attack,
+                hit=True,
+                flat_modifiers=[-offset_damage],
+                decision_provider=decision_provider,
+            )
+        actual_reduction = min(offset_damage, attack.value * 0.5)
+        return self.finish_attack(
+            defender,
+            attack,
+            hit=True,
+            flat_modifiers=[-actual_reduction],
+            decision_provider=decision_provider,
+        )
+
+    def create_damage_event(
+        self,
+        defender,
+        attack,
+        damage=None,
+        percentage_modifiers=None,
+        flat_modifiers=None,
+    ):
+        is_true_damage = attack.damage_type == "true_damage"
+        return DamageEvent(
+            source=attack.source,
+            target=defender,
+            value=attack.value if damage is None else damage,
+            damage_type=attack.damage_type,
+            skill=attack.skill,
+            percentage_modifiers=(
+                list(attack.percentage_modifiers)
+                + ([] if is_true_damage else list(percentage_modifiers or []))
+            ),
+            flat_modifiers=(
+                list(attack.flat_modifiers)
+                + ([] if is_true_damage else list(flat_modifiers or []))
+            ),
+            action_id=attack.action_id,
+            skill_id=attack.skill_id,
+            source_tags=attack.source_tags,
+            ignore_shield=attack.ignore_shield,
+            source_statuses_snapshotted=True,
+            attack_id=attack.attack_id,
+        )
+
+    def preview_damage(
+        self,
+        defender,
+        attack,
+        damage=None,
+        percentage_modifiers=None,
+        flat_modifiers=None,
+    ):
+        event = self.create_damage_event(
+            defender,
+            attack,
+            damage=damage,
+            percentage_modifiers=percentage_modifiers,
+            flat_modifiers=flat_modifiers,
+        )
+        return DamageResolver().calculate(event)
+
+    def finish_attack(
+        self,
+        defender,
+        attack,
+        hit,
+        damage=None,
+        percentage_modifiers=None,
+        flat_modifiers=None,
+        decision_provider=None,
+    ):
+        attack.hit = hit
+        attack.resolved = True
+        if not hit:
+            attack.final_damage = 0
+            attack.final_hit_segments = 0
+            print("未命中")
+            self.consume_attack_resolved(defender, attack)
+            return {"hit": False, "damage": 0}
+
+        if getattr(attack, "defer_damage", False):
+            # Trap-like attacks finish every defense first, then calculate one
+            # shared damage pool from the final hit list.
+            attack.final_damage = 0
+            self.consume_attack_resolved(defender, attack)
+            return {"hit": True, "damage": 0}
+
+        damage_event = self.create_damage_event(
+            defender,
+            attack,
+            damage=damage,
+            percentage_modifiers=percentage_modifiers,
+            flat_modifiers=flat_modifiers,
+        )
+        was_in_brink = defender.has_status("brink_of_death")
+        final_damage = DamageResolver().resolve(
+            damage_event,
+            decision_provider=decision_provider,
+        )
+        attack.final_damage = final_damage
+        for shield, absorbed in damage_event.shield_absorptions:
+            print(f"{defender.name}的{shield.name}吸收了{absorbed}点伤害。")
+        print(f"{attack.source.name}对{defender.name}造成了{final_damage}点HP伤害")
+        if not was_in_brink and defender.has_status("brink_of_death"):
+            print(f"{defender.name}进入了濒死状态。")
+        self.consume_attack_resolved(defender, attack)
+        return {"hit": True, "damage": final_damage}
+
+    @staticmethod
+    def consume_attack_resolved(defender, attack):
+        attack.target = defender
+        attack.consume_resolution_modifiers()
