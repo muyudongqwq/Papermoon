@@ -33,9 +33,9 @@ class CorePackagingTests(unittest.TestCase):
 
     def test_facade_reexports_same_rule_objects(self):
         from core import GameLoop, GameManager, GameSession
-        from game.game_loop import GameLoop as OriginalLoop
-        from game.game_manager import GameManager as OriginalManager
-        from game.game_session import GameSession as OriginalSession
+        from game.game.game_loop import GameLoop as OriginalLoop
+        from game.game.game_manager import GameManager as OriginalManager
+        from game.game.game_session import GameSession as OriginalSession
         self.assertIs(GameLoop, OriginalLoop)
         self.assertIs(GameManager, OriginalManager)
         self.assertIs(GameSession, OriginalSession)

@@ -711,7 +711,7 @@ class Character:
             raise ValueError("临时MP必须大于0")
         self.temporary_mp += amount
         self.temporary_mp_waits_for_personal_turn_end = bool(self.in_battle)
-        from game.rule_report import report_mp_pool_change
+        from game.game.rule_report import report_mp_pool_change
         report_mp_pool_change(self, "temporary_mp", self.temporary_mp - amount,
                               self.temporary_mp, operation="add", reason="grant_temporary_mp")
         return self.temporary_mp
@@ -720,7 +720,7 @@ class Character:
         removed = self.temporary_mp
         self.temporary_mp = 0
         self.temporary_mp_waits_for_personal_turn_end = False
-        from game.rule_report import report_mp_pool_change
+        from game.game.rule_report import report_mp_pool_change
         report_mp_pool_change(self, "temporary_mp", removed, 0,
                               operation="set", reason="clear_temporary_mp")
         return removed
@@ -943,7 +943,7 @@ class Character:
             requested = payment["amount"]
             if payment.get("pool") == "temporary_mp":
                 payer.temporary_mp += requested
-                from game.rule_report import report_mp_pool_change
+                from game.game.rule_report import report_mp_pool_change
                 report_mp_pool_change(payer, "temporary_mp", payer.temporary_mp - requested,
                                       payer.temporary_mp, operation="add", reason="refund")
                 refunded = requested
@@ -1079,10 +1079,11 @@ class Character:
         self.movement_lock_layer = None
         self.movement_lock_source = None
 
-    def update_modifiers(self, timing="global_turn_end", turn_number=None):
+    def update_modifiers(self, timing="global_turn_end", turn_number=None, duration_snapshot=None):
         result = self.modifier_manager.update(
             timing,
             turn_number=turn_number,
+            duration_snapshot=duration_snapshot,
         )
         if timing == "global_turn_end":
             self.clear_battle_plus_effects()
@@ -1360,7 +1361,7 @@ class Character:
         return True
 #存活检定
     def get_base_attitude(self, character):
-        from game.relationship import Attitude
+        from game.game.relationship import Attitude
 
         # A familiar mirrors its summoner's outward base attitude.  The other
         # character's attitude toward the familiar remains independent.
@@ -1373,7 +1374,7 @@ class Character:
         return self.attitudes.get(character, Attitude.NEUTRAL)
 
     def set_base_attitude(self, character, attitude):
-        from game.relationship import normalize_attitude
+        from game.game.relationship import normalize_attitude
 
         if character is self:
             raise ValueError("不能设置角色对自身的态度")
@@ -1382,7 +1383,7 @@ class Character:
         return attitude
 
     def ensure_friendly_base(self, character):
-        from game.relationship import Attitude
+        from game.game.relationship import Attitude
 
         if self.get_base_attitude(character) is not Attitude.FRIENDLY:
             self.set_base_attitude(character, Attitude.FRIENDLY)
@@ -1404,7 +1405,7 @@ class Character:
         return bool(self.ally_sources.get(character))
 
     def is_friendly_with(self, character):
-        from game.relationship import Attitude
+        from game.game.relationship import Attitude
 
         return (
             self.is_ally(character)
@@ -1412,7 +1413,7 @@ class Character:
         )
 
     def is_hostile_to(self, character):
-        from game.relationship import Attitude
+        from game.game.relationship import Attitude
 
         return self.get_base_attitude(character) is Attitude.HOSTILE
 
@@ -1516,6 +1517,7 @@ class Character:
 
     def enter_brink(self):
         brink_effect = {
+            "duration": 1,
             "modifier_id": "brink_of_death",
             "effect_type":"add_status",
             "polarity": "neutral",
@@ -1527,11 +1529,11 @@ class Character:
                 "max_stacks": 1,
             },
             "effect_data":{
-                "value":"brink_of_death",
-                "duration": 1
+                "status_id":"brink_of_death"
             }
         }
         weakness_effect = {
+            "duration": 4,
             "modifier_id": "weakness",
             "effect_type":"add_status",
             "polarity": "debuff",
@@ -1543,8 +1545,7 @@ class Character:
                 "max_stacks": 1,
             },
             "effect_data":{
-                "value":"weakness",
-                "duration":4
+                "status_id":"weakness"
             }
         }
         brink_modifier = create_modifier(

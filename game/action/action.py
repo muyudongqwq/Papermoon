@@ -501,6 +501,7 @@ class Action:
             return False
 
         effect = {
+            "duration": 2,
             "modifier_id": "stay",
             "effect_type": "add_status",
             "stacking": {
@@ -511,8 +512,7 @@ class Action:
                 "duration_refresh_rule": "reset",
             },
             "effect_data":{
-                "value": "stay",
-                "duration": 2
+                "status_id": "stay"
             }
         }
         modifier = create_modifier(

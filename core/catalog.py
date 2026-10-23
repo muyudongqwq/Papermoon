@@ -5,6 +5,7 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 from threading import RLock
 
@@ -13,11 +14,15 @@ from game.character.card_factory import validate_character_card_catalog
 from game.skill.content_registry import CONTENT_CATALOGS, validate_content_catalogs
 from game.skill.class_skill_data import CLASS_SKILL_DATA
 from game.rank.rank import SkillRank
+from game.status.data import STATUS_DATA
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CATALOG = ROOT / "userdata" / "catalog.json"
-CATEGORIES = ("personal_skill", "class_skill", "basic_magic", "noble_phantasm", "character_card")
-LIVE_CATALOGS = {**CONTENT_CATALOGS, "character_card": CHARACTER_CARD_DATA}
+# Bundled resources live in PyInstaller's extraction directory; user files must
+# survive process exit and remain shared with the source-based editor and Core.
+DATA_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else ROOT
+DEFAULT_CATALOG = DATA_ROOT / "userdata" / "catalog.json"
+CATEGORIES = ("personal_skill", "class_skill", "basic_magic", "noble_phantasm", "status", "character_card")
+LIVE_CATALOGS = {**CONTENT_CATALOGS, "status": STATUS_DATA, "character_card": CHARACTER_CARD_DATA}
 BUILTINS = deepcopy(LIVE_CATALOGS)
 BUILTINS["class_skill"] = {name: {"name": name, "ranks": deepcopy(ranks)}
                            for name, ranks in CLASS_SKILL_DATA.items()}
@@ -25,7 +30,7 @@ _CATALOG_LOCK = RLock()
 
 
 def empty_project():
-    return {"format_version": 1, **{category: {} for category in CATEGORIES}}
+    return {"format_version": 2, **{category: {} for category in CATEGORIES}}
 
 
 def _unique_object(pairs):
@@ -72,10 +77,6 @@ class CatalogProject:
         self.path = Path(path).resolve()
         self._saved_bytes = self.path.read_bytes() if self.path.exists() else None
         self.data = empty_project() if self._saved_bytes is None else parse_json(self._saved_bytes.decode("utf-8-sig"))
-        # Version 1 originally contained four directories. Upgrade in memory
-        # only; the user's file and backup stay untouched until an explicit save.
-        if isinstance(self.data, dict) and set(self.data) == {"format_version", *(set(CATEGORIES) - {"class_skill"})}:
-            self.data["class_skill"] = {}
         self.validate()
 
     def effective(self):
@@ -85,9 +86,9 @@ class CatalogProject:
     def validate(self):
         data = self.data
         if not isinstance(data, dict) or set(data) != {"format_version", *CATEGORIES}:
-            raise ValueError("项目必须包含format_version及五个内容目录")
-        if type(data["format_version"]) is not int or data["format_version"] != 1:
-            raise ValueError("不支持的项目格式版本")
+            raise ValueError("项目必须使用新格式：format_version=2及六个内容目录（含status）")
+        if type(data["format_version"]) is not int or data["format_version"] != 2:
+            raise ValueError("只支持format_version=2，不兼容旧项目格式")
         for category in CATEGORIES:
             if not isinstance(data[category], dict):
                 raise ValueError(f"{category}必须是目录对象")
@@ -108,7 +109,7 @@ class CatalogProject:
                         raise ValueError("职介技能必须至少定义一个非空等级")
                     continue
                 expected = key if category != "basic_magic" else f"basic_magic:{key}"
-                field = "card_id" if category == "character_card" else "skill_id"
+                field = "status_id" if category == "status" else "card_id" if category == "character_card" else "skill_id"
                 if definition.get(field) != expected:
                     raise ValueError(f"目录ID {key} 与 {field} 不一致，应为 {expected}")
         # Reject NaN and Python objects even for callers bypassing JSON input.

@@ -1,7 +1,7 @@
 import unittest
 
 from game.character.masters import Master
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.skill.event_runtime import GameEvent
 from game.turn.damage import DamageEvent, DamageResolver
@@ -86,7 +86,7 @@ class EventRuntimeTests(unittest.TestCase):
                 "effects": [{
                     "effect_type": "modify_event_value",
                     "effect_data": {
-                        "operation": "add",
+                        "calculation": "add",
                         "value": -10,
                         "minimum": 0,
                     },
@@ -191,7 +191,7 @@ class EventRuntimeTests(unittest.TestCase):
                 10,
                 {
                     "effect_type": "modify_event_value",
-                    "effect_data": {"operation": "multiply", "value": 0.5},
+                    "effect_data": {"calculation": "multiply", "value": 0.5},
                 },
             ),
             (

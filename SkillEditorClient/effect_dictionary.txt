@@ -1,19 +1,24 @@
 Papermoon Skill / Effect 数据规范
+数据版本：beta 0.1
+更新日期：2026-10-22
 =================================
 
-状态：运行时参考规范（严格effect验证器已接入）
+状态：运行时参考规范（存在严格的Effect验证器，不满足规范的Effect不会被接受）
 
-本文件只描述当前代码已经接受的数据，以及已经确认但尚未实现的关键词。
+本文件描述当前代码已经接受的数据，以及已经确认但尚未实现的关键词。
 实际运行入口以以下文件为准：
 
 - game/skill/skill_runtime.py
-- game/modifier/game.modifier.py
+- game/modifier/modifier.py
 - game/modifier/modifier_manager.py
 - game/skill/event_runtime.py
 - game/skill/field_runtime.py
 - game/skill/reality_marble_runtime.py
 - game/turn/damage.py
 - game/turn/damage_types.py
+- game/status/data.py
+- game/status/registry.py
+- game/status/runtime.py
 
 不要把组件、目标规则、效果和Modifier写在同一层：
 
@@ -22,13 +27,13 @@ Papermoon Skill / Effect 数据规范
 - Modifier：需要留在角色身上的持续结果。
 
 
-一、技能顶层结构
+1.  技能描述
 ================
 
-必填字段：
+1.1  必填字段：
 
 skill_id
-    角色技能集合内的稳定唯一ID。
+    角色技能集合内的稳定唯一ID，即内部表示的技能名。最好不要重复。
 
 name
     显示名称。
@@ -37,12 +42,14 @@ rank
     技能Rank。
 
 components
-    非空列表。一个技能可以包含多个主动、被动、触发或反应组件。
+    非空列表。一个技能可以复合多个主动、被动、触发或反应效果。
+    不同的效果以components 1, 2 ,3...列出
 
-常用可选字段：
+1.2  常用可选字段：
 
 skill_category
     技能分类，例如class_skill、personal_skill、basic_magic。
+    class_skill：职介技能。存在固定的职介技能表。如阵地作成，道具作成等效果需要自定义。
 
 negative_skill
     是否为负面技能，默认False。
@@ -55,13 +62,13 @@ casting
     魔术或宝具的咏唱数据。由skill/casting.py解释。
 
 
-二、component结构
+2  component结构
 =================
 
-必填字段：
+2.1  必填字段：
 
 component_id
-    同一技能内唯一。
+    技能内的效果名。同一技能内唯一。
 
 type
     active  主动选择发动。
@@ -72,7 +79,7 @@ type
 effects
     效果列表。使用choices时可以省略直接effects。
 
-主动组件常用字段：
+2.2  主动组件常用字段：
 
 available_phases
     可以发动的阶段列表。常用值：
@@ -82,8 +89,15 @@ available_phases
 
 resolution_timing
     效果产生的结算时机。常用值：
-    immediate、ap_checkpoint、defense_phase、battle_start、phase_start、
-    phase_end、character_turn_end、global_turn_end、battle_end。
+    immediate（立即结算）
+    ap_checkpoint（在每AP结束时结算）
+    defense_phase（防御阶段结算）
+    battle_start（战斗开始时结算）
+    phase_start（任意阶段开始时结算）
+    phase_end（任意阶段结束时结算）
+    character_turn_end（角色回合结束时结算）
+    global_turn_end（大回合结束时结算）
+    battle_end（战斗结束时结算）
 
 target
     目标类型，见“目标结构”。
@@ -106,46 +120,49 @@ inputs
     主动组件的可变整数输入列表。详见“可变输入结构”。
 
 usage_limit
-    active、trigger、react组件的使用次数限制；passive不接受：
-    {"scope": "global_turn" | "battle" | "game", "maximum": 1}
+    active、trigger、react组件的使用次数限制；passive不接受此参数：
+    例：
+    {"scope": "global_turn"（每回合） | "battle"（每场战斗） | "game"（每次游戏）, "maximum": 1（限制的次数）}
 
 cooldown
     active、trigger、react组件成功发动后的冷却：
     {"turns": 1, "unit": "global_turn"}
-    可选group。同一个Skill内具有相同group的组件共享冷却；切换技能组时，缓存的
-    Skill实例会保留该冷却状态。
+    可选group。同一个Skill内具有相同group的组件共享冷却；切换技能组时，缓存的Skill实例会保留该冷却状态。
 
-触发/反应组件常用字段：
+2.3  触发/反应组件常用字段：
 
 trigger_event
     旧式事件名字段。
 
 trigger
-    推荐结构：
+    结构例：
     {
         "event_type": "damage_received",
         "timing": "after",
         "priority": 0
     }
+    解释：受到伤害后触发，优先级最高。
 
 limit
     {
         "scope": "event" | "global_turn" | "until_triggered" |
                  "next_battle_start",
         "per_target": true,
-        "maximum": 1
+        "maximum": 1（这里决定能触发的次数）
     }
-    until_triggered跨越全局回合等待；组件成功结算一次后永久失效。
-    next_battle_start仅响应持有者下一次battle_joined；成功结算后永久失效。
-    玩家放弃react、条件不满足、资源不足或结算抛错均不会消耗生命周期。
-    这两个scope的maximum固定为1；per_target不改变“整个组件失效”的规则。
+    解释：这段代码用于限制自动触发类效果和反应类效果的触发次数和有效期。
+    event：同一个事件最多触发x次。
+    global_turn：每个大回合最多触发x次。
+    until_triggered永远等待；组件成功结算一次后永久失效，修改maximum不会改变此例。
+    next_battle_start仅响应持有者下一次battle_joined（进入战斗时）；成功结算后永久失效。修改maximum不会改变此例。
+    玩家放弃react、条件不满足、资源不足或结算抛错均不会消耗次数。
 
-
-三、choices结构
+3、choices结构
 ===============
+3.1
+choices用于一个效果包含多个可选效果的情况：
 
-choices用于一个组件包含多个可选分支的情况：
-
+代码例：
 {
     "maximum_selections": 1,
     "allow_duplicate": false,
@@ -164,16 +181,15 @@ choices用于一个组件包含多个可选分支的情况：
 
 - maximum_selections默认为1，必须为正整数。
 - 玩家可以选择1至maximum_selections项，不必选满。
-- allow_duplicate默认为False。
-- 所有可选效果都不可用时，组件不能发动。
+- allow_duplicate决定同一选项是否能反复选择，默认为false，即禁止重复选。
+- 所有可选效果都不可用时，技能不能发动。
 - 已支付的消耗不会因为后续某个效果失效而返还。
 
 
-三点五、可变输入结构
+3.2  可变输入数据
 ====================
-
-inputs允许用于active和react组件。react输入会在玩家确认发动反应后、支付消耗前
-收集，并可通过context来源读取当前事件数值。当前支持两种输入：
+3.2.1
+inputs允许用于active和react组件。react输入会在玩家确认发动反应后、支付消耗前收集，并可通过context来源读取当前事件数值。当前支持两种输入：
 
 integer
     普通整数。必须声明有限的maximum。
@@ -182,42 +198,92 @@ resource_amount
     资源投入量。必须声明resource；实际maximum会自动取“声明上限”和
     “当前可用资源量”中的较小值。MP使用包括御主代付在内的当前可用MP。
 
-示例输入定义：
-
+示例输入：
 {
     "input_id": "x",
     "input_type": "resource_amount",
     "resource": "mp",
     "minimum": 1,
-    "maximum": {
-        "source": "actor_attribute",
-        "attribute": "magic",
-        "multiplier": 10
-    },
+    "maximum": 30,
     "prompt": "请输入投入的MP。"
 }
 
-minimum和maximum可以直接写整数，也可以使用边界表达式。边界source为：
+    解释：
+    input_id，不用管。是后续消耗时调用的参数。相同技能效果内不能重复，可以为任何字符。
+    input_type：输入资源数量
+    resource：资源种类
+    minimum：至少输入的量
+    maximum：至多输入的量
+    minimum和maximum可以直接输入整数。
 
+3.2.2   可变输入进阶：
+minimum和maximum也可以使用表达式定义。示例代码如下：
+       "maximum":
+    {
+        "source": "actor_attribute",
+        "attribute": "magic",
+        "multiplier": 10
+    }
+解释：最大用量为发动者的魔力Rank*10。
+
+
+以下是可用的参数：
 - constant：读取value。
-- actor_attribute：读取attribute对应的当前有效属性值。
-- resource_current：读取resource的当前可用量。
-- resource_maximum：读取resource的上限。
-- resource_missing：读取resource距离上限的缺失量。
-- context：读取key指定的运行时上下文。
+格式：
+     "source": "constant"
+     "value": 输入一个整数
+用例：
+      "source": "constant",
+      "value": 30
+即最大用量为30。和直接输入整数没有区别。
 
-边界表达式均可追加multiplier和flat，按“原值 * multiplier + flat”计算；也可追加
-minimum和maximum进行截断。
+- actor_attribute：读取attribute对应的当前有效属性值。
+格式：
+      "source": "actor_attribute",
+      "attribute": "双引号内输入一个属性。筋力strength，敏捷flexibility，耐久endurance，魔力magic，幸运fortune"
+用例如上。
+
+- resource_current：读取resource的当前可用量。
+格式：
+      "source": "resource_current",
+      "resource": "在双引号内输入resource_id"
+用例：
+      "source": "resource_current",
+      "resource": "mp"
+
+- resource_maximum：读取resource的上限。
+格式同上。
+
+- resource_missing：读取resource距离上限的缺失量。
+格式同上。
+
+- context：读取key指定的运行时上下文。
+格式：
+      "
+
+边界表达式均可追加multiplier（乘）和flat（加减），按“原值 * multiplier + flat”计算；也可追加minimum和maximum强制限制上下限。
+格式，以actor_attribute为例：
+      "source": "actor_attribute",
+      "attribute": "magic",
+      "multiplier": "10",
+      "flat": "10",
+      "minimum": "30",
+      "maximum": "50",
+解释：读取技能使用者的魔力属性，最终输入值为魔力Rank*10+10，不足30时强制定为30，不足50时强制定为50。
 
 cost、effects和choices.options中的数值字段可用下列结构引用输入：
 
 {"input_id": "x", "multiplier": 1.5, "flat": 0}
 
-还可以提供minimum和maximum，对计算结果进行截断。所有结果最终使用整数部分。
+含义：最终调用的参数是1.5x + 0
+
+所有结果最终使用整数部分。
 输入在支付消耗前完成验证；非法输入不会支付资源。程序或GUI可以通过
 input_values={"x": 20}直接提交，未提交时引擎生成NumericDecisionRequest。
 
-例如“防护：投入X点MP，获得X*1.5护盾”可写为：
+以
+“防护：投入X点MP，获得X*1.5护盾”
+为示例：
 
 {
     "component_id": "barrier",
@@ -298,13 +364,14 @@ selectable_attribute
     仍作用于技能发动者本人。
 
 常用target_rules：
+均为布尔值（True/False）。
 
-must_be_alive
-exclude_self
+must_be_alive（目标必须活着）
+exclude_self（排除自身）
 exclude_same_position
     true时排除与actor位于同一精确地图节点的角色。高层与地面是不同节点。
-required_visibility
-target_battle_state
+required_visibility（需要在视野内）
+target_battle_state（需要对方处于战斗状态中）
 unlimited_targets
 distance
 include_roads
@@ -315,7 +382,7 @@ merge_area_levels
 虚拟攻击阶段重新选择普通攻击或攻击技能的目标时也会持续应用此限制。
 
 
-五、effect公共结构
+5、effect公共结构
 ==================
 
 所有效果至少包含：
@@ -331,11 +398,14 @@ merge_area_levels
 即时效果通常只需要effect_type和effect_data。
 产生持续效果的Modifier effect还需要“Modifier公共字段”。
 
+计算或处理方式统一使用effect_data.calculation，具体选项由effect_type决定。
+旧字段operation不再接受；add_resource内gain_rules也统一使用calculation。
 
-六、已实现的即时effect
+
+6、已实现的即时effect集合。
 ======================
 
-1. damage
+6.1. damage
 ---------
 
 跳过攻击骰和防御流程，直接建立DamageEvent。
@@ -348,13 +418,14 @@ effect_data.damage_type
 effect_data.value 或 effect_data.value_source
     value为固定基础伤害。
     value_source可使用上下文值、actor_attribute或target_attribute。
+    状态trigger/react中可使用status_stack_count，读取当前来源的状态实例层数。
     使用属性来源时必须同时提供attribute。
 
 可选：
 
 multiplier=1
 flat=0
-percentage_modifiers=[]
+percentage_modifiers=[]（这里以小数形式表达）
 flat_modifiers=[]
 action_id
 skill_id
@@ -365,7 +436,7 @@ is_hidden=false
 计算顺序为基础值*multiplier+flat，随后进入统一DamageEvent管线。
 
 
-2. create_attack_event
+6.2. create_attack_event
 ----------------------
 
 生成AttackProfile并指定给目标，进入pending_attacks等待防御。
@@ -401,7 +472,7 @@ effect_data.resolution_channel
 damage_segments存在时必须为非空列表，总伤害为各段之和。
 
 
-3. add_resource
+6.3. add_resource
 ---------------
 
 为角色创建HP、MP以外的新资源。
@@ -420,16 +491,16 @@ gain_rule结构：
 
 {
     "trigger_event": "event_name",
-    "operation": "add",
+    "calculation": "add",
     "value": 1,
     "condition": {}
 }
 
-operation：add、subtract、multiply、divide、set。
+calculation：add、subtract、multiply、divide、set。
 value也可以改用value_source。
 
 
-4. gain_resource
+6.4. gain_resource
 ----------------
 
 以add方式增加已经存在的自定义资源，并遵守该资源的上下限。
@@ -441,7 +512,7 @@ effect_data.resource_id
 effect_data.value
 
 
-5. modify_resource
+6.5. modify_resource
 ------------------
 
 直接修改已经存在的自定义资源。
@@ -453,11 +524,11 @@ effect_data.value
 
 可选：
 
-effect_data.operation="add"
+effect_data.calculation="add"
     add | subtract | multiply | divide | set
 
 
-6. recover_resource
+6.6. recover_resource
 -------------------
 
 回复HP、MP或具有maximum的自定义资源，不超过资源上限。
@@ -494,7 +565,7 @@ effect_data.maximum=1
 
 必填：
 
-effect_data.operation
+effect_data.calculation
     move_first | move_last | move_before | move_after
 
 effect_data.duration
@@ -608,7 +679,7 @@ interior.effects=[]
 
 effect_data字段：
 
-operation="add"
+calculation="add"
     add | multiply | set
 value=0
 minimum
@@ -908,7 +979,7 @@ pending_attacks的攻击不会撤销。
         "effect_type": "growing",
         "effect_data": {
             "growth_id": "territory_growth",
-            "operation": "add",
+            "calculation": "add",
             "value": 1,
             "initial_value": 0,
             "minimum": 0,
@@ -924,7 +995,7 @@ pending_attacks的攻击不会撤销。
         }
     }
 
-operation：
+calculation：
 
 add
     在现有成长值上增加value。
@@ -1215,13 +1286,20 @@ remove_skill_when_exhausted=false
 被此效果截断的伤害会反映在DamageEvent.final_value及后续受伤事件中。
 
 
-七、已实现的Modifier effect
+7、已实现的Modifier effect
 ===========================
-
+7.1
 以下效果通过create_modifier()建立持续效果：
 
 add_status
-    effect_data.value：状态ID。
+    effect_data.status_id：状态仓库中已定义的ID，例如burning。
+    不再接受effect_data.value或任意未定义字符串。duration放在effect顶层；
+    省略时使用仓库默认值，null表示永久。示例：
+    {"effect_type": "add_status", "duration": 2,
+     "effect_data": {"status_id": "burning"}}
+    目标自动获得状态实例及其持续效果、事件触发，无需在角色卡安装辅助技能。
+    名称、正负面、可净化性、持续时间及stacking默认来自仓库，可由效果顶层覆盖。
+    状态只按global_turn_end扣时，不接受battle_turn_end或phase_window。
 
 attribute_bonus
     effect_data.effect_target：strength、endurance、flexibility、magic、
@@ -1233,7 +1311,10 @@ numeric_attribute_bonus
     effect_data.value：数值变化。
 
 dice_bonus
-    effect_data.effect_target：派生骰字段。
+    effect_data.effect_target：派生骰字段，也支持以下分组：
+    attack：攻击骰，同时调整physical_attack与magic_attack。
+    defense：防御骰，同时调整dodge、block与offset。
+    单项字段仍可单独使用；分组与单项同时存在时按各自规则叠加。
     effect_data.value：骰值变化。
 
 attack_bonus
@@ -1292,7 +1373,7 @@ shield
     相同modifier_id默认使用replace。
 
 hidden
-    使用StatusModifier的value，并额外记录隐藏地点。
+    effect_data.value为专用隐蔽标记，并额外记录隐藏地点；不走add_status仓库接口。
     离开原地点、地点消失或地点不是建筑时自动移除。
     可选字段：
     effect_data.requires_building=true
@@ -1308,9 +1389,9 @@ hidden
     合法的非移动行动。
 
 
-八、Modifier公共字段
+8、Modifier公共字段
 ====================
-
+8.1
 持续效果可以在effect顶层提供：
 
 modifier_id
@@ -1391,7 +1472,7 @@ movement_point_bonus
 visibility_bonus
 
 
-九、已具有机械作用的status值
+9、已具有机械作用的status值
 ============================
 
 cannot_investigate
@@ -1417,17 +1498,91 @@ carriable
     骑乘能力的兼容status标记。实际可携带人数由carry_capacity Modifier决定；
     携带、下车、同行优先级和移动力结算已经实现。
 
-任意其他字符串也可以作为普通status存在，但只有被其他规则查询时才有机械作用。
+以上规则标记已经登记在状态仓库中；新增状态必须先定义仓库条目。
+
+状态仓库（项目format_version=2）
+-------------------------------
+
+编辑器增加“状态”分类，与固有技能、职介技能、基础魔术、宝具及角色卡共同保存。
+不兼容旧format_version项目，旧add_status.value写法直接校验失败。
+
+最小条目：
+    {"status_id": "my_marker", "name": "我的标记", "components": []}
+
+完整燃烧示例（内置burning仅作为可编辑示例规则）：
+    {
+      "status_id": "burning",
+      "name": "燃烧",
+      "description": "每次全局回合末每层造成10点基础魔术伤害，最多3层，持续3次回合末。",
+      "polarity": "debuff",
+      "purifiable": true,
+      "duration": 3,
+      "stacking": {
+        "stack_scope": "same_source",
+        "stacking_rule": "stack",
+        "max_stacks": 3,
+        "duration_refresh_rule": "reset"
+      },
+      "components": [{
+        "component_id": "tick", "type": "trigger", "target": "self",
+        "trigger": {"event_type": "global_turn_end", "timing": "after"},
+        "effects": [{"effect_type": "damage", "effect_data": {
+          "damage_type": "magic", "value_source": "status_stack_count", "multiplier": 10
+        }}]
+      }]
+    }
+
+status_id以小写字母开头，只含小写字母、数字、下划线。必填status_id、name、
+components；可选description、polarity、purifiable、duration、duration_timing、
+persist_after_death、stacking。默认中性、不可净化、永久、同来源刷新。
+
+components只支持passive、trigger、react，复用现有effects和condition。目标默认为
+self（承受状态者），也支持event_actor、event_source、event_target、event_targets。
+trigger只接受event_type、timing和priority；before_damage等前置事件需timing=before。
+不接受主动行动、cost、choices、inputs、limit、usage_limit或cooldown。
+
+passive只接受无条件self持续数值修正（含护盾、HP下限等Modifier），不接受hidden、
+add_status或其他即时效果；效果自身不能另设duration、stacking、净化、消耗次数等
+生命周期字段。随外层状态叠层，并在外层净化、死亡清理或到期时一并撤销。
+trigger/react可以使用普通效果字典；已执行的伤害、回复等即时结果不会因净化回滚。
+由trigger/react另行产生的持续效果按该effect声明的生命周期管理。
+
+反应次数：react按“承受者+status_id”每全局回合最多一次，同ID多组件、多来源共享
+这一次；刷新、替换、移除后重施都不重置。trigger按“承受者+status_id+原施加者+
+原技能来源+component_id”每全局回合最多一次；不同施加者独立，重施不能绕过限制。
+次数在执行效果前占用，避免同步嵌套事件循环触发；仍保留现有事件链深度保护。
+持续伤害的来源为原施加者，状态持有者负责条件判断与反应选择。
+触发效果仍执行一次。设置value_source="status_stack_count"可读取当前来源的状态实例
+层数；damage按“层数×multiplier+flat”计算。例如multiplier=10时，1/2/3层分别为
+10/20/30点基础伤害，再进入原有对魔力、护盾等伤害结算。不要同时填写value与value_source。
+stacking_rule="stack"与max_stacks控制层数和上限，duration_refresh_rule控制重施后的时间。
+不同施加者的层数分别计算，不读取角色身上所有同名状态的层数总和。
+层数在每条effect执行时读取，该条effect的嵌套结算使用同一份层数快照；后续effect
+重新读取当时的层数。触发候选排队后、实际执行前发生的叠层也会计入。
+固定value不会自动随层数变化；passive数值仍由外层状态叠层机制缩放，不要重复配置。
+此数值来源只在状态trigger/react中可用，普通技能直接使用会报错。
+除damage外，create_attack_event也可使用此来源及multiplier/flat；recover_resource可用
+此来源直接回复等于层数的资源（其现有schema不接受multiplier/flat）；grant_temporary_mp
+支持此来源及multiplier/flat。不支持value_source的其他效果仍使用各自原有字段。
+
+回合末：先发送global_turn_end事件并结算状态，再扣持续时间，到期后移除。
+本次回合末事件链中刚获得或刷新持续时间的Modifier不扣时，从下一次回合末开始计数。
+在普通行动阶段施加的状态会参与当回合末结算；duration=1会完整结算一次再到期。
+各来源保留独立状态实例；净化一条不清除其他来源，最后一条移除时才清除聚合标记。
+
+状态定义修改在下次Core启动时加载；运行中的实例保存自己的定义快照。
+角色状态提供status_instances（名称、来源、剩余回合、层数等），结构化战报提供
+status_instance及status_triggered记录。GM保留完整来源；玩家视图不揭露未知施加者。
 
 
-十、已确认但尚未实现的effect
+10、已确认但尚未实现的effect
 ==============================
 
 attitude / alliance / information effects
     关系和机械情报管理器已经存在，尚未包装成通用技能effect。
 
 
-十一、不再接受的旧名称
+11、已弃用的旧名称
 ======================
 
 set_workshop
@@ -1448,7 +1603,7 @@ dark_damage
     不再接受；使用true_damage。
 
 
-十二、验证器现有边界
+12、effect验证器工作边界
 ====================
 
 game/skill/effect_validation.py已经检查：

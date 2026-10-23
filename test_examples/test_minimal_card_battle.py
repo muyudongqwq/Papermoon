@@ -3,7 +3,7 @@ import unittest
 
 from game.action.action import Action
 from game.character.masters import Master
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.modifier.modifier import create_modifier
 from test_examples.minimal_card_battle import run_acceptance

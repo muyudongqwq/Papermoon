@@ -4,7 +4,7 @@ from game.action.action import Action
 from game.action.action_list import ActionContext, ActionListBuilder
 from game.character.masters import Master
 from game.character.servants import Servant
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.map.movement import Encounter
 from game.turn.damage import AttackEvent

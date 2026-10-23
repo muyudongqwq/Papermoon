@@ -1,6 +1,6 @@
-from game.game_loop import GameLoop
+from game.game.game_loop import GameLoop
 from core.terminal_commands import GameExitRequested, TerminalCommandHandler
-from game.command_spell import CommandSpellService
+from game.game.command_spell import CommandSpellService
 from game.turn.decision import (
     DecisionRefreshRequested,
     DecisionOption,

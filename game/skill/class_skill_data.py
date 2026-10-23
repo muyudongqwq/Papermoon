@@ -29,7 +29,7 @@ def _fixed_status(status, *, polarity="neutral", purifiable=False):
         "effect_type": "add_status",
         "polarity": polarity,
         "purifiable": purifiable,
-        "effect_data": {"value": status},
+        "effect_data": {"status_id": status},
     }
 
 

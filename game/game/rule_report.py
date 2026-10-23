@@ -102,6 +102,8 @@ class RuleReportManager:
         if fields is None:
             return
         data = {key: event.payload[key] for key in fields if key in event.payload}
+        if "status_instance" in event.payload:
+            data["status_instance"] = event.payload["status_instance"]
         if event.event_type == "resource_changed" and data.get("resource_id") == "mp":
             data["pool"] = "temporary_mp" if data.get("reason") == "pay_temporary_mp" else "mp"
         if event.event_type == "action_resolved":
@@ -122,3 +124,12 @@ def report_skill_use(actor, skill, component, targets, *, paid=None, inputs=None
                               "component_name": component.get("name", skill.name),
                               "activation_type": component["type"],
                               "paid_costs": dict(paid or {}), "inputs": dict(inputs or {})})
+
+
+def report_status_use(owner, runtime, component, targets, *, phase=None):
+    from game.status.runtime import status_view
+    modifier = runtime.status_modifier
+    return report(owner, "status_triggered", actor=modifier.source_actor, targets=[owner, *targets],
+                  phase=phase, private=True,
+                  target_data={**status_view(modifier), "component_id": component["component_id"],
+                               "activation_type": component["type"]})

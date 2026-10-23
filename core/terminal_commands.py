@@ -1,6 +1,6 @@
 import shlex
 
-from game.gm_commands import GMCommandService
+from game.game.gm_commands import GMCommandService
 
 
 class GameExitRequested(Exception):
@@ -114,7 +114,14 @@ class TerminalCommandHandler:
             self.output("当前没有正在行动的角色。")
             return
         position = getattr(character.position, "name", "未设置")
-        statuses = ", ".join(sorted(character.status_flags)) or "无"
+        from game.status.runtime import iter_status_runtimes, status_view
+        instances = [status_view(runtime.status_modifier) for runtime in iter_status_runtimes(character)]
+        details = [f"{s['name']}（来源：{s['source_name'] or '系统'}；"
+                   f"{'永久' if s['duration'] is None else str(s['duration']) + '回合'}；{s['stack_count']}层）"
+                   for s in instances]
+        represented = {s['status_id'] for s in instances}
+        details.extend(sorted(character.status_flags - represented))
+        statuses = ", ".join(details) or "无"
         custom_resources = ", ".join(
             (
                 f"{resource.name} "

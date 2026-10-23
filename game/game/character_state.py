@@ -6,7 +6,7 @@ from game.skill.casting import get_casting_config, noble_damage_multiplier
 from game.skill.component_runtime import component_runtime_reasons, component_use_count, get_component_state
 
 
-_STATS = {"physical_attack": "物理攻击骰", "magic_attack": "魔术攻击骰", "dice_bonus": "判定骰",
+_STATS = {"attack": "攻击骰", "defense": "防御骰", "physical_attack": "物理攻击骰", "magic_attack": "魔术攻击骰", "dice_bonus": "判定骰",
           "dodge": "闪避骰", "block": "格挡骰", "offset": "抵消骰", "hide": "隐蔽骰",
           "perceive": "感知骰", "strength": "筋力", "endurance": "耐久", "flexibility": "敏捷",
           "magic": "魔力", "fortune": "幸运"}
@@ -38,6 +38,14 @@ def effect_view(effect, skill=None):
     if kind in {"damage", "create_attack_event"} and isinstance(value, (int, float)):
         value *= noble_damage_multiplier(skill)
     description = label
+    if data.get("value_source") == "status_stack_count":
+        description += f"：状态层数×{data.get('multiplier', 1):g}"
+        if data.get("flat", 0):
+            description += f"{data['flat']:+g}"
+    if kind == "add_status":
+        from game.status.registry import get_status_definition
+        status = get_status_definition(data["status_id"])
+        description += f"：{status['name']}"
     if isinstance(value, (int, float)):
         description += f"{value:+g}" if kind.endswith("bonus") else f"：{value:g}"
     if kind == "prevent_death":
@@ -128,6 +136,7 @@ def skill_view(actor, skill, category):
 
 
 def character_state(character):
+    from game.status.runtime import iter_status_runtimes, status_view
     skills = []
     for collection, category in (("class_skills", "class_skill"), ("personal_skills", "personal_skill"),
                                  ("magic_skill", "basic_magic"), ("noble_phantasms", "noble_phantasm")):
@@ -142,6 +151,7 @@ def character_state(character):
         "activation_mode": get_casting_config(state.skill).get("activation_mode", "release"),
     }
     return {
+        "status_instances": [status_view(runtime.status_modifier) for runtime in iter_status_runtimes(character)],
         "card_id": getattr(character, "card_id", None),
         "servant_class": getattr(character, "servant_class", None),
         "skills": skills, "casting": casting,

@@ -12,10 +12,10 @@ import uuid
 
 from game.character import list_character_cards
 from game.character.card_factory import get_character_card_definition
-from core.catalog import CatalogProject, DEFAULT_CATALOG, ROOT
+from core.catalog import CatalogProject, DEFAULT_CATALOG, DATA_ROOT
 from core.scenarios import create_manual_scenario, start_manual_scenario
-from game.rule_report import identity
-from game.session_view import character_view
+from game.game.rule_report import identity
+from game.game.session_view import character_view
 from core.terminal_game_runner import GameTerminalDecisionProvider, TerminalGameRunner
 from core.terminal_commands import GameExitRequested
 
@@ -86,7 +86,7 @@ def menu(teams):
 
 
 def run_manual(project, *, scenario="battle", teams=None, seed=None, maximum_turns=120,
-               log_root=ROOT / "userdata" / "runs", input_func=input, output_func=print):
+               log_root=DATA_ROOT / "userdata" / "runs", input_func=input, output_func=print):
     if seed is None:
         seed = random.SystemRandom().randrange(2**32)
     random_state = random.getstate()
@@ -98,13 +98,17 @@ def run_manual(project, *, scenario="battle", teams=None, seed=None, maximum_tur
         with (folder / "terminal.txt").open("w", encoding="utf-8") as transcript,\
                 (folder / "reports.jsonl").open("w", encoding="utf-8") as journal,\
                 redirect_stdout(Transcript(sys.stdout, transcript)), project.activate():
-            snapshot = {"format_version": 1, **project.effective()}
+            snapshot = {"format_version": 2, **project.effective()}
             (folder / "catalog.json").write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
             game = create_manual_scenario(scenario, teams=teams, maximum_turns=maximum_turns)
 
             def write_report(record, _context):
                 journal.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n")
                 journal.flush()
+                if record["kind"] == "status_triggered":
+                    data = record["data"]["target"]
+                    recipient = record["targets"][0]["name"]
+                    print(f"{recipient}的{data['name']}结算（来源：{data['source_name'] or '系统'}）。")
 
             def logged_input(prompt):
                 command = input_func(prompt)

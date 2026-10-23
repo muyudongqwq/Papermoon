@@ -294,7 +294,7 @@ def _casting_status_effect():
         },
         "duration": 2,
         "effect_data": {
-            "value": "casting",
+            "status_id": "casting",
         },
     }
 
@@ -339,7 +339,7 @@ class CastingState:
         state.modifier = result.modifier
         actor.casting_state = state
         state.continue_for_turn(turn_number)
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(actor, "casting_started", actor=actor, private=True,
                actor_data={"skill_id": skill.skill_id, "skill_name": skill.name,
                            "paid_mp": sum(item["amount"] for item in ledger)})
@@ -410,7 +410,7 @@ class CastingState:
         ]
         maximum = max(requirements, default=self.layers + 1)
         self.layers = min(self.layers + 1, maximum)
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(self.actor, "casting_progressed", actor=self.actor, private=True,
                actor_data={"skill_id": self.skill.skill_id, "layers": self.layers,
                            "maximum_layers": maximum})
@@ -461,7 +461,7 @@ class CastingState:
             self.payment_ledger
         )
         self._clear()
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(self.actor, "casting_interrupted", actor=self.actor, private=True,
                actor_data={"skill_id": self.skill.skill_id, "reason": reason,
                            "refunded_mp": sum(item["refunded"] for item in self.refund_results)})
@@ -472,7 +472,7 @@ class CastingState:
             return False
         self.released = True
         self._clear()
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(self.actor, "casting_released", actor=self.actor, private=True,
                actor_data={"skill_id": self.skill.skill_id, "layers": self.layers})
         return True

@@ -12,12 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class PackageLayoutTests(unittest.TestCase):
     def test_leaf_packages_import_independently_without_loading_ui_or_old_names(self):
-        for first in ("game.character.card_factory", "game.action.action", "game.skill.skill_runtime", "game.game_manager"):
+        for first in ("game.character.card_factory", "game.action.action", "game.skill.skill_runtime", "game.game.game_manager"):
             script = f"""
 import importlib, sys
 importlib.import_module({first!r})
 from game import GameManager
-from game.game_manager import GameManager as direct
+from game.game.game_manager import GameManager as direct
 from game.character import create_character_from_card
 from game.character.masters import Master
 assert GameManager is direct

@@ -1,7 +1,7 @@
 import unittest
 
 from game.character.servants import Servant
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from core.terminal_commands import TerminalCommandHandler
 from game.skill.skill_runtime import SkillUnavailableError
@@ -33,13 +33,13 @@ def resource_skill_definition():
                             {
                                 "trigger_event": "damage_received",
                                 "condition": {"damage_at_least": 1},
-                                "operation": "add",
+                                "calculation": "add",
                                 "value": 1,
                             },
                             {
                                 "trigger_event": "damage_received",
                                 "condition": {"damage_at_least": 10},
-                                "operation": "add",
+                                "calculation": "add",
                                 "value": 2,
                             },
                         ],

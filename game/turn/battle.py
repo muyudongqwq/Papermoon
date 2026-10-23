@@ -1504,7 +1504,7 @@ class BattleManager:
             return None
 
         print(f"{guarder.name}开始援护{original_target.name}。")
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(guarder, "guard_started", actor=guarder, targets=[original_target],
                involved={"guard_kind": guard_kind})
         hp_before = guarder.hp

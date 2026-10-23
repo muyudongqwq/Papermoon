@@ -206,7 +206,7 @@ class BattleOrderChangeTests(unittest.TestCase):
             "effect_type": "order_change",
             "polarity": "buff",  # 输入值不会改变关键词固定的neutral属性。
             "effect_data": {
-                "operation": "move_before",
+                "calculation": "move_before",
                 "subject": "actor",
                 "anchor": "target",
                 "duration": 1,

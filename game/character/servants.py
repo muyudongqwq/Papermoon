@@ -71,7 +71,7 @@ class Servant(Character):
         master_cost = amount - servant_cost
         self.temporary_mp -= temporary_cost
         self.mp -= servant_cost
-        from game.rule_report import report_mp_pool_change
+        from game.game.rule_report import report_mp_pool_change
         report_mp_pool_change(self, "temporary_mp", self.temporary_mp + temporary_cost,
                               self.temporary_mp, operation="subtract", reason="pay_temporary_mp")
         report_mp_pool_change(self, "mp", self.mp + servant_cost, self.mp,
@@ -120,7 +120,7 @@ class Servant(Character):
         )
         old_mp = self.mp
         self.mp = max(0, self.mp - upkeep)
-        from game.rule_report import report_mp_pool_change
+        from game.game.rule_report import report_mp_pool_change
         report_mp_pool_change(self, "mp", old_mp, self.mp,
                               operation="subtract", reason="masterless_upkeep")
         self.update_modifiers(

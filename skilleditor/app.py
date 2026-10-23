@@ -63,7 +63,7 @@ class SkillEditor:
         ttk.Button(tools, text="新建", command=self.new).pack(side="left", padx=4)
         ttk.Button(left, text="复制为新条目", command=self.duplicate).pack(fill="x", pady=2)
         ttk.Button(left, text="恢复内置 / 删除自定义条目", command=self.remove).pack(fill="x", pady=2)
-        ttk.Label(left, text="* 表示本地覆盖；内置定义保留。\n职介技能按名称引用，在ranks中定义各等级。", wraplength=300).pack(fill="x", pady=8)
+        ttk.Label(left, text="* 表示本地覆盖；内置定义保留。\n职介技能在ranks中定义各等级。\n状态在仓库中定义，由技能通过status_id引用。", wraplength=300).pack(fill="x", pady=8)
         notebook = ttk.Notebook(right)
         notebook.pack(fill="both", expand=True)
         edit = ttk.Frame(notebook)
@@ -80,11 +80,14 @@ class SkillEditor:
         ttk.Label(edit, text="保存会校验整个项目及角色引用；修改在下次启动Core时生效。", padding=6).pack(fill="x")
         reference_text = ScrolledText(reference, wrap="word", font=("Microsoft YaHei UI", 10))
         reference_text.pack(fill="both", expand=True)
-        reference_text.insert("1.0", (ROOT / "game" / "skill" / "effect_dictionary.txt").read_text(encoding="utf-8"))
+        reference_text.insert("1.0", self.read_reference_dictionary())
         reference_text.configure(state="disabled")
         self.status = tk.StringVar(value="就绪。选择条目后可直接编辑JSON，保存为独立的本地内容。")
         ttk.Label(self.root, textvariable=self.status, padding=8, wraplength=1140).pack(fill="x")
         self.root.bind("<Control-s>", lambda _event: self.save())
+
+    def read_reference_dictionary(self):
+        return (ROOT / "game" / "skill" / "代码数据规范.txt").read_text(encoding="utf-8-sig")
 
     def error(self, error):
         self.status.set(f"未完成：{error}")
@@ -126,8 +129,12 @@ class SkillEditor:
         self.text.insert("1.0", self.loaded_text)
         self.text.edit_reset()
         self.entry_label.configure(text=f"{LABELS[category]} · {key}")
-        self.status.set("职介技能按名称与等级引用；更名请使用“复制为新条目”。" if category == "class_skill"
-                        else "编辑完成后点击保存；ID需要更换时请使用“复制为新条目”。")
+        if category == "status":
+            self.status.set("状态通过status_id引用；value_source=status_stack_count读取本实例层数，multiplier设置每层数值。反应每角色每状态每回合最多一次。")
+        elif category == "class_skill":
+            self.status.set("职介技能按名称与等级引用；更名请使用“复制为新条目”。")
+        else:
+            self.status.set("编辑完成后点击保存；ID需要更换时请使用“复制为新条目”。")
 
     def dirty(self):
         return self.current is not None and (self.text.get("1.0", "end-1c") != self.loaded_text
@@ -194,7 +201,7 @@ class SkillEditor:
         kind = self.kind.get()
         category = KINDS[kind]
         prompt = "请输入职介技能名称（角色卡使用此名称引用）：" if category == "class_skill" else "请输入不重复的新ID："
-        initial = "自定义职介技能" if category == "class_skill" else "user_new_card" if category == "character_card" else "user_new_skill"
+        initial = "自定义职介技能" if category == "class_skill" else "user_new_status" if category == "status" else "user_new_card" if category == "character_card" else "user_new_skill"
         key = simpledialog.askstring("新建条目", prompt, initialvalue=initial, parent=self.root)
         if not key:
             return

@@ -140,6 +140,7 @@ class EventManager:
         self._turn_uses = {}
         self._chain_uses = set()
         self._lifecycle_reservations = set()
+        self._status_uses = set()
 
     @property
     def current_event(self):
@@ -165,6 +166,7 @@ class EventManager:
         return result
 
     def clear_turn_usage(self, turn_number=None):
+        self._status_uses = {key for key in self._status_uses if key[0] == turn_number}
         if turn_number is None:
             self._turn_uses.clear()
             self._chain_uses.clear()
@@ -287,10 +289,12 @@ class EventManager:
 
     def _collect_candidates(self, event):
         from game.skill.skill_runtime import iter_character_skills
+        from game.status.runtime import iter_status_runtimes
 
         candidates = []
         for owner in self._characters(event):
-            for skill_index, skill in enumerate(iter_character_skills(owner)):
+            sources = [*iter_character_skills(owner), *iter_status_runtimes(owner)]
+            for skill_index, skill in enumerate(sources):
                 for component_index, component in enumerate(skill.definitions):
                     kind = component.get("type")
                     if kind not in {"trigger", "react"}:
@@ -450,6 +454,10 @@ class EventManager:
 
         if event.payload.get("survival_resolved"):
             return False
+        if candidate.skill.source_type == "status":
+            key = (event.global_turn, *candidate.skill.quota_key(candidate.owner, candidate.component))
+            if key in self._status_uses:
+                return False
         if component_runtime_reasons(candidate.owner, candidate.skill, candidate.component,
                                      turn_number=event.global_turn, battle=event.battle):
             return False
@@ -539,6 +547,8 @@ class EventManager:
         # synchronously, so recording afterward would allow a trigger to
         # re-enter itself before the recursion guard existed.
         try:
+            if candidate.skill.source_type == "status":
+                self._status_uses.add((event.global_turn, *candidate.skill.quota_key(candidate.owner, candidate.component)))
             self._event_uses.add((event.event_id, *candidate.key))
             self._record_usage(candidate, event, usage_targets)
             targets = self._effect_targets(candidate, event)
@@ -597,11 +607,14 @@ class EventManager:
             results = []
             for target in targets or [candidate.owner]:
                 for effect in effects:
+                    if candidate.skill.source_type == "status" and not candidate.skill.status_modifier.applied:
+                        break
                     results.append(apply_skill_effect(
                         effect,
                         target,
                         candidate.skill,
-                        actor=candidate.owner,
+                        actor=(candidate.skill.status_modifier.source_actor or candidate.owner
+                               if candidate.skill.source_type == "status" else candidate.owner),
                         decision_provider=decision_provider,
                         turn_number=event.global_turn,
                         phase=event.event_type,
@@ -633,9 +646,12 @@ class EventManager:
                 "component_expired": component_expired,
             }
             event.records.append(record)
-            from game.rule_report import report_skill_use
-            report_skill_use(candidate.owner, candidate.skill, candidate.component, targets,
-                             paid=paid, inputs=resolved_inputs, phase=event.event_type)
+            from game.game.rule_report import report_skill_use, report_status_use
+            if candidate.skill.source_type == "status":
+                report_status_use(candidate.owner, candidate.skill, candidate.component, targets, phase=event.event_type)
+            else:
+                report_skill_use(candidate.owner, candidate.skill, candidate.component, targets,
+                                 paid=paid, inputs=resolved_inputs, phase=event.event_type)
             return record
         finally:
             if one_shot:

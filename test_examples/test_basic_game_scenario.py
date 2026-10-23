@@ -1,6 +1,6 @@
 import unittest
 
-from game.basic_game_scenario import (
+from game.game.basic_game_scenario import (
     create_basic_game_scenario,
 )
 

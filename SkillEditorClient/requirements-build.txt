@@ -1,0 +1,2 @@
+# Build dependency only; the produced exe includes the Python/Tk runtime.
+pyinstaller==6.22.3

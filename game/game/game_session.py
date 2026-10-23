@@ -4,11 +4,11 @@ from copy import deepcopy
 from threading import Lock, Thread
 from uuid import uuid4
 
-from game.command_spell import CommandSpellService
-from game.game_loop import GameLoop
-from game.gm_commands import GMCommandService
-from game.queued_decision import QueuedDecisionProvider, SessionStopped
-from game.session_view import build_snapshot, current_known_characters
+from game.game.command_spell import CommandSpellService
+from game.game.game_loop import GameLoop
+from game.game.gm_commands import GMCommandService
+from game.game.queued_decision import QueuedDecisionProvider, SessionStopped
+from game.game.session_view import build_snapshot, current_known_characters, redact_status_sources
 
 
 class _SessionGameLoop(GameLoop):
@@ -144,6 +144,8 @@ class GameSession:
         if gm or target_owned:
             data.update(record["data"]["target"])
         result["data"] = deepcopy(data)
+        if not gm:
+            redact_status_sources(result["data"], known)
         return result
 
     def _on_rule_report(self, record, context):

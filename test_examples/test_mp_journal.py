@@ -3,8 +3,8 @@
 import unittest
 
 from game.character import create_character_from_card
-from game.game_manager import GameManager
-from game.game_session import GameSession
+from game.game.game_manager import GameManager
+from game.game.game_session import GameSession
 from game.map.map import Location
 from game.skill.casting import CastingState
 

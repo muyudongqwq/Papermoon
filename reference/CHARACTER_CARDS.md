@@ -147,7 +147,7 @@ assert len(servant.noble_phantasms) == 3
    已有职介技能和基础魔术直接引用，不复制规则实现。
 3. 在CHARACTER_CARD_DATA增加一条基础数据与内容引用，不增加专用工厂函数。
 4. 运行目录校验、该卡专项测试和全量测试。新增或变更Effect字段时，仍必须
-   同步更新 `game/skill/effect_dictionary.txt`。
+   同步更新 `game/skill/代码数据规范.txt`。
 
 文本样本不会被工厂自动解析或执行；新文本放入samples也不会自动变为可运行卡。
 正式宝具目录现有尼禄的3件宝具，工厂测试另有独立临时夹具用于校验通用格式。

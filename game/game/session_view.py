@@ -1,6 +1,6 @@
 """Build JSON-compatible views on the session's engine thread."""
 
-from game.character_state import character_state
+from game.game.character_state import character_state
 
 
 def current_known_characters(owned, characters):
@@ -8,6 +8,23 @@ def current_known_characters(owned, characters):
     for actor in owned:
         known.update(actor.current_awareness(characters))
     return known.intersection(characters)
+
+
+def redact_status_sources(value, known):
+    """Keep full provenance in GM records, without revealing an unknown caster."""
+    known_ids = {character.character_id for character in known}
+    def redact(item):
+        if isinstance(item, dict):
+            if "status_id" in item and "source_character_id" in item and item["source_character_id"] not in known_ids:
+                for key in ("source_character_id", "source_name", "source_skill_id"):
+                    item[key] = None
+            for child in item.values():
+                redact(child)
+        elif isinstance(item, list):
+            for child in item:
+                redact(child)
+    redact(value)
+    return value
 
 
 def character_view(character, position_id, *, exact):
@@ -68,6 +85,8 @@ def build_snapshot(session, controller_id):
         if position is not None:
             nodes.add(position)
         view = character_view(character, session._position_id, exact=exact)
+        if not gm:
+            redact_status_sources(view, visible)
         view["position_id"] = session._position_id(position)
         views.append(view)
     map_views = [{"position_id": session._position_id(node), "name": node.name}

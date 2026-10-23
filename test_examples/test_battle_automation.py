@@ -447,7 +447,7 @@ class BattleAutomationTests(unittest.TestCase):
             {
                 "modifier_id": "random_defense",
                 "effect_type": "add_status",
-                "effect_data": {"value": "random_defense"},
+                "effect_data": {"status_id": "random_defense"},
             },
             defender,
         ))

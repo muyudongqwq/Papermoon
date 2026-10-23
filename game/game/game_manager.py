@@ -1,16 +1,16 @@
 from game.turn.Turn import TurnManager
 from game.turn.decision import DecisionOption, DecisionRequest
 
-from game.holy_grail import HolyGrail
+from game.game.holy_grail import HolyGrail
 from game.skill.field_runtime import FieldManager
 from game.skill.reality_marble_runtime import RealityMarbleManager
 from game.skill.observation_runtime import ObservationManager
-from game.command_spell_transfer import CommandSpellTransferManager
+from game.game.command_spell_transfer import CommandSpellTransferManager
 from game.skill.event_runtime import EventManager
 from game.skill.trap_runtime import TrapManager
 from game.skill.summon_runtime import SummonManager
-from game.relationship import InformationManager, RelationshipManager
-from game.rule_report import RuleReportManager
+from game.game.relationship import InformationManager, RelationshipManager
+from game.game.rule_report import RuleReportManager
 
 
 class GameManager:
@@ -565,12 +565,25 @@ class GameManager:
         )
         return self.end_game(reason="victory", winners=winners)
 
-    def on_turn_end(self, turn_number):
+    def resolve_turn_end_event(self, turn_number, decision_provider=None):
+        # Expiry follows all end-of-turn triggers. New/refreshed durations from
+        # those triggers belong to the next boundary, not the current snapshot.
+        characters = list(self.all_characters)
+        snapshots = {character: {m: m.duration_revision for m in character.modifiers}
+                     for character in characters}
         self.event_manager.emit(
             "global_turn_end",
             phase="global_turn_end",
             payload={"turn_number": turn_number},
+            decision_provider=decision_provider,
         )
+        for character in characters:
+            character.update_modifiers("global_turn_end", turn_number=turn_number,
+                                       duration_snapshot=snapshots[character])
+
+    def on_turn_end(self, turn_number, *, emit_event=True, decision_provider=None):
+        if emit_event:
+            self.resolve_turn_end_event(turn_number, decision_provider=decision_provider)
         self.observation_manager.end_turn(turn_number)
         self.field_manager.end_turn(turn_number)
         self.reality_marble_manager.end_turn(turn_number)

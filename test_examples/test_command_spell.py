@@ -4,8 +4,8 @@ from unittest.mock import patch
 from game.action.action import Action
 from game.character.masters import Master
 from game.character.servants import Servant
-from game.command_spell import CommandSpellService
-from game.game_manager import GameManager
+from game.game.command_spell import CommandSpellService
+from game.game.game_manager import GameManager
 from core.terminal_game_runner import GameTerminalDecisionProvider
 from game.map.map import Location
 from game.turn.battle import BattleManager

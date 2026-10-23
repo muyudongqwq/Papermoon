@@ -101,7 +101,7 @@ def resolve_order_change_effect(effect, target, skill, **context):
         raise ValueError("order_change的subject必须是'actor'或'target'")
     subject = objects[subject_selector]
 
-    operation = data.get("operation")
+    operation = data.get("calculation")
     anchor = None
     if operation in {"move_before", "move_after"}:
         anchor_selector = data.get("anchor")
@@ -136,7 +136,7 @@ def resolve_modify_event_value_effect(effect, target, skill, **context):
         raise SkillUnavailableError("modify_event_value只能在事件结算中使用")
     data = effect.get("effect_data", {})
     return event.modify_value(
-        data.get("operation", "add"),
+        data.get("calculation", "add"),
         data.get("value", 0),
         minimum=data.get("minimum"),
         maximum=data.get("maximum"),
@@ -151,6 +151,8 @@ def resolve_grant_temporary_mp_effect(effect, target, skill, **context):
         if event is None or event.value is None:
             raise SkillUnavailableError("临时MP效果缺少事件数值")
         value = event.value
+    elif data.get("value_source") == "status_stack_count":
+        value = context["status_stack_count"]
     value = int(value * data.get("multiplier", 1) + data.get("flat", 0))
     if value <= 0:
         return 0
@@ -465,7 +467,7 @@ def resolve_modify_resource_effect(effect, target, skill, **context):
     data, resource_id = _resource_change_data(effect)
     return target.modify_resource(
         resource_id,
-        data.get("operation", "add"),
+        data.get("calculation", "add"),
         data["value"],
     )
 
@@ -1398,6 +1400,16 @@ validate_effect_registry(EFFECT_HANDLERS)
 
 
 def apply_skill_effect(effect, target, skill, **context):
+    if "operation" in effect.get("effect_data", {}):
+        raise ValueError("effect_data.operation已改为calculation，不接受旧字段")
+    # Read this live instance, never the recipient's aggregate status flags or
+    # another caster's stacks. A single effect keeps this snapshot throughout
+    # nested damage/reaction resolution; the next effect reads fresh state.
+    status = getattr(skill, "status_modifier", None)
+    if status is not None:
+        context["status_stack_count"] = status.stack_count
+    elif effect.get("effect_data", {}).get("value_source") == "status_stack_count":
+        raise SkillUnavailableError("status_stack_count只能由状态触发或反应效果读取")
     effect_type = effect.get("effect_type")
     try:
         handler = EFFECT_HANDLERS[effect_type]
@@ -1580,6 +1592,9 @@ def _apply_passive_skill_components(character, skill, *, phase="skill_load"):
 
 
 def character_owns_skill(character, skill):
+    if getattr(skill, "source_type", None) == "status":
+        modifier = skill.status_modifier
+        return modifier in character.modifiers and modifier.applied
     return any(
         candidate is skill
         for candidate in iter_character_skills(character)
@@ -2066,13 +2081,13 @@ def _effect_is_usable(effect, target, actor=None, source_skill=None):
             or not getattr(subject, "in_battle", False)
         ):
             return False
-        if data.get("operation") in {"move_before", "move_after"}:
+        if data.get("calculation") in {"move_before", "move_after"}:
             return bool(
                 anchor is not None
                 and anchor is not subject
                 and getattr(anchor, "current_battle", None) is battle
             )
-        return data.get("operation") in {"move_first", "move_last"}
+        return data.get("calculation") in {"move_first", "move_last"}
     if effect.get("effect_type") == "purify":
         return bool(target.get_purifiable_modifiers())
     if effect.get("effect_type") in {"gain_resource", "modify_resource"}:
@@ -2636,7 +2651,7 @@ def resolve_skill_component(
         turn_number=context.get("turn_number"),
         battle=context.get("battle"),
     )
-    from game.rule_report import report_skill_use
+    from game.game.rule_report import report_skill_use
     report_skill_use(actor, skill, component, effect_targets, paid=paid,
                      inputs=resolved_inputs, phase=context.get("phase"))
     return {

@@ -345,7 +345,7 @@ class FieldManager:
             self.game_manager.turn_manager.turn,
             created=True,
         )
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(field.owner, "field_created", actor=field.owner, private=True, position=field.center,
                actor_data={"field_id": field.field_id, "name": field.name,
                            "battle_bound": field.battle_bound, "duration": field.duration})
@@ -369,7 +369,7 @@ class FieldManager:
                     options=(DecisionOption("允许离场", True, ("allow",)),
                              DecisionOption("不允许离场", False, ("deny",))),
                 ))
-            from game.rule_report import report
+            from game.game.rule_report import report
             report(character, "battle_exit_permission", actor=field.owner, targets=[character],
                    involved={"allowed": bool(allowed)},
                    actor_data={"field_id": field.field_id, "field_name": field.name})
@@ -469,7 +469,7 @@ class FieldManager:
             return False
         field.remove()
         self.fields.remove(field)
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(field.owner, "field_removed", actor=field.owner, private=True, position=field.center,
                actor_data={"field_id": field.field_id, "name": field.name})
         return True

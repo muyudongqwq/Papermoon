@@ -8,9 +8,9 @@ from unittest.mock import patch
 from game.action.action import Action
 from game.character import create_character_from_card
 from game.character.masters import Master
-from game.game_manager import GameManager
-from game.game_session import GameSession
-from game.session_view import character_view
+from game.game.game_manager import GameManager
+from game.game.game_session import GameSession
+from game.game.session_view import character_view
 from game.map.map import Location
 from game.modifier.modifier import create_modifier
 from game.skill.casting import CastingState
@@ -300,7 +300,7 @@ class SessionReportTests(unittest.TestCase):
                             "trigger": {"event_type": "before_damage", "timing": "before"},
                             "condition": {"event_target_is_self": True},
                             "effects": [{"effect_type": "modify_event_value",
-                                         "effect_data": {"operation": "add", "value": -1}}]}],
+                                         "effect_data": {"calculation": "add", "value": -1}}]}],
         })
         events = self.game.event_manager
         outside = events.component_limit_view(self.target, skill, skill.definitions[0])
@@ -331,7 +331,7 @@ class SessionReportTests(unittest.TestCase):
             self.game.rule_reports.record("test", actor=self.nero, private=True)
 
         session._capture_views = broken_after_report
-        with patch("game.game_session._SessionGameLoop.run", run):
+        with patch("game.game.game_session._SessionGameLoop.run", run):
             session.start()
             self.assertTrue(session.join(2))
         self.assertEqual(session.state, "failed")

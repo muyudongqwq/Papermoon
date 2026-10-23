@@ -90,7 +90,7 @@ finally:
 
 ## 结构化战报
 
-`game/rule_report.py::RuleReportManager` 独立于技能触发队列，只记录结果，不发动
+`game/game/rule_report.py::RuleReportManager` 独立于技能触发队列，只记录结果，不发动
 技能或请求选择。`GameManager.rule_reports.history` 是可信调用者可读取的完整
 JSON记录，包含所有权限层，不应直接提供给玩家。Session启动时订阅新记录，
 结束、停止或异常时解除订阅；启动前的记录不会按当前视野重新投递。

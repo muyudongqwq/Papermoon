@@ -56,7 +56,8 @@ def validate_noble_phantasm_definition(definition):
 
 def validate_content_catalogs():
     """Validate every catalog entry and reject mismatched dictionary keys."""
-    validated = {}
+    from game.status.registry import validate_status_catalog
+    validated = {"status": validate_status_catalog()}
     for content_type, catalog in CONTENT_CATALOGS.items():
         ids = set()
         for entry_id, definition in catalog.items():

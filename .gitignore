@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-build/
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -18,6 +19,8 @@ htmlcov/
 # Build output and local configuration
 /build/
 /dist/
+/SkillEditorClient.exe
+/SkillEditorClient beta *.exe
 *.log
 .env
 .env.*

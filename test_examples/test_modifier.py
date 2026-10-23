@@ -1,9 +1,11 @@
 import unittest
+from unittest.mock import patch
+from game.status.data import STATUS_DATA, marker
 
 from game.action.action import Action
 from game.character.servants import Servant
 from game.character.masters import Master
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.modifier.modifier import create_modifier
 from game.modifier.context import ModifierContext
@@ -54,6 +56,11 @@ def numeric_effect(
 
 
 class ModifierLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        context = patch.dict(STATUS_DATA, {"marked": marker("marked", "标记")})
+        context.start()
+        self.addCleanup(context.stop)
+
     def test_contextual_attribute_affects_all_derived_values_and_attack_damage(self):
         target = create_servant("Target")
         effect = {
@@ -235,7 +242,7 @@ class ModifierLifecycleTests(unittest.TestCase):
                     "modifier_id": "conditional_status",
                     "effect_type": "add_status",
                     "conditions": {"phases": ["defense"]},
-                    "effect_data": {"value": "cannot_dodge"},
+                    "effect_data": {"status_id": "cannot_dodge"},
                 },
                 target,
             )
@@ -338,7 +345,7 @@ class ModifierLifecycleTests(unittest.TestCase):
                 "stack_scope": "same_source",
                 "stacking_rule": "independent",
             },
-            "effect_data": {"value": "marked"},
+            "effect_data": {"status_id": "marked"},
         }
         first = create_modifier(
             effect,
@@ -455,7 +462,7 @@ class ModifierLifecycleTests(unittest.TestCase):
             definition = next(
                 effect
                 for effect in effects
-                if effect.get("effect_data", {}).get("value")
+                if effect.get("effect_data", {}).get("status_id")
                 == "cannot_investigate"
             )
             self.assertEqual(definition["polarity"], "debuff")
@@ -492,7 +499,7 @@ class ModifierLifecycleTests(unittest.TestCase):
                 "stack_scope": "same_source",
                 "stacking_rule": "refresh",
             },
-            "effect_data": {"value": "cannot_escape"},
+            "effect_data": {"status_id": "cannot_escape"},
         }
         protected_effect = dict(base_effect, purifiable=False)
         purifiable_effect = dict(base_effect, purifiable=True)
@@ -1257,6 +1264,11 @@ class ModifierConsumptionTests(unittest.TestCase):
 
 
 class ModifierManagerContinuationTests(unittest.TestCase):
+    def setUp(self):
+        context = patch.dict(STATUS_DATA, {"marked": marker("marked", "标记")})
+        context.start()
+        self.addCleanup(context.stop)
+
     phase_window_effect = staticmethod(
         ModifierManagerTests.phase_window_effect
     )
@@ -1478,6 +1490,7 @@ class ModifierManagerContinuationTests(unittest.TestCase):
     def test_strongest_complex_effect_requires_and_uses_priority(self):
         target = create_servant()
         low = {
+            "duration": 2,
             "modifier_id": "strongest_status",
             "effect_type": "add_status",
             "stacking": {
@@ -1485,8 +1498,9 @@ class ModifierManagerContinuationTests(unittest.TestCase):
                 "stack_scope": "all_sources",
                 "stacking_rule": "strongest",
                 "strength_priority": 1,
+                "strength_comparison": "higher",
             },
-            "effect_data": {"value": "marked", "duration": 2},
+            "effect_data": {"status_id": "marked"},
         }
         high = {
             **low,
@@ -1494,7 +1508,8 @@ class ModifierManagerContinuationTests(unittest.TestCase):
                 **low["stacking"],
                 "strength_priority": 3,
             },
-            "effect_data": {"value": "marked", "duration": 4},
+            "duration": 4,
+            "effect_data": {"status_id": "marked"},
         }
 
         low_modifier = create_modifier(low, target)
@@ -1658,6 +1673,7 @@ class ModifierManagerContinuationTests(unittest.TestCase):
         first_source = create_servant("First")
         second_source = create_servant("Second")
         effect = {
+            "duration": 3,
             "modifier_id": "marked",
             "effect_type": "add_status",
             "stacking": {
@@ -1666,7 +1682,7 @@ class ModifierManagerContinuationTests(unittest.TestCase):
                 "stacking_rule": "refresh",
                 "max_stacks": 1,
             },
-            "effect_data": {"value": "marked", "duration": 3},
+            "effect_data": {"status_id": "marked"},
         }
         first = create_modifier(effect, target, source=first_source)
         second = create_modifier(effect, target, source=second_source)

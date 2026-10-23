@@ -6,8 +6,8 @@ import json
 from core.catalog import CATEGORIES, parse_json
 
 KINDS = {"固有技能": "personal_skill", "基础魔术": "basic_magic", "宝具": "noble_phantasm",
-         "御主卡": "character_card", "从者卡": "character_card", "职介技能": "class_skill"}
-LABELS = {"personal_skill": "固有技能", "class_skill": "职介技能", "basic_magic": "基础魔术", "noble_phantasm": "宝具", "character_card": "角色卡"}
+         "御主卡": "character_card", "从者卡": "character_card", "职介技能": "class_skill", "状态": "status"}
+LABELS = {"personal_skill": "固有技能", "class_skill": "职介技能", "basic_magic": "基础魔术", "noble_phantasm": "宝具", "character_card": "角色卡", "status": "状态"}
 
 
 def format_json(data):
@@ -19,13 +19,18 @@ def copy_definition(category, key, definition):
     if category == "class_skill":
         data["name"] = key
         return data
-    field = "card_id" if category == "character_card" else "skill_id"
+    field = "status_id" if category == "status" else "card_id" if category == "character_card" else "skill_id"
     data[field] = f"basic_magic:{key}" if category == "basic_magic" else key
     return data
 
 
 def new_definition(kind, key):
     category = KINDS[kind]
+    if category == "status":
+        from game.status.data import STATUS_DATA
+        data = copy_definition("status", key, STATUS_DATA["burning"])
+        data.update(name="新状态", description="请修改状态名称、持续时间及效果。")
+        return data
     if category == "class_skill":
         return {"name": key, "ranks": {"C": [{"component_id": "passive", "type": "passive",
                 "target": "self", "effects": [{"effect_type": "attack_bonus", "polarity": "buff",

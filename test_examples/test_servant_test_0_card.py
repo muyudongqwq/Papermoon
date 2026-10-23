@@ -6,8 +6,8 @@ from game.action.action import Action
 from game.action.action_list import ActionContext, ActionListBuilder
 from game.character import create_character_from_card
 from game.character.masters import Master
-from game.game_manager import GameManager
-from game.game_session import GameSession
+from game.game.game_manager import GameManager
+from game.game.game_session import GameSession
 from game.map.map import Location
 from game.modifier.modifier import create_modifier
 from game.skill.casting import CastingState, castable_sources, get_casting_mp_cost, release_options
@@ -76,13 +76,18 @@ class ServantTest0CardTests(unittest.TestCase):
     def test_sword_bonus_is_free_and_uses_survive_switching_same_battle(self):
         sword = self.choose_privilege("swordsmanship")
         base, attacks, mp = self.actor.physical_attack, self.actor.attack_phase_count, self.actor.mp
+        magic, defense = self.actor.magic_attack, {name: getattr(self.actor, name) for name in ("dodge", "block", "offset")}
+        self.assertEqual([len(option["effects"]) for option in sword.definitions[0]["choices"]["options"]], [1, 1])
         self.actor.resolve_skill_component(sword.skill_id, "swordsmanship", target=self.actor,
                                           selected_choice_ids=["attack"], turn_number=1)
         self.assertEqual(self.actor.physical_attack, base + 9)
+        self.assertEqual(self.actor.magic_attack, magic + 9)
+        self.assertEqual({name: getattr(self.actor, name) for name in defense}, defense)
         self.assertEqual(self.actor.attack_phase_count, attacks)
         self.assertEqual(self.actor.mp, mp)
         self.choose_privilege("presence_concealment", 2)
         self.assertEqual(self.actor.physical_attack, base)
+        self.assertEqual(self.actor.magic_attack, magic)
         restored = self.choose_privilege("swordsmanship", 3)
         self.assertIs(restored, sword)
         self.assertEqual(component_use_count(self.actor, sword, sword.definitions[0]), 1)
@@ -90,7 +95,11 @@ class ServantTest0CardTests(unittest.TestCase):
             self.set_turn(turn)
             self.actor.resolve_skill_component(sword.skill_id, "swordsmanship", target=self.actor,
                                               selected_choice_ids=["defense"], turn_number=turn)
+            self.assertEqual({name: getattr(self.actor, name) for name in defense}, {name: value + 9 for name, value in defense.items()})
+            self.assertEqual(self.actor.physical_attack, base)
+            self.assertEqual(self.actor.magic_attack, magic)
             self.actor.update_modifiers("global_turn_end", turn_number=turn)
+            self.assertEqual({name: getattr(self.actor, name) for name in defense}, defense)
         with self.assertRaises(SkillUnavailableError):
             self.actor.resolve_skill_component(sword.skill_id, "swordsmanship", target=self.actor,
                                               selected_choice_ids=["attack"], turn_number=5)
@@ -239,7 +248,7 @@ class ServantTest0CardTests(unittest.TestCase):
     def test_ordinary_escape_uses_same_theatre_permission_window(self):
         self.open_theatre()
         self.game.decision_provider = ScriptedDecisionProvider(["deny"])
-        self.first.add_modifier(create_modifier({"effect_type": "add_status", "effect_data": {"value": "stay"}}, self.first))
+        self.first.add_modifier(create_modifier({"effect_type": "add_status", "effect_data": {"status_id": "stay"}}, self.first))
         self.first.attack_phase_count = 1
         before = self.first.hp
         action = Action(self.first, "escape")

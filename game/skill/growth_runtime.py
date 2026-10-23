@@ -312,7 +312,7 @@ def apply_growth_effect(effect, target, source_skill, **context):
         )
     runtime_context = dict(context)
     runtime_context.setdefault("actor", state.actor)
-    return state.update(data.get("operation", "add"), data["value"], runtime_context)
+    return state.update(data.get("calculation", "add"), data["value"], runtime_context)
 
 
 def remove_growth_states_for_source(owner, source_skill):

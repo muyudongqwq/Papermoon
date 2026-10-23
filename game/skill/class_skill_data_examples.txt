@@ -168,7 +168,7 @@ skill/class_skill_data.py。
             "polarity": "debuff",
             "purifiable": false,
             "effect_data": {
-                "value": "cannot_investigate"
+                "status_id": "cannot_investigate"
             }
         },
         {
@@ -176,7 +176,7 @@ skill/class_skill_data.py。
             "polarity": "debuff",
             "purifiable": false,
             "effect_data": {
-                "value": "cannot_escape"
+                "status_id": "cannot_escape"
             }
         },
         {
@@ -184,7 +184,7 @@ skill/class_skill_data.py。
             "polarity": "debuff",
             "purifiable": false,
             "effect_data": {
-                "value": "random_defense"
+                "status_id": "random_defense"
             }
         }
     ]

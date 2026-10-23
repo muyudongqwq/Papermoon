@@ -17,8 +17,8 @@ from game.character import (
 from game.character.card_factory import create_master_test_0
 from game.character.masters import Master
 from game.character.servants import Servant
-from game.game_loop import GameLoop
-from game.game_manager import GameManager
+from game.game.game_loop import GameLoop
+from game.game.game_manager import GameManager
 from game.map.map import Location, Road
 from game.skill.content_registry import CONTENT_CATALOGS
 from game.turn.decision import ScriptedDecisionProvider

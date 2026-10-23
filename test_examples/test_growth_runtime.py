@@ -32,12 +32,12 @@ def gain_mark(value=1):
     }
 
 
-def growth_effect(value, stages, operation="add"):
+def growth_effect(value, stages, calculation="add"):
     return {
         "effect_type": "growing",
         "effect_data": {
             "growth_id": "evolution",
-            "operation": operation,
+            "calculation": calculation,
             "value": value,
             "minimum": 0,
             "stages": stages,

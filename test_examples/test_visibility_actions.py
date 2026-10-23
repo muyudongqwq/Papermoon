@@ -142,7 +142,7 @@ class GeneralActionTests(unittest.TestCase):
             {
                 "modifier_id": "cannot_investigate",
                 "effect_type": "add_status",
-                "effect_data": {"value": "cannot_investigate"},
+                "effect_data": {"status_id": "cannot_investigate"},
             },
             actor,
         ))

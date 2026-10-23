@@ -1,8 +1,8 @@
 import unittest
 
 from game.character.masters import Master
-from game.game_manager import GameManager
-from game.gm_commands import GMCommandService
+from game.game.game_manager import GameManager
+from game.game.gm_commands import GMCommandService
 from core.terminal_commands import TerminalCommandHandler
 from game.map.map import Location, Map
 

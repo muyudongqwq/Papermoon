@@ -91,7 +91,9 @@ class CharacterResource:
             raise TypeError("每条资源获得规则必须是字典")
         if not rule.get("trigger_event"):
             raise ValueError("资源获得规则必须提供trigger_event")
-        operation = rule.get("operation", "add")
+        if "operation" in rule:
+            raise ValueError("资源获得规则的operation已改为calculation，不接受旧字段")
+        operation = rule.get("calculation", "add")
         if operation not in VALID_RESOURCE_OPERATIONS:
             raise ValueError(f"未知的资源运算：{operation}")
         if "value" not in rule and "value_source" not in rule:
@@ -362,7 +364,7 @@ class ResourceManager:
                     value = context[source_name]
                 else:
                     value = rule["value"]
-                operation = rule.get("operation", "add")
+                operation = rule.get("calculation", "add")
                 old_value = resource.current_value
                 change = resource.apply(operation, value)
                 self._emit_change(
@@ -376,7 +378,7 @@ class ResourceManager:
                 results.append({
                     "resource_id": resource.resource_id,
                     "rule_index": index,
-                    "operation": rule.get("operation", "add"),
+                    "operation": rule.get("calculation", "add"),
                     "value": value,
                     "change": change,
                     "current_value": resource.current_value,

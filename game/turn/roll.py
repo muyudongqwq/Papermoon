@@ -167,7 +167,7 @@ class RollResolver:
             "roll_committed",
             context,
         )
-        from game.rule_report import report
+        from game.game.rule_report import report
         report(character, "roll_resolved", actor=character, private=True, phase=phase,
                actor_data={"stat_name": stat_name, "initial_die": first_die, "die": die,
                            "stat_bonus": stat_bonus, "dice_bonus": dice_bonus,

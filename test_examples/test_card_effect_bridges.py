@@ -1,8 +1,10 @@
 import unittest
+from unittest.mock import patch
+from game.status.data import STATUS_DATA, marker
 
 from game.action.action_list import ActionContext, ActionListBuilder
 from game.character.masters import Master
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.skill.component_runtime import component_use_count
 from game.skill.content_data import PERSONAL_SKILL_DATA
@@ -25,13 +27,18 @@ def source_skill(actor, skill_id="source"):
             "type": "passive",
             "effects": [{
                 "effect_type": "add_status",
-                "effect_data": {"value": f"{skill_id}_loaded"},
+                "effect_data": {"status_id": f"{skill_id}_loaded"},
             }],
         }],
     })
 
 
 class CardEffectBridgeTests(unittest.TestCase):
+    def setUp(self):
+        context = patch.dict(STATUS_DATA, {key: marker(key, key) for key in ("source_loaded", "catalog_loaded")})
+        context.start()
+        self.addCleanup(context.stop)
+
     def test_restore_component_restores_usage_and_cooldown(self):
         actor = master()
         actor.current_global_turn = 1
@@ -130,7 +137,7 @@ class CardEffectBridgeTests(unittest.TestCase):
                 "type": "passive",
                 "effects": [{
                     "effect_type": "add_status",
-                    "effect_data": {"value": "catalog_loaded"},
+                    "effect_data": {"status_id": "catalog_loaded"},
                 }],
             }],
         }

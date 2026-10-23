@@ -3,7 +3,7 @@ import unittest
 from game.action.action import Action
 from game.action.action_list import ActionContext, ActionListBuilder
 from game.character.masters import Master
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from core.terminal_game_runner import TerminalGameRunner
 from game.map.map import Location
 from game.map.movement import MovementAction

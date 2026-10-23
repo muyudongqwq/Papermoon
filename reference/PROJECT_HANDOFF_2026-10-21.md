@@ -1,7 +1,279 @@
 # Papermoon 项目工作交接记录
 
-更新时间：2026-10-21  
+更新时间：2026-10-23
 工作区：`C:\Users\hiiragi\Desktop\Papermoon`
+
+
+## 最新进展（2026-10-21）
+
+### 更新：可选发动效果入口与分支层级（2026-10-23）
+
+- 用户明确选择“只调整编辑器界面”，引擎仍保留44种effect_type，choices继续作为技能单元字段。
+  新增FORM_EFFECT_TYPES包含choices（可选发动），参数/参考窗口使用独立的编辑器schema。
+- SkillEditorClient加载原有component.choices为一条界面效果；仅选choices时显示该效果内部的
+  可选分支。maximum_selections与allow_duplicate固定显示在效果参数灰框中，不在分支栏重复显示。
+- 读回表单时将可选发动映射回component.choices，普通效果仍写入effects，保留原分支ID、
+  缺省字段、条件、额外消耗与既有结算次序。保存、导出和JSON预览均使用引擎现有格式。
+  每个单元最多一组可选发动；分支效果不提供此入口，手输嵌套或重复入口时拒绝保存。
+- 新分支标题无名称时仅显示“分支 N”，不显示choice_N；命名后显示名称，内部标识仍自动生成。
+  删除所有分支后提示删除整条可选发动效果，防止空选择被静默保存。
+- 普通效果与可选发动切换时分别保留各自的参数和高级设置草稿；仅当前类型的表单可见。
+  choices自身没有Modifier高级设置，分支条件仍从分支高级设置编辑。
+- 更新既有界面检查，并新增层级/参数归属、切换草稿、重复和嵌套校验检查及编辑器schema检查。
+  702项自动测试、73项实际Tk检查、源码安装诊断通过；已查看参数归属与分支标题的实际界面。
+
+### 更新：攻击骰与防御骰分组（2026-10-23）
+
+- dice_bonus的effect_target支持attack（physical_attack、magic_attack）与defense
+  （dodge、block、offset）。共享映射位于game/modifier/dice_targets.py；原单项字段仍可使用。
+- DiceModifier统一对组内各项施加、撤销和按层变化；条件型查询按相同映射匹配当前骰，
+  不修改角色原有字段，也不会重复计算。角色状态摘要显示攻击骰/防御骰中文名称。
+- SkillEditorClient的参数下拉显示中文分组，保存为英文ID；切换效果类型、高级JSON及
+  重新加载时保持标准值。中文选项仅用于显示，不写入效果定义。
+- 内置剑术的攻击与防御分支各改为一条分组效果；持续时间、使用次数和特权切换规则不变。
+  没有批量改写用户自定义技能。两份字典仅局部补充分组说明，保持其他文本及文件换行字节。
+- 新增分组影响范围、叠层/到期、条件型作用域、分组与单项组合的引擎检查；扩展尼禄
+  剑术检查，并增加真实Tk分组选择、保存英文ID及切换参数类型检查。
+  701项自动测试、70项实际Tk检查通过，已检查剑术单条分组效果的实际界面排版。
+
+### 更新：可选分支图形化表单（2026-10-23）
+
+- SkillEditorClient的技能单元增加“可选分支 choices”折叠区域，显示分支数量，支持
+  maximum_selections正整数输入、allow_duplicate勾选及分支的新建、改名、删除。
+- 分支内复用既有效果类型、参数、效果高级设置和参考窗口；分支额外消耗复用资源/数值表单，
+  随单元可用阶段限制action_point。条件及其他原有字段保留在分支/可选分支高级设置中。
+- 既有choice_id保留，新分支自动生成choice_N，删除后只更新显示序号；所有新增折叠区域默认关闭。
+  不存在choices时不写入空结构，不强行补写原本省略的默认参数；删除全部分支时移除choices，
+  无直接效果的空技能仍由引擎拒绝。单元、分支及效果高级设置不能覆盖对应表单控制字段。
+- 分支编辑纳入草稿检测、保存、导入导出和只读JSON预览；不完整效果、非法数量或高级JSON阻止保存。
+  删除最后一个分支/效果/消耗时重置空容器高度，并沿用画布刷新，避免残留大块空白。
+- 异常choices结构回退到完整JSON编辑；全局效果参考按钮可定位仅存在于分支中的效果。
+- 新增1项异常结构检查和7项实际Tk检查，覆盖剑术等内置分支无损读写、修改后重开、
+  重复分支的真实引擎结算和逐次额外消耗、阶段资源限制、非法草稿保护及删除布局。
+  697项自动测试、69项实际Tk检查通过；已查看剑术分支概览和效果编辑截图。
+
+### 更新：单元空白默认值与末尾删除（2026-10-23）
+
+- 新单元type与target显式留空，分别显示“选择技能类型”“选择效果目标”，选择后动态显示说明。
+  保存前必须选择；既有定义保持原值，未写target的旧定义仍以self显示且不强行补写字段。
+- 单元标题、加号与末尾“删除此技能单元”按钮使用与新建按钮相同的11pt样式；
+  每个末尾按钮只删除所属单元。移除全局删除按钮/下拉选择框，删除后仅调整显示序号，内部ID不变。
+- 可用阶段的标题及复选框均显示中文；PHASE_LABELS位于SkillEditorClient/model.py，左侧仍是引擎ID，
+  用户只改右侧文字即可。TARGET_DESCRIPTIONS在同一文件，覆盖所有基础和事件目标的提示。
+- 单元内效果与消耗交换顺序。效果类型未选时仅显示“请选择效果类型”，删除切换类型保留内容等常驻说明。
+  效果参数标题、表单及参数行使用与阶段一致的灰底，保留白色输入框和高级JSON编辑区。
+- 将消耗标题下的提示提取为SkillEditorClient/forms.py的COST_HINT，方便用户自行调整。
+- 新增1项阶段/目标说明覆盖检查与1项实际Tk空白选择/校验/保存检查；既有删除检查改为单元末尾操作，
+  扩展字号、背景、效果顺序及中文文案检查。696项自动测试、48项新客户端Tk、14项旧编辑器Tk通过。
+  截图已确认默认空白、单元标题/加号字号、中文阶段、参数灰度与末尾删除；安装诊断入口通过。
+- 用户对启动命令和exe重打包的既有沟通偏好保持有效；本次没有构建或改动用户内容文件。
+
+### 更新：固有技能数字编号与界面精简（2026-10-22）
+
+- 用户要求新建固有技能用纯数字编号，从10开始，0至9留给测试。新增new_personal_skill_key，
+  取现有最大数字目录键加1（至少10），不填补中间空缺、不附带英语/名称/Rank。
+  为复用现有严格数据接口，ID保存为数字字符串"10"；不改变已有ID或角色卡引用。
+  只调整新建固有技能；基础魔术、宝具及现有导入/复制行为保持原方式。
+- 左侧固有技能数字ID按数值排序，原非数字条目保持相对顺序；排序后确保选中项可见。
+- 新单元内部ID按unit_0、unit_1等自动生成，ID输入框移除。旧单元ID保留；删除不改其他单元ID。
+  缺失/空白component_id的异常导入回退到条目高级设置，防止隐藏字段后无法修复。
+- 移除重复“查看JSON/整理JSON”工具栏按钮，完整JSON仍通过只读预览页签访问。
+  顶部重复技能名称/Rank摘要移除；名称、Rank的标签和输入框为11pt，技能说明保持10pt。
+  “新建技能单元”按钮字体11pt并增加内边距，其余按钮字号不变。
+- “类型 type”改为“技能类型”，下方只显示当前类型的对应说明；切换时同步更新。
+  可用阶段区域增加灰色底框，复选框与标签背景一致，与目标字段分隔。
+- 新增1项数字ID分配模型检查；更新实际新建和字号检查，新增1项数值排序/保存重开/角色卡引用
+  集成检查，确认"101"技能可由角色卡装载并执行unit_0。695项自动测试、47项新客户端Tk和
+  14项旧编辑器Tk通过；界面截图已检查。本次未改用户内容文件或构建exe。
+
+### 更新：选择已有技能时全部折叠（2026-10-22）
+
+- SkillForm提供collapse_all，加载定义时显式收起全部嵌套Collapsible，技能说明仍为常显文本框。
+- 新客户端覆写on_select，重复选中当前技能也收起并回到表单顶部，不重载定义、不清除草稿，
+  包括尚未完成的高级JSON；切换其他技能仍沿用原未保存确认流程。
+- 新增1项真实Treeview交互检查，覆盖初次选中全折叠、重复选择保留非法JSON草稿和切换技能全折叠。
+  当前60项实际Tk检查通过（新客户端46、旧编辑器14）；本次仅修改界面选择行为。
+
+### 更新：阶段勾选与删除后空白修复（2026-10-22）
+
+- 技能说明恢复原3行常显文本框，不使用Collapsible。Rank候选移除GM，
+  SkillRank验证规则不改，表单及新建弹窗仍可手输GM并通过校验和保存。
+- 单元标识和type输入框改为半宽；type正下方常显active/passive/react/trigger的用途说明。
+  PhaseSelect改为直接显示ttk.Checkbutton，按可用宽度在1至3列间排列，保留原阶段顺序及AP消耗联动。
+- 效果未选择合法类型时隐藏整个effect_data区，选择后再显示；隐藏只影响布局，不清除参数或草稿。
+- 已通过回归复现删除最后一个展开单元后空容器保留1892像素高度，且画布仍停在旧滚动位置的问题。
+  最后一项删除时将单元/消耗/效果容器高度重置为1；结构改变和折叠后合并调度布局更新，
+  等待几何传播后刷新滚动范围并将视口限制到有效范围。没有借助“再添加”掩盖问题。
+- 实际Tk新增4项：长单元滚到底后删除、GM手输保存、阶段复选框与AP联动、效果参数显隐保留。
+  原宽度检查扩展至单元标识及type，并检查说明常显和提示位置；真实弹窗检查验证GM手输。
+- 694项自动测试、45项新客户端Tk和14项旧编辑器Tk通过；截图验证常显说明、勾选阶段、
+  未选/选定效果以及删除后的显示。用户项目和规则数据保持原状，本次只改源码。
+- 当前这台Windows电脑的默认标签/输入/下拉字体实测为Microsoft YaHei UI 9pt，
+  技能说明及效果参考10pt，顶部技能标题11pt，JSON区Consolas 11pt；本次不改字号。
+
+### 更新：简化新建与技能单元界面（2026-10-22）
+
+- 用户确认components界面译为“技能单元”。固有技能、基础魔术和宝具的新建弹窗改为
+  名称及Rank，按钮为“开始”“取消”，支持中文、必填和合法Rank校验，输入宽度20字符。
+- 内部目录ID按user_名称_Rank生成，重名自动追加编号；基础魔术的skill_id保持basic_magic:前缀。
+  顶部显示名称和Rank并随编辑更新，原有ID不随改名/改Rank变化，可在技能高级设置中查看。
+- 新定义components为空、说明为空，不再附送样例攻击加成、AP消耗或技能单元；
+  点击“新建技能单元”才添加active单元，生成不重复的unit_N标识，其消耗和效果初始为空。
+  “新建效果”位于单元的效果组中；所有Collapsible默认关闭，包括说明、单元、消耗、效果和高级设置。
+- 删除单元按钮移到新建旁，使用相邻只读下拉选择要删的单元；删除后只更新显示编号，保留其他单元ID。
+  名称/Rank输入框按可用宽度的一半布局，左侧目录、旧编辑器及底层JSON字段保持原规则。
+- 原JSON输入区统一命名为技能/技能单元/消耗/效果/效果参数/条目高级设置，JSON预览仍只读。
+  空技能不能保存；删除全部单元后同样拒绝保存。既有技能、未知附加字段和草稿往返保留。
+- 更新模型检查并新增1项ID冲突检查；更新新建测试并新增5项实际Tk检查，覆盖中文弹窗及校验、
+  默认折叠与按需添加、选择删除、取消/重名不覆盖、半宽字段和高级设置标签。
+  全量694项自动测试、41项新客户端Tk及14项旧编辑器Tk通过，实际界面截图已检查。
+- 更新安装检查的临时示例构造以兼容空白新建流程；本次源码修改没有构建exe，beta 0.1保持原快照。
+
+### 更新：发布beta 0.1 exe（2026-10-22）
+
+- 用户明确要求按当前状态重新打包并命名beta 0.1，允许删除旧exe。
+  根目录产物为SkillEditorClient beta 0.1.exe，旧SkillEditorClient.exe删除。
+- SkillEditorClient包声明VERSION、APPLICATION_NAME、EXECUTABLE_NAME；窗口标题、构建名称、
+  exe集成检查统一使用版本标识。Windows产品版本beta 0.1，数字文件版本0.1.0.0。
+- exe包含当前源码和SkillEditorClient/effect_dictionary.txt；不改动用户规范、展示文字或userdata。
+  安装检查同时校验版本、两种参考视图一致，测试对照展示字典SHA-256确认最新文本已打包。
+- 693项自动测试、36项新客户端Tk、14项旧编辑器Tk及4项实际exe检查全部通过。
+  exe验证包括无控制台保存/重开、移至中文目录且PATH无Python、可见窗口正常关闭、同包Core校验。
+- 新产物SHA-256：90F59DA4D68ABFD121497994CD4DE6ED828334F05619BC07952FEF3B3F3A3D07。
+- 用户新沟通偏好：命令没有变化时不重复启动方法；无需例行说明未重新打包exe。
+  未来仍仅在用户明确要求时构建。
+
+### 更新：区分开发规范与客户端展示字典（2026-10-22）
+
+- 用户将规范改名为game/skill/代码数据规范.txt，并将展示副本放到
+  SkillEditorClient/effect_dictionary.txt；保留用户对这两份文本的修改，不自动同步内容。
+- 新客户端独立参考窗口与完整字典页签统一读取客户端副本，按模块位置定位，不依赖工作目录；
+  支持UTF-8 BOM。旧编辑器仅调整资源读取路径并提供可覆盖的读取方法，原编辑功能不变。
+- 构建脚本及安装检查同步新资源路径，但本次没有执行构建或覆盖exe。
+  展示说明修改后重启源码版查看；现有exe仍为历史版本。
+- 新增2项字典路径/精简文本检查与1项实际Tk双入口读取检查；693项自动测试、
+  新客户端36项和旧编辑器14项实际Tk检查全部通过。两份用户字典与exe均未改动。
+
+### 更新：统一calculation（本次不打包exe）
+
+- 用户明确选择calculation作为统一字段。effect_data中的operation全部替换为calculation，
+  涉及modify_resource、modify_event_value、growing、order_change；资源gain_rules同步改名。
+  cost_modifier、damage_modifier、recover_resource原有calculation及全部计算顺序/取值保持原样。
+- 严格验证器、运行时读取、内置御主技能、测试定义、参数下拉和效果字典均同步；不保留旧字段别名。
+  直接apply_skill_effect或资源API遇到旧operation也会报错，防止误退回默认add。
+- 本次只统一技能/资源定义字段。已有内部函数参数、战斗OrderChange.operation、事件重放记录
+  和战报的operation，以及会话operation_id等是其他接口概念，保持不变。
+- 新增9项测试验证7种calculation的严格校验、资源运算、gain_rules=set、成长set/subtract、
+  事件重放及旧字段拒绝；新增2项实际Tk检查验证下拉保存后执行set及旧草稿拒绝保存。
+- 最终691项自动测试、35项新客户端Tk及14项旧编辑器Tk全部通过。旧skilleditor源码未改。
+- 用户新增持续约束：无明确要求时不重新打包exe。此次没有运行构建或exe测试，根目录exe
+  SHA-256修改前后均为FF819916C050B2E1CD24CE5CDE15E7A0829BF08ED29186318015FAA1E213228F。
+  该exe仍为上次只读参考窗口版本，尚不包含统一字段；用pyw -3 -m SkillEditorClient预览源码。
+  今后不要因修改源码而自行构建、覆盖exe。
+
+### 更新：独立只读效果参考窗口
+
+- 用户要求内置effect_type对应effect_data及说明的只读窗口，已在SkillEditorClient新增
+  effect_reference.py；顶部“效果参考”浏览全部类型，每条效果“查看说明”直接定位。
+- 左侧为44种现有效果，支持类型、中文名、参数和说明全文搜索；右侧显示schema固定必填/
+  可选字段、编辑器候选值及effect_dictionary.txt的对应原文。Modifier另附顶层公共字段。
+  按编号（含17.1等）及Modifier裸标题提取现有字典，不建立第二份手写规则说明。
+- 窗口复用、独立滚动、不grab、不阻塞编辑；内容只读可复制，打开/搜索/关闭均不写项目或改变草稿。
+  原完整字典页签保持可用。旧skilleditor源码不改。
+- 新增5项参考内容检查（覆盖全部44种schema和说明）、4项实际Tk交互检查；当前682项自动测试、
+  新33项/旧14项Tk检查及4项最终exe检查全部通过。exe检查也确认窗口只读和44种参考内容。
+- 已更新根目录SkillEditorClient.exe，用户重启后可见；正在运行的窗口未关闭。
+
+### 更新：效果参数下拉与表单
+
+- 用户澄清希望扩展底层effect，但不接受助手提议的8类能力；底层新增内容改由用户指定。
+  那批能力没有实现，本轮仅处理SkillEditorClient已有44种效果的界面。
+- 新增effect_options.py，effect_type和effect_data可选字段直接读取引擎EFFECT_SCHEMAS；
+  中文名称、参数控件/候选值仅为界面提示，最终规则仍由原验证器决定。
+- effect_type改为可选可输入下拉；effect_data新增参数表单和高级JSON页签，支持字段增删、
+  布尔/枚举下拉和直接数值/文本输入。status_id使用当前CatalogProject的有效状态目录，含自定义状态。
+- effect_editor.py在表单/JSON之间显式同步，校验失败保留原草稿并拒绝切换；切换类型不删除
+  旧参数/顶层附加设置，旧字段会标示不适用，保存仍严格拒绝不合法组合。
+- 保留既有参数的类型及复杂结构；模式或格式变化不视为编辑，非法草稿仍能检测未保存状态，
+  布尔与数字不会因Python的True==1而误认为内容相同。
+- 当前677项自动测试通过（新增9项下拉/schema/type检查）；新客户端29项Tk、旧版14项Tk，
+  以及4项最终exe检查全部通过。测试覆盖实际表单产生伤害、全部现有技能往返、自定义状态、
+  页签点击和无效草稿；exe检查也核对了新下拉与参数表单。已同步更新根目录exe。
+- 未修改旧skilleditor源码、引擎effect_type或effect_data语义。界面捕获检查无控件重叠。
+
+### 更新：整局模块收进game/game
+
+- 用户要求把game根目录裸露实现收进game/game，共迁移13个.py文件；外层仅保留__init__.py包入口。
+  原规则.txt资料及其他领域子目录保持原位置。
+- 正式模块路径改为game.game.<模块名>；源码、Core、测试（含patch目标及新进程导入脚本）、
+  动态公共导出及文档示例均同步更新，不留下旧路径转发文件。
+- 外层from game import GameManager等公共入口继续指向同一个实现，保持延迟导入，避免循环依赖。
+- 全量668项自动测试、34项实际Tk检查及4项exe集成检查通过；包依赖检查确认没有残留旧模块导入。
+- 已重新打包根目录SkillEditorClient.exe；原运行文件移至忽略的build/SkillEditorClient.before-layout.exe，
+  无需关闭用户正在编辑的窗口。下次启动根目录exe即使用更新后的包路径。
+
+### 更新：SkillEditorClient 独立exe
+
+- 用户授权以exe替换此版.pyw/.vbs入口，根目录生成SkillEditorClient.exe，两份旧入口已删除。
+- PyInstaller 6.22.3单文件windowed打包，自带Python 3.10/Tkinter；不用安装Python，编辑器无控制台。
+- 源码入口为python -m SkillEditorClient；构建入口SkillEditorClient/build_exe.py，独立环境
+  .venv-build，依赖requirements-build.txt。exe/构建环境/中间产物均被Git忽略。
+- core.catalog.ROOT继续指向只读资源目录，新增DATA_ROOT定位exe所在目录（源码运行时与ROOT一致）。
+  默认catalog、错误记录及Core战报均写到DATA_ROOT/userdata，避免写入临时解包目录导致丢失。
+- 新客户端覆盖launch_core，自带exe以--run-core调用同包Core，只在这个测试子进程分配终端。
+  PYINSTALLER_RESET_ENVIRONMENT=1令Core独立解包，编辑器退出后仍可继续。
+  原skilleditor源码未改动；两版在同一文件夹仍共享相同catalog。
+- --check-installation <报告路径>使用隐藏实际Tk控件和临时目录检查保存/重开/验证，不写真实catalog。
+- 当前668项自动检查通过；20项新客户端Tk、14项旧编辑器Tk以及4项exe集成检查全部通过。
+  exe检查覆盖正常可见窗口、无控制台表单保存、独立中文目录运行及同包Core校验。
+- 构建时必须在正常Windows桌面环境读取Tcl/Tk；脚本有预检查，避免沙箱限制导致静默缺失GUI运行库。
+- exe包含打包时的源码快照；源码修改后需重新构建，外部catalog修改无需构建。
+
+### 更新：SkillEditorClient 表单试验版
+
+- 用户要求保留旧skilleditor源码，另建SkillEditorClient。新包复用旧目录UI及CatalogProject，
+  本轮旧skilleditor全部Python文件SHA-256均保持开始工作时的值，原cmd启动器未改。
+- 最初使用.pyw/.vbs入口，后由用户要求替换为独立SkillEditorClient.exe，见上节。
+- 左侧列表/职介技能保持原UI；技能右侧增加表单与只读JSON预览。新建默认一个展开active
+  组件，component_id留空；name/description文本、rank可选可输入、type/target下拉、阶段多选。
+- cost/effects/组件可折叠并支持多条增删；无AP1/AP2时隐藏action_point候选，移除AP阶段时
+  清空不合法选择、保留数值并阻止保存，等待用户选择其他资源或明确删除。
+- effect_type为文本框，effect_data仍为JSON；暂未表单化字段使用折叠高级JSON保留。
+  已验证现有全部技能表单往返不丢字段。职介/角色卡/状态等仍使用原JSON编辑方式。
+- 默认共用userdata/catalog.json；保存、引用校验、备份、冲突检测、未保存离开提示均复用原版。
+  不增加自动保存，不自动扩展触发/反应类型的专用表单；未知或损坏结构导入退回JSON供修正。
+- 新增10项无桌面检查与19项实际Tk检查；当前666项自动测试全部通过，旧14项Tk也通过。
+  GUI布局已捕获并检查，无第三方依赖。无控制台入口测试只用临时项目，不启动实际游戏。
+- 试用说明在README与MANUAL_TESTING；新客户端测试命令为
+  python -m test_examples.smoke_skill_editor_client。
+
+### 状态仓库记录
+
+- 用户所问“工作量”指是否需要大型底层重构，今后按改造范围回答，无需估算人日。
+- 已在现有Modifier与事件队列上扩展game/status/，提供STATUS_DATA、严格校验和状态实例。
+- 所有add_status改用effect_data.status_id引用仓库；不兼容value写法和旧项目，项目格式为2。
+- core/catalog与Skill Editor新增status分类，可新建、编辑、复制、保存、导入导出、删除及恢复内置。
+- burning是可编辑的示例（每层10基础魔术伤害、最多3层、3次全局回合末、可净化）；不同角色施加分别记录。
+- react按“承受者+status_id”每全局回合最多一次；多组件、多来源共享，不因刷新或重施重置。
+- trigger按“承受者+status_id+原施加者+原技能+component_id”每全局回合一次；用于防循环。
+- 状态触发保留原施加者作为效果来源，承受者作为条件与反应选择主体；不注册为角色技能。
+- 全局回合末先发送并结算global_turn_end，再扣Modifier时间；事件链中新获或刷新时间的效果
+  从下一次回合末计时。保留其他专用生命周期，并向回合末传递决策器。
+- 状态passive只支持self持续数值Modifier，生命周期与叠层由外层统一管理；trigger/react复用
+  现有即时效果。固定value不自动放大；value_source=status_stack_count可读取当前实例层数，
+  damage用multiplier/flat换算。passive数值仍由外层叠层缩放，避免重复倍率。
+- character_state新增status_instances；战报记录实例与status_triggered，终端显示来源/剩余时间。
+  玩家视图会遮蔽未知施加者；GM保留完整来源。无需重新录入现有正式角色卡。
+- 新增37项状态专项测试；最终644项自动测试在默认与4个打乱种子下全部通过，
+  13项实际Tk控件检查与32种子实战全部通过，无遗留工作线程。
+- 新测试在test_examples/test_status_catalog.py，Tk状态操作冒烟在smoke_skill_editor.py。
+- 层数数值读取补充：燃烧默认同来源stack、max_stacks=3、每层10点；每条effect执行前读取
+  当前实例层数，不汇总其他来源。数值来源也接入攻击事件、资源回复及临时MP原有接口。
+  本补充新增12项自动测试，当前全量656项及14项实际Tk控件检查全部通过。
+- 用户已授权每天北京时间00:00检查更新，验证后自动提交并推送origin/main。
+  已创建本聊天定时任务“Papermoon 每日提交上传”（ID：papermoon，ACTIVE）。无更新跳过；
+  不包含todo、userdata、生成记录和缓存；遇到检查失败、冲突或未完成修改时保留现场并报告。
+  这是每日定时上传授权，不表示每次改代码都立即提交或推送。本次仅设置计划，尚未立即上传。
 
 ## 0. 给新聊天的最短说明
 
@@ -29,16 +301,16 @@ https://github.com/muyudongqwq/Papermoon.git，由用户创建并授权首次提
 
 - `README.md`
 - 本文件
-- `game/skill/effect_dictionary.txt`
+- `game/skill/代码数据规范.txt`
 - `game/turn/decision.py`
-- `game/game_loop.py`
-- `game/game_session.py`
-- `game/queued_decision.py`
-- `game/rule_report.py`
-- `game/character_state.py`
+- `game/game/game_loop.py`
+- `game/game/game_session.py`
+- `game/game/queued_decision.py`
+- `game/game/rule_report.py`
+- `game/game/character_state.py`
 - `SESSION_RUNTIME.md`
 - `core/terminal_game_runner.py`
-- `game/game_manager.py`
+- `game/game/game_manager.py`
 - `game/turn/Turn.py`
 - `game/turn/battle.py`
 - `game/skill/content_data.py`
@@ -73,11 +345,11 @@ https://github.com/muyudongqwq/Papermoon.git，由用户创建并授权首次提
 
 当前统计：
 
-- 非测试 Python 文件：85 个；
-- 非测试 Python 代码：30,678 行；
-- 自动测试模块：61 个；
-- 自动测试：607 项，另有11项实际Tk控件冒烟检查；
-- 默认顺序及随机种子 1、7、42、20261021打乱顺序：每次607项全部通过；
+- 非测试 Python 文件：101个（含客户端exe构建与启动模块）；
+- 自动测试模块：66个；
+- 自动测试：691项，另有49项实际Tk控件检查（旧14项、新客户端35项）；
+- 本次默认全量691项通过；4项exe检查属于上次打包版本，本轮不打包、不重新运行exe检查；
+- 此前状态仓库644项在默认及四个打乱种子下全部通过；
 - 32个正常随机种子实战全部自然结束，未发现遗留会话线程；
 - 代码可由 `python main.py` 启动最小终端场景。
 
@@ -109,7 +381,7 @@ python -m unittest discover -s test_examples -p "test_*.py"
 1. 当前用户最新裁定；
 2. 已通过的自动测试；
 3. 当前代码的统一实现；
-4. `game/skill/effect_dictionary.txt` 中的正式数据格式；
+4. `game/skill/代码数据规范.txt` 中的正式数据格式；
 5. `game/` 下的规则书；
 6. `test_examples/samples/` 中的历届角色卡。
 
@@ -135,7 +407,7 @@ python -m unittest discover -s test_examples -p "test_*.py"
 
 ### 5.1 GameManager
 
-`game/game_manager.py` 是一局游戏的聚合根，持有：
+`game/game/game_manager.py` 是一局游戏的聚合根，持有：
 
 - 活跃、死亡和消失角色；
 - TurnManager；
@@ -264,7 +536,7 @@ Modifier 支持：
 - 战斗顺序/净化：`order_change`、`purify`；
 - Modifier：`add_status`、`attribute_bonus`、`numeric_attribute_bonus`、`dice_bonus`、`attack_bonus`、`plus_bonus`、`magic_resistance`、`movement_point_bonus`、`visibility_bonus`、`carry_capacity`、`presence_concealment`、`damage_modifier`、`cost_modifier`、`shield`、`hidden`。
 
-`game/skill/effect_dictionary.txt` 是唯一正式字段说明。每完成或变更关键词，都要同步更新该文件。
+`game/skill/代码数据规范.txt` 是唯一正式字段说明。每完成或变更关键词，都要同步更新该文件。
 
 未知 Effect 和已讨论但尚未实现的 Effect 都严格返回“效果关键词不存在”。不保留旧字段兼容。
 
@@ -503,7 +775,7 @@ Modifier 支持：
 
 ### 9.1 通用循环、会话、核心战报与详细状态已建立
 
-`game/game_loop.py::GameLoop` 已负责以下通用编排：
+`game/game/game_loop.py::GameLoop` 已负责以下通用编排：
 
 - 游戏循环；
 - AP1/AP2批量收集；
@@ -537,7 +809,7 @@ GameSession复用令咒与GM服务，提供结构化入口、工作线程、队�
 
 等实际运行稳定后，再评估是否把内核改造成显式可暂停状态机。第一版直接改async风险很大，因为Encounter、简易轮、反应技能和令咒都存在嵌套决策。
 
-实际入口为 `game/game_session.py`、`game/queued_decision.py` 和 `game/session_view.py`。选项只提交option_id，数值输入只提交整数value；请求ID、版本和控制者必须匹配。快照和事件不含规则对象，GM可看完整状态，玩家只看自己和机械视野允许的信息。
+实际入口为 `game/game/game_session.py`、`game/game/queued_decision.py` 和 `game/game/session_view.py`。选项只提交option_id，数值输入只提交整数value；请求ID、版本和控制者必须匹配。快照和事件不含规则对象，GM可看完整状态，玩家只看自己和机械视野允许的信息。
 
 即时命令仅在allow_refresh=True窗口接收，成功或拒绝后均重建请求。嵌套反应窗口可以正常作答，但需完成该选择后再发即时命令。控制者ID来自可信本地调用者；持久化、随机流存档和跨进程恢复尚未实现。
 
@@ -559,7 +831,7 @@ GameSession复用令咒与GM服务，提供结构化入口、工作线程、队�
 ### 9.4 巨型模块
 
 - `game/skill/skill_runtime.py` 已超过10万字节；
-- `game/turn/battle.py` 也很大；原终端循环的通用编排已迁移到 `game/game_loop.py`，后者仍包含较多地图交互代码。
+- `game/turn/battle.py` 也很大；原终端循环的通用编排已迁移到 `game/game/game_loop.py`，后者仍包含较多地图交互代码。
 
 不要为了美观进行无目标重构。只有在建立运行层接口或新增通用Effect时，才按职责逐步提取服务，并以现有测试保护行为。
 
@@ -635,7 +907,7 @@ GameSession复用令咒与GM服务，提供结构化入口、工作线程、队�
 
 ### 10.6 GM接口
 
-已有 `game/gm_commands.py`：
+已有 `game/game/gm_commands.py`：
 
 - `add_resource target resource amount`；
 - `damage target damage_type amount`；
@@ -646,7 +918,7 @@ GameSession复用令咒与GM服务，提供结构化入口、工作线程、队�
 
 ### 10.7 核心战报与详细角色状态（已完成）
 
-- `game/rule_report.py`提供独立结果记录，不发送规则GameEvent、不触发技能。
+- `game/game/rule_report.py`提供独立结果记录，不发送规则GameEvent、不触发技能。
   EventManager在既有事件完成后投递白名单记录，攻击/骰子/伤害/技能/咏唱等出口
   补充明确结果。结构化记录不依赖print；终端输出保持兼容。
 - GameManager.rule_reports.history是完整GM日志（含各权限层），只供可信调用者。
@@ -658,7 +930,7 @@ GameSession复用令咒与GM服务，提供结构化入口、工作线程、队�
 - 未知来源/目标身份及位置会被隐藏；普通旁观者只读事件与已知身份，不读数值。
   精确HP/护盾仅给受伤方及GM，技能/基础伤害仅给发动方及GM，骰值/资源等为私人。
   视野后续变化不重写旧战报，返回值均独立且JSON可序列化。
-- `game/character_state.py`只读展示技能说明、usage、共享冷却、咏唱层数/成本、
+- `game/game/character_state.py`只读展示技能说明、usage、共享冷却、咏唱层数/成本、
   加符、护盾剩余值、持续Modifier、资源边界和互斥技能缓存；Session补充自有场地、
   待防御攻击和当前战斗阶段。敌方可见条目仍只提供身份/已知位置。
 - runtime_available只表示次数/冷却/生命周期，不能替代决策合法性。事件限额
@@ -775,9 +1047,10 @@ MANUAL_TESTING.md。当前不需要新卡或新增人工裁定；不要在编辑
 ## 13. 协作偏好
 
 - 使用“你”，不要使用敬语。
+- 用户没有明确要求时，不重新打包或覆盖exe；通过源码启动预览修改。最近一次字段统一未打包。
 - 遇到规则尚未决定且不同选择会显著改变结果时，先列出冲突和需要决定的边界，再写代码。
 - 已明确规则应直接实现并测试，不必反复确认。
-- 每次增加或改变Effect字段，必须同步更新 `game/skill/effect_dictionary.txt`。
+- 每次增加或改变Effect字段，必须同步更新 `game/skill/代码数据规范.txt`。
 - 优先增加通用接口，不为单张卡写无法复用的硬编码；确有卡片特例时应明确标注。
 - 修改后进行对应专项测试，并尽可能运行全量测试。
 - 系统测试已完成；用户现已要求并取得Core / Skill Editor双击启动版本，下一步

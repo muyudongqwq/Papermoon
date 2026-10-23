@@ -3,7 +3,7 @@ import unittest
 from game.character.masters import Master
 from game.character.npc import Familiar, NPC
 from game.character.servants import Servant
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.turn.battle import BattleManager
 

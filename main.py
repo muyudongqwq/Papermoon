@@ -1,6 +1,6 @@
 """Papermoon终端版的默认启动入口。"""
 
-from game.basic_game_scenario import create_basic_game_scenario
+from game.game.basic_game_scenario import create_basic_game_scenario
 from core.terminal_game_runner import TerminalGameRunner
 
 

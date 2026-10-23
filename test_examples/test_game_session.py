@@ -8,9 +8,9 @@ from unittest.mock import patch
 from game.character.familiar import Familiar
 from game.character.masters import Master
 from game.character.servants import Servant
-from game.game_manager import GameManager
-from game.game_session import GameSession
-from game.game_loop import GameLoop
+from game.game.game_manager import GameManager
+from game.game.game_session import GameSession
+from game.game.game_loop import GameLoop
 
 from game.map.map import Location
 from game.turn.battle import BattleManager
@@ -309,7 +309,7 @@ class GameSessionTests(unittest.TestCase):
                 "trigger": {"event_type": "before_damage", "timing": "before"},
                 "condition": {"event_target_is_self": True}, "target": "self",
                 "effects": [{"effect_type": "modify_event_value", "effect_data": {
-                    "operation": "add", "value": -10, "minimum": 0,
+                    "calculation": "add", "value": -10, "minimum": 0,
                 }}],
             }],
         })

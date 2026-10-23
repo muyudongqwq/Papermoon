@@ -7,12 +7,12 @@ initialize the entire engine or introduce cycles between rule packages.
 from importlib import import_module
 
 _EXPORTS = {
-    "GameManager": ("game.game_manager", "GameManager"),
-    "GameLoop": ("game.game_loop", "GameLoop"),
-    "GameSession": ("game.game_session", "GameSession"),
-    "QueuedDecisionProvider": ("game.queued_decision", "QueuedDecisionProvider"),
-    "HolyGrail": ("game.holy_grail", "HolyGrail"),
-    "create_basic_game_scenario": ("game.basic_game_scenario", "create_basic_game_scenario"),
+    "GameManager": ("game.game.game_manager", "GameManager"),
+    "GameLoop": ("game.game.game_loop", "GameLoop"),
+    "GameSession": ("game.game.game_session", "GameSession"),
+    "QueuedDecisionProvider": ("game.game.queued_decision", "QueuedDecisionProvider"),
+    "HolyGrail": ("game.game.holy_grail", "HolyGrail"),
+    "create_basic_game_scenario": ("game.game.basic_game_scenario", "create_basic_game_scenario"),
 }
 
 __all__ = list(_EXPORTS)

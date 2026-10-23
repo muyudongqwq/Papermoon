@@ -43,7 +43,7 @@ PERSONAL_SKILL_DATA = {
             "effects": [{
                 "effect_type": "modify_event_value",
                 "effect_data": {
-                    "operation": "add",
+                    "calculation": "add",
                     "value": {"input_id": "prevented_damage", "multiplier": -1},
                     "minimum": 0,
                 },
@@ -431,9 +431,9 @@ PERSONAL_SKILL_DATA.update({
             "condition": {"battle_state": True}, "usage_limit": {"scope": "battle", "maximum": 3},
             "choices": {"options": [
                 {"choice_id": "attack", "name": "攻击骰+9", "effects": [
-                    _nero_dice_bonus(stat) for stat in ("physical_attack", "magic_attack")]},
+                    _nero_dice_bonus("attack")]},
                 {"choice_id": "defense", "name": "防御骰+9", "effects": [
-                    _nero_dice_bonus(stat) for stat in ("dodge", "block", "offset")]},
+                    _nero_dice_bonus("defense")]},
             ]},
         }],
     },
@@ -506,7 +506,7 @@ NOBLE_PHANTASM_DATA = {
                 "exit_penalty": {"value": 60, "damage_type": "physical"},
                 "effects": [{"effect_type": "add_status", "polarity": "buff", "purifiable": False,
                     "application_mode": "continuous", "effect_target": {"scope": "field_owner"},
-                    "effect_data": {"value": "retain_attack_phase_on_failed_defense"}}],
+                    "effect_data": {"status_id": "retain_attack_phase_on_failed_defense"}}],
             }}],
         }],
     },

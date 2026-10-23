@@ -2,7 +2,7 @@ import unittest
 
 from game.character.card_factory import create_master_test_0
 from game.character.masters import Master
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.turn.battle import BattleManager
 from game.turn.damage import DamageEvent, DamageResolver

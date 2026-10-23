@@ -2,6 +2,7 @@
 
 from game.turn.damage_types import normalize_damage_types
 from game.modifier.context import ModifierContext
+from game.modifier.dice_targets import dice_targets
 
 
 class Modifier:
@@ -218,6 +219,7 @@ class Modifier:
         self.buff_skill_id = None
         self.buff_application_id = None
         self.last_duration_update_turn = None
+        self.duration_revision = 0
         self.applied = False
 
         self._validate_definition()
@@ -595,65 +597,27 @@ class DiceModifier(BonusModifier):
         super().__init__(effect, target, **kwargs)
         self.effect_target = self.effect_data["effect_target"]
 
+    def _adjust_targets(self, amount):
+        for stat in dice_targets(self.effect_target):
+            if stat in getattr(self.target, "DERIVED_STAT_NAMES", ()):
+                self.target.adjust_derived_modifier(stat, amount)
+            else:
+                setattr(self.target, stat, getattr(self.target, stat) + amount)
+
     def _apply_effect(self):
         if self.is_contextual:
             return
-        if self.effect_target in getattr(
-            self.target,
-            "DERIVED_STAT_NAMES",
-            (),
-        ):
-            self.target.adjust_derived_modifier(
-                self.effect_target,
-                self.value * self.stack_count,
-            )
-            return
-        current = getattr(self.target, self.effect_target)
-        setattr(
-            self.target,
-            self.effect_target,
-            current + self.value * self.stack_count,
-        )
+        self._adjust_targets(self.value * self.stack_count)
 
     def _remove_effect(self):
         if self.is_contextual:
             return
-        if self.effect_target in getattr(
-            self.target,
-            "DERIVED_STAT_NAMES",
-            (),
-        ):
-            self.target.adjust_derived_modifier(
-                self.effect_target,
-                -self.value * self.stack_count,
-            )
-            return
-        current = getattr(self.target, self.effect_target)
-        setattr(
-            self.target,
-            self.effect_target,
-            current - self.value * self.stack_count,
-        )
+        self._adjust_targets(-self.value * self.stack_count)
 
     def _change_stack_effect(self, difference):
         if self.is_contextual:
             return
-        if self.effect_target in getattr(
-            self.target,
-            "DERIVED_STAT_NAMES",
-            (),
-        ):
-            self.target.adjust_derived_modifier(
-                self.effect_target,
-                self.value * difference,
-            )
-            return
-        current = getattr(self.target, self.effect_target)
-        setattr(
-            self.target,
-            self.effect_target,
-            current + self.value * difference,
-        )
+        self._adjust_targets(self.value * difference)
 
 
 class PlusModifier(Modifier):
@@ -924,8 +888,11 @@ class ShieldModifier(Modifier):
 class StatusModifier(Modifier):
     def __init__(self, effect, target, **kwargs):
         super().__init__(effect, target, **kwargs)
-        self.status = self.effect_data["value"]
+        self.status = self.effect_data["status_id"]
         self.value = self.status
+        from game.status.registry import get_status_definition
+        from game.status.runtime import StatusRuntime
+        self.status_runtime = StatusRuntime(self, get_status_definition(self.status))
 
     def _apply_effect(self):
         register = getattr(self.target, "_register_status_source", None)
@@ -933,18 +900,35 @@ class StatusModifier(Modifier):
             self.target.status_flags.add(self.status)
         else:
             register(self.status, self)
+        try:
+            self.status_runtime.apply_passives()
+        except Exception:
+            self.target._unregister_status_source(self.status, self)
+            raise
 
     def _remove_effect(self):
+        self.status_runtime.remove_passives()
         unregister = getattr(self.target, "_unregister_status_source", None)
         if unregister is None:
             self.target.status_flags.discard(self.status)
         else:
             unregister(self.status, self)
 
+    def _change_stack_effect(self, difference):
+        self.status_runtime.change_stacks(difference)
+
+    def update(self, timing=Modifier.DEFAULT_DURATION_TIMING, turn_number=None):
+        if timing != "global_turn_end":
+            return False
+        return super().update(timing, turn_number)
+
 
 class HiddenModifier(StatusModifier):
     def __init__(self, effect, target, **kwargs):
-        super().__init__(effect, target, **kwargs)
+        # Hidden has its own specialized lifecycle; it is not a catalog status.
+        Modifier.__init__(self, effect, target, **kwargs)
+        self.status = self.effect_data["value"]
+        self.value = self.status
         self.hidden_position = target.position
         self.remove_on_position_change = self.effect_data.get(
             "remove_on_position_change",
@@ -972,7 +956,7 @@ class HiddenModifier(StatusModifier):
         self.withdrawn_position = None
 
     def _apply_effect(self):
-        super()._apply_effect()
+        self.target._register_status_source(self.status, self)
         if self.prevent_movement:
             self.target._register_status_source("cannot_move", self)
         if not self.withdraw_from_battle:
@@ -988,7 +972,7 @@ class HiddenModifier(StatusModifier):
         )
 
     def _remove_effect(self):
-        super()._remove_effect()
+        self.target._unregister_status_source(self.status, self)
         if self.prevent_movement:
             self.target._unregister_status_source("cannot_move", self)
         battle = self.withdrawn_battle
@@ -1003,6 +987,12 @@ class HiddenModifier(StatusModifier):
             return
         battle.add_participant(self.target)
         battle.queue_late_participant(self.target)
+
+    def update(self, timing=Modifier.DEFAULT_DURATION_TIMING, turn_number=None):
+        return Modifier.update(self, timing, turn_number)
+
+    def _change_stack_effect(self, difference):
+        pass
 
     def conceals_from(self, observer):
         return observer is not self.target and observer not in self.revealed_to
@@ -1136,9 +1126,20 @@ MODIFIER_TYPES = {
 def create_modifier(effect, target, **kwargs):
     effect_type = effect["effect_type"]
     if effect_type == "add_status":
+        from copy import deepcopy
+        from game.status.registry import get_status_definition, validate_status_definition
+        from game.skill.effect_validation import validate_effect_definition
+        validate_effect_definition(effect)
+        definition = get_status_definition(effect["effect_data"]["status_id"])
+        validate_status_definition(definition)
+        defaults = {key: deepcopy(value) for key, value in definition.items()
+                    if key not in {"status_id", "description", "components"}}
+        defaults.setdefault("modifier_id", definition["status_id"])
+        defaults.update(deepcopy(effect))
+        effect = defaults
         modifier_class = (
             WeaknessModifier
-            if effect.get("effect_data", {}).get("value") == "weakness"
+            if effect["effect_data"]["status_id"] == "weakness"
             else StatusModifier
         )
     else:

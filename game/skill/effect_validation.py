@@ -100,7 +100,7 @@ EFFECT_SCHEMAS = {
             "duplicate_policy", "remove_with_source",
         },
     ),
-    "add_status": _schema(required={"value"}, modifier=True),
+    "add_status": _schema(required={"status_id"}, modifier=True),
     "attribute_bonus": _schema(
         required={"effect_target", "value"}, modifier=True,
     ),
@@ -159,7 +159,7 @@ EFFECT_SCHEMAS = {
     ),
     "growing": _schema(
         required={"growth_id", "value", "stages"},
-        optional={"operation", "initial_value", "minimum", "maximum"},
+        optional={"calculation", "initial_value", "minimum", "maximum"},
     ),
     "hidden": _schema(
         required={"value"},
@@ -172,10 +172,10 @@ EFFECT_SCHEMAS = {
     ),
     "magic_resistance": _schema(required={"value"}, modifier=True),
     "modify_event_value": _schema(
-        optional={"operation", "value", "minimum", "maximum"},
+        optional={"calculation", "value", "minimum", "maximum"},
     ),
     "modify_resource": _schema(
-        required={"resource_id", "value"}, optional={"operation"},
+        required={"resource_id", "value"}, optional={"calculation"},
     ),
     "movement_point_bonus": _schema(required={"value"}, modifier=True),
     "carry_capacity": _schema(required={"value"}, modifier=True),
@@ -187,7 +187,7 @@ EFFECT_SCHEMAS = {
         optional={"scope", "attempts"},
     ),
     "order_change": _schema(
-        required={"operation", "duration"}, optional={"subject", "anchor"},
+        required={"calculation", "duration"}, optional={"subject", "anchor"},
     ),
     "plus_bonus": _schema(
         required={"effect_target", "value"}, modifier=True,
@@ -407,14 +407,14 @@ def _validate_resource_definition(data, path):
             rule,
             rule_path,
             allowed={
-                "trigger_event", "operation", "value", "value_source",
+                "trigger_event", "calculation", "value", "value_source",
                 "condition",
             },
             required={"trigger_event"},
         )
         _string(rule["trigger_event"], f"{rule_path}.trigger_event")
-        operation = rule.get("operation", "add")
-        _enum(operation, f"{rule_path}.operation", VALID_RESOURCE_OPERATIONS)
+        calculation = rule.get("calculation", "add")
+        _enum(calculation, f"{rule_path}.calculation", VALID_RESOURCE_OPERATIONS)
         if "value" not in rule and "value_source" not in rule:
             _error(rule_path, "必须提供value或value_source")
         if "value" in rule and "value_source" in rule:
@@ -991,8 +991,8 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         _string(data["growth_id"], f"{path}.growth_id")
         _integer(data["value"], f"{path}.value")
         _enum(
-            data.get("operation", "add"),
-            f"{path}.operation",
+            data.get("calculation", "add"),
+            f"{path}.calculation",
             {"add", "subtract", "set"},
         )
         for field in ("initial_value", "minimum", "maximum"):
@@ -1238,10 +1238,17 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
     elif effect_type in {"gain_resource", "modify_resource"}:
         _string(data["resource_id"], f"{path}.resource_id")
         _number(data["value"], f"{path}.value")
-        if "operation" in data:
-            _enum(data["operation"], f"{path}.operation", VALID_RESOURCE_OPERATIONS)
-            if data["operation"] == "divide" and data["value"] == 0:
+        if "calculation" in data:
+            _enum(data["calculation"], f"{path}.calculation", VALID_RESOURCE_OPERATIONS)
+            if data["calculation"] == "divide" and data["value"] == 0:
                 _error(f"{path}.value", "divide操作不能使用0")
+    elif effect_type == "grant_temporary_mp":
+        _validate_value_source(data, path)
+        if "value_source" in data:
+            _enum(data["value_source"], f"{path}.value_source", {"event_value", "status_stack_count"})
+        for field in ("multiplier", "flat"):
+            if field in data:
+                _number(data[field], f"{path}.{field}")
     elif effect_type == "recover_resource":
         _string(data["resource_id"], f"{path}.resource_id")
         _validate_value_source(data, path, required=True)
@@ -1261,24 +1268,24 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         if maximum != "all":
             _integer(maximum, f"{path}.maximum", positive=True)
     elif effect_type == "order_change":
-        operation = data["operation"]
+        calculation = data["calculation"]
         _enum(
-            operation, f"{path}.operation",
+            calculation, f"{path}.calculation",
             {"move_first", "move_last", "move_before", "move_after"},
         )
         if data["duration"] is not None:
             _integer(data["duration"], f"{path}.duration", positive=True)
         if "subject" in data:
             _enum(data["subject"], f"{path}.subject", {"actor", "target"})
-        if operation in {"move_before", "move_after"}:
+        if calculation in {"move_before", "move_after"}:
             if "anchor" not in data:
-                _error(path, f"{operation}必须提供anchor")
+                _error(path, f"{calculation}必须提供anchor")
             _enum(data["anchor"], f"{path}.anchor", {"actor", "target"})
         elif "anchor" in data:
             _error(f"{path}.anchor", "只用于move_before或move_after")
     elif effect_type == "modify_event_value":
-        if "operation" in data:
-            _enum(data["operation"], f"{path}.operation", {"add", "multiply", "set"})
+        if "calculation" in data:
+            _enum(data["calculation"], f"{path}.calculation", {"add", "multiply", "set"})
         for field in ("value", "minimum", "maximum"):
             if field in data and data[field] is not None:
                 _number(data[field], f"{path}.{field}")
@@ -1423,6 +1430,12 @@ def validate_effect_definition(
     )
     if schema.modifier:
         _validate_modifier_common(effect, path)
+    if effect_type == "add_status":
+        from game.status.registry import get_status_definition
+        _string(data["status_id"], f"{data_path}.status_id")
+        get_status_definition(data["status_id"])
+        if effect.get("duration_timing", "global_turn_end") != "global_turn_end" or "phase_window" in effect:
+            _error(path, "状态持续时间统一按global_turn_end扣减，不接受phase_window")
     if effect_type in {
         "modify_event_value", "cancel_event", "change_damage_type",
     } and component_type not in {

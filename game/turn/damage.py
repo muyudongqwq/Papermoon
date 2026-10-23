@@ -313,7 +313,7 @@ class DamageResolver:
          event_manager.emit("damage_received", **common)
          if event.source is not None and event.source is not event.target:
             event_manager.emit("damage_dealt", **common)
-      from game.rule_report import report
+      from game.game.rule_report import report
       report(event.target, "damage_resolved", actor=event.source, targets=[event.target],
              position=position, battle=battle,
              public={"attack_id": event.attack_id},
@@ -385,7 +385,7 @@ class AttackEvent:
       self.resolution_reason = None
       self._resolution_consumption_done = False
       self._cancellation_reported = False
-      from game.rule_report import report
+      from game.game.rule_report import report
       report(target, "attack_declared", actor=source, targets=[target],
              public={"attack_id": self.attack_id, "channel": resolution_channel},
              involved={"damage_type": self.damage_type, "attack_roll": attack_roll},
@@ -406,7 +406,7 @@ class AttackEvent:
       if self.resolved or self._cancellation_reported:
          return False
       self._cancellation_reported = True
-      from game.rule_report import report
+      from game.game.rule_report import report
       report(self.target, "attack_cancelled", actor=self.source, targets=[self.target],
              public={"attack_id": self.attack_id}, involved={"reason": reason})
       return True
@@ -433,7 +433,7 @@ class AttackEvent:
          manager = getattr(owner, "modifier_manager", None)
          if manager is not None:
             manager.consume_event("attack_resolved", context)
-      from game.rule_report import report
+      from game.game.rule_report import report
       report(self.target, "attack_resolved", actor=self.source, targets=[self.target],
              public={"attack_id": self.attack_id},
              involved={"hit": self.hit, "damage": self.final_damage,

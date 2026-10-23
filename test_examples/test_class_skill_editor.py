@@ -51,17 +51,16 @@ class ClassSkillEditorTests(unittest.TestCase):
             self.assertEqual(actor.class_skills[0].source_type, "class_skill")
             self.assertEqual(actor.atk, 35)
 
-    def test_old_four_directory_project_upgrades_without_writing_until_save(self):
+    def test_old_project_is_rejected_without_changing_file(self):
         legacy = empty_project()
+        legacy["format_version"] = 1
+        del legacy["status"]
         del legacy["class_skill"]
         self.path.write_text(format_json(legacy), encoding="utf-8")
         original = self.path.read_bytes()
-        loaded = CatalogProject(self.path)
-        self.assertEqual(loaded.data["class_skill"], {})
+        with self.assertRaises(ValueError):
+            CatalogProject(self.path)
         self.assertEqual(self.path.read_bytes(), original)
-        loaded.save()
-        self.assertEqual(self.path.with_suffix(".json.bak").read_bytes(), original)
-        self.assertEqual(CatalogProject(self.path).data, loaded.data)
 
     def test_save_reopen_and_export_preserve_all_ranks(self):
         self.add_class()

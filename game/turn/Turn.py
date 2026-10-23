@@ -1352,19 +1352,13 @@ class TurnManager:
                 decision_provider
             )
 
-        for character in self.characters:
-            character.update_modifiers(
-                "global_turn_end",
-                turn_number=self.turn,
-            )
+        if self.game_manager is not None:
+            self.game_manager.resolve_turn_end_event(self.turn, decision_provider=decision_provider)
+        else:
+            for character in [*self.characters, *self.dead_characters]:
+                character.update_modifiers("global_turn_end", turn_number=self.turn)
 
-        for character in self.dead_characters:
-            character.update_modifiers(
-                "global_turn_end",
-                turn_number=self.turn,
-            )
-
-        for character in self.characters:
+        for character in self.characters[:]:
             character.advance_casting(
                 self.turn,
                 decision_provider=decision_provider,
@@ -1372,7 +1366,7 @@ class TurnManager:
             character.end_global_turn(self.turn)
 
         if self.game_manager is not None:
-            self.game_manager.on_turn_end(self.turn)
+            self.game_manager.on_turn_end(self.turn, emit_event=False)
 
         self.update_visibility()
 

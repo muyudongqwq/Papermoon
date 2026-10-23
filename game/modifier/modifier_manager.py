@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from numbers import Real
 
 from game.modifier.context import ModifierContext
+from game.modifier.dice_targets import dice_targets
 
 
 @dataclass
@@ -73,12 +74,16 @@ class ModifierManager:
 
     @staticmethod
     def _state(modifier):
-        return {
+        result = {
             "duration": modifier.duration,
             "phase_window_remaining": modifier.phase_window_remaining,
             "stack_count": modifier.stack_count,
             "remaining_uses": modifier.remaining_uses,
         }
+        if getattr(modifier, "status_runtime", None) is not None:
+            from game.status.runtime import status_view
+            result["status"] = status_view(modifier)
+        return result
 
     def _resource_state(self):
         return {
@@ -140,6 +145,9 @@ class ModifierManager:
             "source_id": modifier.source_id,
             "polarity": modifier.polarity,
         }
+        if getattr(modifier, "status_runtime", None) is not None:
+            from game.status.runtime import status_view
+            data["status_instance"] = status_view(modifier)
         data.update(payload or {})
         return event_manager.emit(
             event_type,
@@ -177,7 +185,7 @@ class ModifierManager:
         # Buffs produced by a skill share the skill's stable id. A later use
         # replaces every buff from an earlier use of the same named skill,
         # while multiple effects belonging to the same use may coexist.
-        if modifier.polarity == "buff" and modifier.buff_skill_id is not None:
+        if modifier.polarity == "buff" and modifier.buff_skill_id is not None and modifier.effect_type != "add_status":
             for existing_buff in self.owner.modifiers[:]:
                 if (
                     existing_buff.polarity == "buff"
@@ -246,12 +254,16 @@ class ModifierManager:
             self.owner.validate_ride_group()
         return True
 
-    def update(self, timing="global_turn_end", turn_number=None):
+    def update(self, timing="global_turn_end", turn_number=None, duration_snapshot=None):
         removed = []
         for modifier in self.owner.modifiers[:]:
+            if modifier not in self.owner.modifiers:
+                continue
             if modifier.should_remove():
                 self.remove(modifier, reason="condition_ended")
                 removed.append(modifier)
+                continue
+            if duration_snapshot is not None and duration_snapshot.get(modifier) != modifier.duration_revision:
                 continue
             if modifier.update(timing, turn_number=turn_number):
                 self.remove(modifier, reason="expired")
@@ -569,10 +581,10 @@ class ModifierManager:
                 or modifier.effect_type != effect_type
             ):
                 continue
-            if effect_target is not None and (
-                getattr(modifier, "effect_target", None) != effect_target
-            ):
-                continue
+            if effect_target is not None:
+                target = getattr(modifier, "effect_target", None)
+                if target != effect_target and (effect_type != "dice_bonus" or effect_target not in dice_targets(target)):
+                    continue
             if modifier.matches_context(context):
                 total += modifier.value * modifier.stack_count
         return total
@@ -659,6 +671,7 @@ class ModifierManager:
     def _has_same_source(existing, modifier):
         return (
             existing.source is modifier.source
+            and existing.source_actor is modifier.source_actor
             and existing.source_type == modifier.source_type
             and existing.source_id == modifier.source_id
         )
@@ -826,6 +839,8 @@ class ModifierManager:
     def _refresh_duration(existing, modifier):
         ModifierManager._refresh_uses(existing, modifier)
         rule = modifier.duration_refresh_rule
+        if rule != "unchanged":
+            existing.duration_revision += 1
         if existing.phase_window is not None or modifier.phase_window is not None:
             if existing.phase_window_signature != modifier.phase_window_signature:
                 raise ValueError(

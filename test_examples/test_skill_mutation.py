@@ -1,7 +1,7 @@
 import unittest
 
 from game.character.masters import Master
-from game.game_manager import GameManager
+from game.game.game_manager import GameManager
 from game.map.map import Location
 
 

@@ -1,8 +1,8 @@
 """Human-operated scenarios; all characters use the selected card templates."""
 
 from game.character import create_character_from_card
-from game.basic_game_scenario import create_basic_game_scenario
-from game.game_manager import GameManager
+from game.game.basic_game_scenario import create_basic_game_scenario
+from game.game.game_manager import GameManager
 from game.map.map import Location, Map
 from game.turn.battle import BattleManager
 

@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import patch
 
 from game.character.masters import Master
-from game.game_loop import GameLoop
-from game.game_manager import GameManager
+from game.game.game_loop import GameLoop
+from game.game.game_manager import GameManager
 from core.terminal_game_runner import TerminalGameRunner
 from game.map.map import Location
 from game.turn.battle import BattleManager

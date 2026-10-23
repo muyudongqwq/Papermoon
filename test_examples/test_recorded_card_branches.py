@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 from game.action.action import Action
 from game.character import create_character_from_card
-from game.command_spell import CommandSpellService
-from game.game_manager import GameManager
+from game.game.command_spell import CommandSpellService
+from game.game.game_manager import GameManager
 from game.map.map import Location
 from game.modifier.modifier import create_modifier
 from game.skill.casting import CastingState
@@ -194,7 +194,7 @@ class RecordedCardBranchTests(unittest.TestCase):
         attack = self.incoming(self.nero)
         options = lambda: [item for item in get_offset_attack_options(self.nero, attack) if item.skill is skill]
         self.assertEqual(options(), [])
-        self.nero.add_modifier(create_modifier({"effect_type": "add_status", "effect_data": {"value": "stay"}}, self.nero))
+        self.nero.add_modifier(create_modifier({"effect_type": "add_status", "effect_data": {"status_id": "stay"}}, self.nero))
         first, second = options()
         resolve_offset_attack_option(self.nero, first)
         mp = self.nero.mp
@@ -256,7 +256,7 @@ class RecordedCardBranchTests(unittest.TestCase):
     def test_escape_under_theatre_denial_charges_once_and_grants_map_action(self):
         self.theatre()
         self.game.decision_provider = ScriptedDecisionProvider(["deny"])
-        self.enemy.add_modifier(create_modifier({"effect_type": "add_status", "effect_data": {"value": "stay"}}, self.enemy))
+        self.enemy.add_modifier(create_modifier({"effect_type": "add_status", "effect_data": {"status_id": "stay"}}, self.enemy))
         hp = self.enemy.hp
         action = Action(self.enemy, "escape")
         action.game_turn = 2

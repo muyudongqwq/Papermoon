@@ -489,10 +489,10 @@ ACTION_DATA = {
         ],
         "effects": [
             {
+                "duration": 2,
                 "effect_type": "add_status",
                 "effect_data": {
-                    "value": "stay",
-                    "duration": 2,
+                    "status_id": "stay",
                 },
             },
         ],

@@ -383,7 +383,7 @@ def resolve_offset_attack_option(
                          battle=character.current_battle)
     if casting_prepaid:
         state.finish_release()
-    from game.rule_report import report_skill_use
+    from game.game.rule_report import report_skill_use
     report_skill_use(character, skill, component, [character], paid=paid, phase="offset")
     return {
         "option": option,

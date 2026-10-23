@@ -50,7 +50,7 @@ class SkillEditorSmokeTests(unittest.TestCase):
         self.app.text.insert("1.0", format_json(data))
 
     def test_window_load_search_and_clean_document(self):
-        self.assertEqual(len(self.app.items), 32)
+        self.assertEqual(len(self.app.items), sum(len(entries) for entries in self.app.project.effective().values()))
         self.app.load("personal_skill", "master_test_0:unblemished_person")
         self.root.update_idletasks()
         self.assertFalse(self.app.dirty())
@@ -187,6 +187,53 @@ class SkillEditorSmokeTests(unittest.TestCase):
             awareness = ctypes.c_int()
             self.assertEqual(ctypes.windll.shcore.GetProcessDpiAwareness(None, ctypes.byref(awareness)), 0)
             self.assertEqual(awareness.value, 2)
+
+    def test_status_can_be_created_copied_saved_and_deleted(self):
+        self.app.kind.set("状态")
+        dialog = self.enter_patch("skilleditor.app.simpledialog.askstring", return_value="my_burning")
+        self.app.new()
+        self.assertEqual(self.app.current, ("status", "my_burning"))
+        self.assertTrue(self.app.validate())
+        self.assertTrue(self.app.save())
+        dialog.return_value = "other_burning"
+        self.app.duplicate()
+        self.assertTrue(self.app.save())
+        loaded = CatalogProject(self.path)
+        self.assertEqual(loaded.data["status"]["other_burning"]["status_id"], "other_burning")
+        self.enter_patch("skilleditor.app.messagebox.askyesno", return_value=True)
+        self.app.remove()
+        self.assertNotIn("other_burning", CatalogProject(self.path).data["status"])
+
+    def test_status_export_import_and_builtin_restore(self):
+        self.app.refresh(select=("status", "burning"))
+        self.edit(lambda data: data.update(duration=7))
+        self.assertTrue(self.app.save())
+        exported = self.path.parent / "status.json"
+        self.enter_patch("skilleditor.app.filedialog.asksaveasfilename", return_value=str(exported))
+        self.app.export_entry()
+        self.assertEqual(json.loads(exported.read_text(encoding="utf-8"))["category"], "status")
+        self.enter_patch("skilleditor.app.messagebox.askyesno", return_value=True)
+        self.app.remove()
+        self.assertEqual(self.app.project.effective()["status"]["burning"]["duration"], 3)
+        self.enter_patch("skilleditor.app.filedialog.askopenfilename", return_value=str(exported))
+        self.app.import_entry()
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.project.data["status"]["burning"]["duration"], 7)
+
+    def test_status_stack_formula_can_be_edited_validated_and_saved(self):
+        self.app.refresh(select=("status", "burning"))
+        self.assertIn("status_stack_count", self.app.status.get())
+        def change(data):
+            data["stacking"]["max_stacks"] = 4
+            data["components"][0]["effects"][0]["effect_data"].update(multiplier=6, flat=2)
+        self.edit(change)
+        self.assertTrue(self.app.validate())
+        self.assertTrue(self.app.save())
+        saved = CatalogProject(self.path).data["status"]["burning"]
+        self.assertEqual(saved["stacking"]["max_stacks"], 4)
+        formula = saved["components"][0]["effects"][0]["effect_data"]
+        self.assertEqual((formula["value_source"], formula["multiplier"], formula["flat"]),
+                         ("status_stack_count", 6, 2))
 
 
 if __name__ == "__main__":
