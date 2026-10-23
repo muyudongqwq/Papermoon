@@ -20,6 +20,9 @@ from game.character import create_character_from_card
 from SkillEditorClient.app import SkillEditorClient
 from SkillEditorClient.model import FORM_CATEGORIES, PHASE_LABELS, TYPE_DESCRIPTIONS, TARGET_DESCRIPTIONS, new_client_definition
 from SkillEditorClient.dialogs import NewSkillDialog
+from SkillEditorClient.condition_model import CONDITION_NAMES
+from SkillEditorClient.cost_editor import COST_TIMING_NAMES
+from SkillEditorClient.trigger_editor import EVENT_OPTIONS
 from SkillEditorClient.widgets import Collapsible
 from SkillEditorClient.effect_options import EFFECT_TYPES, FORM_EFFECT_TYPES, parameter_options
 from game.status.data import STATUS_DATA
@@ -900,6 +903,30 @@ raise SystemExit(main())
             self.assertEqual(actor.hp, hp + 10)
             self.assertEqual(actor.mp, mp - 4)
 
+    def test_choice_add_cost_button_saves_activation_cost_with_or_without_chant(self):
+        for needs_chant in ("否", "是"):
+            with self.subTest(needs_chant=needs_chant):
+                panel = self.new().components[0]
+                panel.chant_choice.set(needs_chant)
+                option = panel.add_effect({"effect_type": "choices", "effect_data": {}}).choices.add_option()
+                option.name.set("攻击强化")
+                option.add_effect({"effect_type": "attack_bonus", "effect_data": {"value": 3}})
+                with patch.object(self.root, "report_callback_exception") as callback_error:
+                    option.add_cost_button.invoke()
+                callback_error.assert_not_called()
+                self.assertEqual(len(option.costs), 1)
+                cost = option.costs[0]
+                self.assertEqual(cost.timing.get(), COST_TIMING_NAMES["activation"])
+                self.assertEqual(tuple(cost.timing_box.cget("values")), (COST_TIMING_NAMES["activation"],))
+                cost.value.set("7")
+                self.assertTrue(self.app.save())
+                saved = CatalogProject(self.path).data["personal_skill"]["user_example"]
+                self.assertEqual(saved["components"][0]["choices"]["options"][0]["cost"],
+                                 [{"resource": "mp", "value": 7, "timing": "activation"}])
+                self.app.load("personal_skill", "user_example", saved)
+                self.assertEqual(self.app.form.components[0].choices.options[0].costs[0].read(),
+                                 {"resource": "mp", "value": 7, "timing": "activation"})
+
     def test_deleting_choices_preserves_surviving_ids_and_can_remove_the_structure(self):
         panel = self.new().components[0]
         choices = panel.add_effect({"effect_type": "choices", "effect_data": {}}).choices
@@ -1068,6 +1095,433 @@ raise SystemExit(main())
         self.assertEqual(window.current_effect, "choices")
         self.assertIn("maximum_selections", window.text.get("1.0", "end-1c"))
         self.assertIn("allow_duplicate", window.text.get("1.0", "end-1c"))
+
+    def test_phase_area_only_shows_for_active_and_preserves_selected_phases(self):
+        panel = self.new().components[0]
+        phases = panel.phases.get()
+        for kind in ("trigger", "react", "passive", ""):
+            panel.kind.set(kind)
+            self.assertEqual(panel.phase_area.winfo_manager(), "")
+            self.assertEqual(panel.phases.get(), phases)
+        panel.kind.set("active")
+        self.assertEqual(panel.phase_area.winfo_manager(), "pack")
+        self.assertEqual(panel.phases.get(), phases)
+
+    def test_active_chant_controls_default_to_no_and_preserve_hidden_drafts(self):
+        panel = self.new().components[0]
+        self.assertEqual(panel.chant_choice.get(), "否")
+        self.assertEqual(tuple(panel.chant_box.cget("values")), ("否", "是"))
+        self.assertEqual(panel.chant_area.winfo_manager(), "pack")
+        self.assertEqual(panel.chant_rounds_row.winfo_manager(), "")
+        phases = panel.phases.get()
+        panel.chant_choice.set("是")
+        panel.chant_rounds.set("2")
+        self.assertEqual(panel.chant_rounds_row.winfo_manager(), "pack")
+        self.assertEqual(panel.phase_area.winfo_manager(), "")
+        self.assertEqual(panel.phases.get(), phases)
+        self.assertEqual(panel.read()["casting_requirement"], 2)
+        for kind in ("trigger", "react", "passive", ""):
+            panel.kind.set(kind)
+            self.assertEqual(panel.chant_area.winfo_manager(), "")
+        panel.kind.set("active")
+        self.assertEqual(panel.chant_rounds.get(), "2")
+        panel.chant_choice.set("否")
+        self.assertEqual(panel.phase_area.winfo_manager(), "pack")
+        self.assertEqual(panel.chant_rounds_row.winfo_manager(), "")
+        self.assertNotIn("casting_requirement", panel.read())
+
+    def test_new_chant_setting_saves_reopens_and_runs_the_existing_casting_flow(self):
+        panel = self.new().components[0]
+        panel.remove_cost(panel.costs[0])
+        panel.chant_choice.set("是")
+        panel.chant_rounds.set("2")
+        self.set_phases(panel, [])
+        self.assertTrue(self.app.save())
+        saved = self.app.project.data["personal_skill"]["user_example"]
+        self.assertEqual(saved["casting"], {"activation_mode": "release"})
+        self.assertEqual(saved["components"][0]["casting_requirement"], 2)
+        self.app.load("personal_skill", "user_example")
+        panel = self.app.form.components[0]
+        self.assertEqual(panel.chant_choice.get(), "是")
+        self.assertEqual(panel.chant_rounds.get(), "2")
+        self.assertEqual(panel.phase_area.winfo_manager(), "")
+        self.assertFalse(self.app.dirty())
+        from game.action.action_list import ActionContext, ActionListBuilder
+        from game.skill.casting import CastingState
+        actor = Master("Chanter", 3, 3, 3, 3, 3, "C", 3)
+        skill = actor.create_personal_skill(saved)
+        actions = ActionListBuilder()
+        self.assertIn("chant", {a.action_id for a in actions.get_available_actions(ActionContext(actor, "AP1"))})
+        state = CastingState.start(actor, skill, 1)
+        self.assertEqual(state.eligible_components(), [])
+        state.advance_at_global_turn_end(1)
+        self.assertEqual(state.eligible_components(), [])
+        state.continue_for_turn(2)
+        state.advance_at_global_turn_end(2)
+        self.assertEqual(state.eligible_components()[0]["component_id"], panel.component_id.get())
+
+    def test_existing_chant_skills_load_requirements_and_keep_casting_configuration(self):
+        for category in ("personal_skill", "noble_phantasm"):
+            for key, saved in self.app.project.effective()[category].items():
+                self.app.load(category, key)
+                for data, panel in zip(saved["components"], self.app.form.components):
+                    if data.get("type") == "active" and data.get("casting_requirement", 0) > 0:
+                        self.assertEqual(panel.chant_choice.get(), "是")
+                        self.assertEqual(panel.chant_rounds.get(), str(data["casting_requirement"]))
+                        self.assertEqual(panel.phase_area.winfo_manager(), "")
+                self.assertEqual(self.app.definition(), saved)
+        self.app.load("noble_phantasm", "servant_test_0:golden_theatre")
+        self.app.form.components[0].chant_rounds.set("2")
+        saved = self.app.definition()
+        self.assertEqual(saved["casting"]["activation_mode"], "automatic")
+        self.assertEqual(saved["casting"]["auto_activate_component_id"], "open_theatre")
+
+    def test_invalid_chant_rounds_do_not_overwrite_saved_data_and_instant_mode_can_be_changed(self):
+        panel = self.new().components[0]
+        self.assertTrue(self.app.save())
+        saved_bytes = self.path.read_bytes()
+        panel = self.app.form.components[0]
+        panel.chant_choice.set("是")
+        for value in ("", "0", "-1", "1.5", "true"):
+            panel.chant_rounds.set(value)
+            self.assertFalse(self.app.save())
+            self.assertEqual(self.path.read_bytes(), saved_bytes)
+        panel.chant_rounds.set("1")
+        self.set_json(self.app.form.extras, {"casting": {"activation_mode": "instant"}})
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.project.data["personal_skill"]["user_example"]["casting"],
+                         {"activation_mode": "release"})
+
+    def test_inherited_noble_chant_requirement_is_visible_and_new_units_default_to_no(self):
+        data = new_client_definition("宝具", "chant_noble")
+        data["range_type"] = "anti_army"
+        data["components"] = [{"component_id": "implicit", "type": "active", "target": "self",
+                               "effects": [{"effect_type": "attack_bonus", "effect_data": {"value": 5}}]}]
+        self.app.load("noble_phantasm", "chant_noble", data)
+        panel = self.app.form.components[0]
+        self.assertEqual(panel.chant_choice.get(), "是")
+        self.assertEqual(panel.chant_rounds.get(), "1")
+        data["components"][0]["cost"] = [{"resource": "mp", "value": 30, "timing": "casting_start"}]
+        self.assertEqual(self.app.definition(), data)
+        second = self.app.form.add_component()
+        self.assertEqual(second.chant_choice.get(), "否")
+        second.kind.set("active")
+        second.target.set("self")
+        self.assertEqual(second.read()["casting_requirement"], 0)
+
+    def test_trigger_condition_form_saves_reloads_and_executes_boolean_filters(self):
+        panel = self.new().components[0]
+        panel.remove_cost(panel.costs[0])
+        panel.remove_effect(panel.effects[0])
+        panel.add_effect({"effect_type": "recover_resource", "effect_data": {"resource_id": "hp", "value": 5}})
+        panel.kind.set("trigger")
+        panel.trigger_editor.load({"event_type": "damage_received", "timing": "after"})
+        editor = panel.condition_editor
+        self.assertEqual(editor.winfo_manager(), "pack")
+        first, = editor.rows
+        self.assertEqual(first.selection.get(), "")
+        first.selection.set(CONDITION_NAMES["event_target_is_self"])
+        first.add_button.invoke()
+        second = editor.rows[1]
+        second.selection.set(CONDITION_NAMES["event_value_at_least"])
+        second.value.set("20")
+        second.join.set("或")
+        second.add_button.invoke()
+        third = editor.rows[2]
+        third.selection.set(CONDITION_NAMES["damage_type"])
+        third.value.set("魔术")
+        third.negated.set(True)
+        self.assertEqual(str(second.join_box.cget("state")), "readonly")
+        self.assertEqual(tuple(second.join_box.cget("values")), ("与", "或"))
+        self.assertIn("事件", first.description.cget("text"))
+        self.assertEqual(ttk.Style(self.root).lookup(editor.cget("style"), "background"),
+                         ttk.Style(self.root).lookup(panel.phase_area.cget("style"), "background"))
+        self.assertTrue(self.app.save())
+        saved = CatalogProject(self.path).data["personal_skill"]["user_example"]
+        condition = saved["components"][0]["condition"]
+        self.assertEqual(condition, {"all": [
+            {"any": [{"event_target_is_self": True}, {"event_value_at_least": 20}]},
+            {"not": {"damage_type": "magic"}},
+        ]})
+        self.app.load("personal_skill", "user_example")
+        panel = self.app.form.components[0]
+        self.assertEqual(len(panel.condition_editor.rows), 3)
+        self.assertEqual(self.app.definition(), saved)
+        self.assertEqual(panel.condition_editor.rows[2].join.get(), "与")
+        self.assertTrue(panel.condition_editor.rows[2].negated.get())
+        self.assertNotIn("condition", json.loads(panel.extras.get()))
+        from game.game.game_manager import GameManager
+        from game.map.map import Location
+        actor = Master("Actor", 3, 3, 3, 3, 3, "C", 3)
+        source = Master("Source", 3, 3, 3, 3, 3, "C", 3)
+        actor.create_personal_skill(saved)
+        location = Location("A")
+        actor.position = source.position = location
+        game = GameManager([actor, source], location)
+        game.start_game()
+        actor.hp -= 20
+        hp = actor.hp
+        game.event_manager.emit("damage_received", actor=source, target=actor, value=10, payload={"damage_type": "physical"})
+        self.assertEqual(actor.hp, hp + 5)
+        game.event_manager.emit("damage_received", actor=source, target=actor, value=30, payload={"damage_type": "magic"})
+        self.assertEqual(actor.hp, hp + 5)
+
+    def test_condition_delete_buttons_follow_their_rows_and_hide_for_last_row(self):
+        panel = self.new().components[0]
+        panel.kind.set("trigger")
+        editor = panel.condition_editor
+        first = editor.rows[0]
+        first.selection.set(CONDITION_NAMES["battle_state"])
+        self.assertEqual(first.delete_button.winfo_manager(), "")
+        first.add_button.invoke()
+        second = editor.rows[1]
+        second.selection.set(CONDITION_NAMES["actor_alive"])
+        second.negated.set(True)
+        for row in editor.rows:
+            self.assertEqual(row.pack_slaves()[-2:], [row.delete_button, row.add_button])
+            self.assertEqual(row.delete_button.cget("text"), "删除此条件")
+            self.assertEqual(row.delete_button.cget("style"), panel.delete_button.cget("style"))
+        first.delete_button.invoke()
+        self.assertEqual(editor.rows, [second])
+        self.assertEqual(second.caption.cget("text"), "条件1：")
+        self.assertEqual(second.delete_button.winfo_manager(), "")
+        self.assertEqual(editor.get(), {"not": {"actor_alive": True}})
+        editor.remove_row(second)
+        self.assertEqual(editor.rows, [second])
+
+    def test_condition_type_switch_preserves_flat_advanced_and_form_changes(self):
+        panel = self.new().components[0]
+        original = {"battle_state": True, "event_target_is_self": True}
+        self.set_json(panel.extras, {"condition": original, "trigger": {"event_type": "damage_received"}})
+        panel.kind.set("trigger")
+        self.assertEqual(panel.condition_editor.get(), original)
+        panel.condition_editor.rows[1].value.set("否")
+        changed = panel.condition_editor.get()
+        panel.kind.set("active")
+        self.assertEqual(panel.condition_editor.winfo_manager(), "")
+        self.assertEqual(json.loads(panel.extras.get())["condition"], changed)
+        panel.kind.set("trigger")
+        self.assertEqual(panel.condition_editor.get(), changed)
+        self.assertEqual(panel.condition_editor.rows[1].value.get(), "否")
+
+    def test_invalid_condition_drafts_and_blank_added_rows_do_not_overwrite_file(self):
+        panel = self.new().components[0]
+        panel.kind.set("trigger")
+        panel.trigger_editor.load({"event_type": "damage_received"})
+        self.assertTrue(self.app.save())
+        saved = self.path.read_bytes()
+        editor = self.app.form.components[0].condition_editor
+        first = editor.rows[0]
+        first.selection.set(CONDITION_NAMES["event_target_is_self"])
+        first.add_button.invoke()
+        self.assertFalse(self.app.save())
+        self.assertEqual(self.path.read_bytes(), saved)
+        editor.remove_row(editor.rows[1])
+        editor.show_json()
+        editor.raw.text.insert("1.0", "invalid")
+        self.assertFalse(self.app.save())
+        self.assertEqual(self.path.read_bytes(), saved)
+        self.assertTrue(self.app.dirty())
+        panel = self.app.form.components[0]
+        panel.kind.set("active")
+        self.assertTrue(panel.condition_sync_notice.winfo_manager())
+        self.assertIn("invalid", editor.raw.get())
+
+    def test_imperial_privilege_event_is_visible_and_round_trips_without_changes(self):
+        key = "servant_test_0:imperial_privilege"
+        self.app.load("personal_skill", key)
+        panel = self.app.form.components[0]
+        event = panel.trigger_editor
+        self.assertEqual(event.winfo_manager(), "pack")
+        self.assertEqual(event.selection.get(), "全局回合开始")
+        self.assertIn("皇帝特权", event.description.cget("text"))
+        self.assertEqual(event.timing.get(), "事件发生后")
+        self.assertEqual(event.get()["priority"], 100)
+        children = panel.body.pack_slaves()
+        self.assertLess(children.index(event), children.index(panel.condition_editor))
+        self.assertEqual(self.app.definition(), self.app.project.effective()["personal_skill"][key])
+        self.assertNotIn("trigger", json.loads(panel.extras.get()))
+        self.assertFalse(self.app.dirty())
+
+    def test_unit_cost_form_edits_prepaid_and_activation_costs_without_public_costs(self):
+        key = "servant_test_0:golden_theatre"
+        self.app.load("noble_phantasm", key)
+        form = self.app.form.components[0]
+        self.assertFalse(hasattr(self.app.form, "cost_group"))
+        self.assertFalse(form.cost_group.expanded)
+        first = form.costs[0]
+        self.assertEqual(first.value.get(), "40")
+        self.assertEqual(first.timing.get(), COST_TIMING_NAMES["casting_start"])
+        self.assertEqual(tuple(first.resource_box.cget("values")), ("mp",))
+        first.value.set("45")
+        second = form.add_cost({"resource": "mp", "value": 3})
+        self.assertEqual(second.timing.get(), COST_TIMING_NAMES["activation"])
+        self.assertEqual(str(second.timing_box.cget("state")), "readonly")
+        self.set_json(second.extras, {"cost_id": "extra_release"})
+        self.assertTrue(self.app.save())
+        saved = self.app.project.data["noble_phantasm"][key]
+        self.assertEqual(saved["components"][0]["cost"], [
+            {"resource": "mp", "value": 45, "timing": "casting_start"},
+            {"resource": "mp", "value": 3, "cost_id": "extra_release"}])
+        self.assertEqual(saved["casting"]["activation_mode"], "automatic")
+        self.app.load("noble_phantasm", key)
+        self.assertEqual([row.read() for row in self.app.form.components[0].costs], saved["components"][0]["cost"])
+        self.assertNotIn("cost", saved)
+        self.assertFalse(self.app.dirty())
+
+    def test_invalid_unit_cost_keeps_saved_file_and_draft_then_can_be_deleted(self):
+        panel = self.new().components[0]
+        panel.remove_cost(panel.costs[0])
+        self.assertTrue(self.app.save())
+        saved = self.path.read_bytes()
+        form = self.app.form.components[0]
+        row = form.add_cost({"resource": "hp", "value": 1, "timing": "casting_start"})
+        self.assertFalse(self.app.save())
+        self.assertEqual(self.path.read_bytes(), saved)
+        self.assertTrue(self.app.dirty())
+        row.resource.set("mp")
+        row.value.set("invalid")
+        self.assertFalse(self.app.save())
+        self.assertEqual(row.value.get(), "invalid")
+        form.remove_cost(row)
+        self.assertEqual(form.cost_rows.cget("height"), 1)
+        self.assertTrue(self.app.save())
+
+    def test_two_units_save_independent_complete_costs_without_a_public_cost_area(self):
+        form = self.new()
+        first = form.components[0]
+        first.remove_cost(first.costs[0])
+        first.chant_choice.set("是")
+        first.add_cost({"resource": "mp", "value": 10, "timing": "casting_start"})
+        second = form.add_component()
+        second.kind.set("active")
+        second.target.set("self")
+        second.chant_choice.set("是")
+        second.chant_rounds.set("2")
+        second.add_cost({"resource": "mp", "value": 40, "timing": "casting_start"})
+        second.add_effect({"effect_type": "attack_bonus", "effect_data": {"value": 3}})
+        self.assertFalse(hasattr(form, "cost_group"))
+        self.assertTrue(self.app.save())
+        saved = self.app.project.data["personal_skill"]["user_example"]
+        self.assertNotIn("cost", saved)
+        self.assertEqual([unit["cost"][0]["value"] for unit in saved["components"]], [10, 40])
+        self.app.load("personal_skill", "user_example")
+        self.app.form.components[0].costs[0].value.set("12")
+        self.assertTrue(self.app.save())
+        saved = self.app.project.data["personal_skill"]["user_example"]
+        self.assertEqual([unit["cost"][0]["value"] for unit in saved["components"]], [12, 40])
+
+    def test_field_maintenance_uses_graphical_cost_rows_and_preserves_type_switch_drafts(self):
+        panel = self.new().components[0]
+        effect = panel.effects[0]
+        effect.effect_type.set("create_field")
+        self.set_json(effect.extras, {})
+        self.set_json(effect.data, {"field_id": "cost_field"})
+        effect.data.show_form()
+        costs = effect.data.add_field("cost", empty=True)
+        costs.input.invoke()
+        row = costs.rows[0]
+        row.value.set("5")
+        self.assertEqual(row.timing.get(), COST_TIMING_NAMES["maintenance"])
+        self.assertEqual(tuple(row.timing_box.cget("values")), (COST_TIMING_NAMES["maintenance"],))
+        self.assertTrue(self.app.save())
+        saved = self.path.read_bytes()
+        effect = self.app.form.components[0].effects[0]
+        self.assertEqual(effect.data.rows["cost"].read(), [{"resource": "mp", "value": 5, "timing": "maintenance"}])
+        effect.effect_type.set("attack_bonus")
+        self.assertIn("当前类型不支持", effect.data.rows["cost"].label.cget("text"))
+        self.assertFalse(self.app.save())
+        self.assertEqual(self.path.read_bytes(), saved)
+        effect.effect_type.set("create_field")
+        self.assertTrue(self.app.save())
+
+    def test_noble_implicit_rank_cost_is_shown_and_saved_explicitly(self):
+        key = "servant_test_0:laus_saint_claudius"
+        data = deepcopy(self.app.project.effective()["noble_phantasm"][key])
+        data["components"][0].pop("cost")
+        self.app.load("noble_phantasm", key, data)
+        self.assertEqual(self.app.form.components[0].costs[0].value.get(), "100")
+        self.assertEqual(self.app.form.components[0].costs[0].timing.get(), COST_TIMING_NAMES["casting_start"])
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.project.data["noble_phantasm"][key]["components"][0]["cost"],
+                         [{"resource": "mp", "value": 100, "timing": "casting_start"}])
+
+    def test_trigger_event_selection_saves_timing_and_preserves_extra_configuration(self):
+        panel = self.new().components[0]
+        panel.kind.set("trigger")
+        event = panel.trigger_editor
+        self.assertEqual(event.selection.get(), "")
+        self.assertEqual(event.description.cget("text"), "选择触发事件")
+        event.load({"event_type": "global_turn_start", "priority": 20, "allow_when_dead": True})
+        event.selection.set("伤害结算前")
+        self.assertEqual(event.timing.get(), "事件发生前")
+        self.assertEqual(tuple(event.timing_box.cget("values")), ("事件发生前",))
+        self.assertTrue(self.app.save())
+        saved = self.app.project.data["personal_skill"]["user_example"]
+        self.assertEqual(saved["components"][0]["trigger"], {
+            "event_type": "before_damage", "timing": "before", "priority": 20, "allow_when_dead": True})
+        self.app.load("personal_skill", "user_example")
+        event = self.app.form.components[0].trigger_editor
+        self.assertEqual(event.selection.get(), "伤害结算前")
+        self.assertEqual(event.get(), saved["components"][0]["trigger"])
+        self.assertFalse(self.app.dirty())
+
+    def test_trigger_event_switching_types_and_invalid_drafts_preserve_data(self):
+        panel = self.new().components[0]
+        self.set_json(panel.extras, {"trigger": {"event_type": "custom_event", "timing": "before", "priority": 3}, "tag": "keep"})
+        panel.kind.set("trigger")
+        event = panel.trigger_editor
+        self.assertEqual(event.selection.get(), "custom_event")
+        self.assertEqual(event.timing.get(), "事件发生前")
+        self.assertIn("自定义", event.description.cget("text"))
+        panel.kind.set("react")
+        self.assertEqual(event.winfo_manager(), "pack")
+        event.selection.set("受到伤害后")
+        panel.kind.set("active")
+        self.assertEqual(event.winfo_manager(), "")
+        self.assertEqual(json.loads(panel.extras.get()), {
+            "trigger": {"event_type": "damage_received", "timing": "after", "priority": 3}, "tag": "keep"})
+        panel.kind.set("trigger")
+        self.assertEqual(event.selection.get(), "受到伤害后")
+        self.assertTrue(self.app.save())
+        saved = self.path.read_bytes()
+        event = self.app.form.components[0].trigger_editor
+        event.extras.text.insert("1.0", "invalid")
+        self.app.form.components[0].kind.set("passive")
+        self.assertTrue(self.app.form.components[0].trigger_sync_notice.winfo_manager())
+        self.assertEqual(event.winfo_manager(), "pack")
+        self.assertFalse(self.app.save())
+        self.assertEqual(self.path.read_bytes(), saved)
+        self.assertIn("invalid", event.extras.get())
+
+    def test_builtin_events_and_legacy_event_ids_preserve_canonical_definitions(self):
+        self.assertEqual(len({v[0] for v in EVENT_OPTIONS.values()}), len(EVENT_OPTIONS))
+        for key, value in self.app.project.effective()["personal_skill"].items():
+            self.app.load("personal_skill", key)
+            self.assertEqual(self.app.definition(), value)
+        value = self.new().read()
+        value["components"][0].update(type="trigger", trigger_event="custom_legacy", priority=15)
+        self.app.load("personal_skill", "user_example", value)
+        event = self.app.form.components[0].trigger_editor
+        self.assertEqual(event.selection.get(), "custom_legacy")
+        self.assertEqual(self.app.definition(), value)
+        event.selection.set("全局回合开始")
+        self.assertEqual(event.get(), {"event_type": "global_turn_start"})
+        self.assertEqual(self.app.definition()["components"][0]["priority"], 15)
+
+    def test_grouped_conditions_use_advanced_json_without_flattening(self):
+        original = self.new().read()
+        condition = {"all": [{"battle_state": True}, {"any": [{"actor_alive": True}, {"event_target_is_self": True}]}]}
+        original["components"][0].update(type="trigger", condition=condition, trigger={"event_type": "damage_received"})
+        self.app.project.put("personal_skill", "user_example", original)
+        self.app.load("personal_skill", "user_example", original)
+        editor = self.app.form.components[0].condition_editor
+        self.assertEqual(editor.mode, "json")
+        self.assertEqual(self.app.definition(), original)
+        self.assertFalse(self.app.dirty())
+        with self.assertRaisesRegex(ValueError, "嵌套分组"):
+            editor.show_form()
+        self.assertEqual(editor.get(), condition)
 
     def test_malformed_import_remains_repairable_and_can_be_left(self):
         self.app.load("personal_skill", "broken", {"skill_id": "broken", "components": [None]})

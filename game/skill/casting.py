@@ -5,9 +5,9 @@ from dataclasses import dataclass, field
 
 from game.modifier.modifier import create_modifier
 from game.action.action_rules import target_matches_rules
+from game.resource.costs import NOBLE_PHANTASM_MP_COSTS
 
 
-NOBLE_PHANTASM_MP_COSTS = {"C": 30, "B": 40, "A": 50}
 MAGIC_NOBLE_PHANTASM_DAMAGE = {"C": 90, "B": 120, "A": 150}
 AREA_RANGE_TYPES = {"anti_army", "anti_fortress"}
 POSITION_REVEAL_RANGE_TYPES = {"anti_fortress"}
@@ -34,33 +34,24 @@ def uses_release_action(skill):
     return bool(config and config.get("activation_mode", "release") == "release")
 
 
-def get_base_casting_mp_cost(skill):
-    config = get_casting_config(skill)
-    value = config.get("mp_cost")
-    if value is None and getattr(skill, "source_type", None) == "noble_phantasm":
-        value = NOBLE_PHANTASM_MP_COSTS.get(skill.rank_name)
-    if value is None:
-        raise ValueError(f"{skill.name}的咏唱没有定义mp_cost")
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError("咏唱mp_cost必须是数字")
-    if value < 0:
-        raise ValueError("咏唱mp_cost不能小于0")
-    if (
-        getattr(skill, "source_type", None) == "noble_phantasm"
-        and config.get("range_type") == "anti_fortress"
-    ):
-        value *= 2
-    return value
+def casting_component(skill, component_id=None):
+    options = [item for item in skill.definitions if item.get("type") == "active"
+               and component_casting_requirement(item) > 0]
+    if component_id is not None:
+        selected = next((item for item in options if item["component_id"] == component_id), None)
+        if selected is None:
+            raise ValueError("请选择该技能中需要咏唱的active单元")
+        return selected
+    if len(options) != 1:
+        raise ValueError("请在开始咏唱时指定技能单元")
+    return options[0]
 
 
-def get_casting_mp_cost(actor, skill):
-    config = get_casting_config(skill)
-    value = get_base_casting_mp_cost(skill)
-    return actor.modifier_manager.calculate_cost(
-        value,
-        resource="mp",
-        cost_id=config.get("cost_id", f"casting:{skill.skill_id}"),
-    )
+def get_casting_mp_cost(actor, skill, component=None):
+    from game.resource.costs import cost_totals, costs_at
+    component = casting_component(skill) if component is None else component
+    return cost_totals(actor, costs_at(component.get("cost", []), "casting_start"),
+                       f"casting:{skill.skill_id}").get("mp", 0)
 
 
 def iter_casting_sources(character):
@@ -78,29 +69,32 @@ def iter_casting_sources(character):
             yield skill
 
 
-def castable_sources(character):
+def castable_options(character, skill=None):
     from game.skill.component_runtime import component_runtime_reasons
     from game.skill.skill_runtime import condition_matches
     result = []
-    for skill in iter_casting_sources(character):
-        if not any(
-            component.get("type") == "active"
-            and component_casting_requirement(component) > 0
-            and condition_matches(component.get("condition"), character, {
-                "battle": getattr(character, "current_battle", None),
-                "turn_number": getattr(character, "current_global_turn", 0),
-            })
-            and not component_runtime_reasons(character, skill, component)
-            for component in skill.definitions
-        ):
+    for source in iter_casting_sources(character):
+        if skill is not None and source is not skill:
             continue
-        try:
-            cost = get_casting_mp_cost(character, skill)
-        except (TypeError, ValueError):
-            continue
-        if character.get_available_mp() >= cost:
-            result.append(skill)
+        config = get_casting_config(source)
+        for component in source.definitions:
+            if component.get("type") != "active" or component_casting_requirement(component) <= 0:
+                continue
+            if config.get("activation_mode") == "automatic" and component["component_id"] != config.get("auto_activate_component_id"):
+                continue
+            if not condition_matches(component.get("condition"), character, {
+                    "battle": getattr(character, "current_battle", None),
+                    "turn_number": getattr(character, "current_global_turn", 0)}):
+                continue
+            if component_runtime_reasons(character, source, component):
+                continue
+            if character.get_available_mp() >= get_casting_mp_cost(character, source, component):
+                result.append((source, component))
     return result
+
+
+def castable_sources(character):
+    return list(dict.fromkeys(skill for skill, component in castable_options(character)))
 
 
 def zero_cast_release_options(character):
@@ -108,17 +102,9 @@ def zero_cast_release_options(character):
     for skill in iter_casting_sources(character):
         if not uses_release_action(skill):
             continue
-        try:
-            cost = get_casting_mp_cost(character, skill)
-        except (TypeError, ValueError):
-            continue
-        if character.get_available_mp() < cost:
-            continue
         for component in skill.definitions:
-            if (
-                component.get("type") == "active"
-                and component_casting_requirement(component) == 0
-            ):
+            if (component.get("type") == "active" and component_casting_requirement(component) == 0
+                    and character.get_available_mp() >= get_casting_mp_cost(character, skill, component)):
                 result.append((skill, component))
     return result
 
@@ -305,6 +291,7 @@ class CastingState:
     skill: object
     payment_ledger: list
     started_turn: int
+    component_id: str
     layers: int = 0
     continued_turn: int | None = None
     modifier: object = None
@@ -315,14 +302,17 @@ class CastingState:
     position_reveal_location: object = None
 
     @classmethod
-    def start(cls, actor, skill, turn_number):
+    def start(cls, actor, skill, turn_number, component_id=None):
         if getattr(actor, "casting_state", None) is not None:
             raise ValueError("角色已经处于咏唱状态")
-        cost = get_casting_mp_cost(actor, skill)
-        ledger = actor.pay_mp_with_ledger(cost)
-        if ledger is None:
+        component = casting_component(skill, component_id)
+        from game.resource.costs import costs_at, pay_costs, SkillUnavailableError
+        try:
+            paid = pay_costs(actor, costs_at(component.get("cost", []), "casting_start"), f"casting:{skill.skill_id}")
+        except SkillUnavailableError:
             return None
-        state = cls(actor, skill, ledger, turn_number)
+        ledger = paid.ledgers.get("mp", [])
+        state = cls(actor, skill, ledger, turn_number, component["component_id"])
         modifier = create_modifier(
             _casting_status_effect(),
             actor,
@@ -341,12 +331,15 @@ class CastingState:
         state.continue_for_turn(turn_number)
         from game.game.rule_report import report
         report(actor, "casting_started", actor=actor, private=True,
-               actor_data={"skill_id": skill.skill_id, "skill_name": skill.name,
+               actor_data={"skill_id": skill.skill_id, "skill_name": skill.name, "component_id": state.component_id,
                            "paid_mp": sum(item["amount"] for item in ledger)})
         return state
 
     @property
     def name(self):
+        if len([item for item in self.skill.definitions if item.get("type") == "active"]) > 1:
+            component = self.component or {}
+            return f"{self.skill.name}：{component.get('name', self.component_id)}"
         return self.skill.name
 
     def continue_for_turn(self, turn_number):
@@ -391,11 +384,16 @@ class CastingState:
             and observer in self.position_reveal_recipients
         )
 
+    @property
+    def component(self):
+        return next((item for item in self.skill.definitions if item["component_id"] == self.component_id), None)
+
     def eligible_components(self):
         return [
             component
             for component in self.skill.definitions
             if component.get("type") == "active"
+            and component["component_id"] == self.component_id
             and component_casting_requirement(component) <= self.layers
         ]
 
@@ -403,22 +401,20 @@ class CastingState:
         if self.continued_turn != turn_number:
             self.interrupt(reason="not_continued")
             return False
-        requirements = [
-            component_casting_requirement(component)
-            for component in self.skill.definitions
-            if component.get("type") == "active"
-        ]
-        maximum = max(requirements, default=self.layers + 1)
+        if self.component is None or not self.skill.is_component_active(self.component_id):
+            self.interrupt(reason="component_removed")
+            return False
+        maximum = component_casting_requirement(self.component)
         self.layers = min(self.layers + 1, maximum)
         from game.game.rule_report import report
         report(self.actor, "casting_progressed", actor=self.actor, private=True,
-               actor_data={"skill_id": self.skill.skill_id, "layers": self.layers,
+               actor_data={"skill_id": self.skill.skill_id, "component_id": self.component_id, "layers": self.layers,
                            "maximum_layers": maximum})
         if self.modifier in self.actor.modifiers:
             self.modifier.duration = 2
         config = get_casting_config(self.skill)
         component_id = config.get("auto_activate_component_id")
-        if component_id is not None:
+        if component_id == self.component_id:
             component = next((
                 item for item in self.skill.definitions
                 if item.get("component_id") == component_id
@@ -488,14 +484,16 @@ class CastingState:
             self.actor.casting_state = None
 
 
-def start_or_continue_casting(actor, skill=None, turn_number=0):
+def start_or_continue_casting(actor, skill=None, turn_number=0, component_id=None):
     state = getattr(actor, "casting_state", None)
     if state is not None:
+        if (skill is not None and state.skill is not skill) or (component_id is not None and state.component_id != component_id):
+            raise ValueError("更换咏唱单元前请先中断当前咏唱")
         state.continue_for_turn(turn_number)
         return state
     if skill is None:
         raise ValueError("开始咏唱时必须指定魔术或宝具")
-    return CastingState.start(actor, skill, turn_number)
+    return CastingState.start(actor, skill, turn_number, component_id)
 
 
 def interrupt_casting(actor, reason="manual"):

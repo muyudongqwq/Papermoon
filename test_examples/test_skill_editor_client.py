@@ -109,7 +109,7 @@ class SkillEditorClientModelTests(unittest.TestCase):
                         {"options": [None]}, {"options": [{"choice_id": ""}]},
                         {"options": [{"choice_id": "x", "effects": [None]}]},
                         {"options": [{"choice_id": "x", "name": 1}]},
-                        {"options": [{"choice_id": "x", "additional_cost": {}}]}):
+                        {"options": [{"choice_id": "x", "cost": {}}]}):
             with self.subTest(choices=choices):
                 definition = {"skill_id": "x", "components": [{"component_id": "unit_0", "choices": choices}]}
                 self.assertFalse(can_use_form(definition))

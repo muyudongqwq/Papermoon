@@ -55,8 +55,8 @@ class AttackProfileTests(unittest.TestCase):
             "skill_id": "test_magic",
             "name": "测试魔术",
             "rank": "C",
-            "casting": {"mp_cost": 10},
-            "components": [{
+             "casting": {"activation_mode": "release"},
+            "components": [{"cost": [{"resource": "mp", "value": 10, "timing": "casting_start"}],
                 "component_id": "attack",
                 "type": "active",
                 "casting_requirement": 0,

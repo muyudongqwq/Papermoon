@@ -49,7 +49,7 @@ class RealityMarble(FieldEffect):
             "center": interior,
             "radius": 0,
             "duration": data.get("duration"),
-            "maintenance": data.get("maintenance"),
+            "cost": data.get("cost", []),
             "effects": effects,
             "selected_targets": data.get("selected_targets", []),
             "remove_on_source_death": False,

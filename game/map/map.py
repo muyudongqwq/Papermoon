@@ -227,7 +227,7 @@ class Road:
             for location in locations
         )
 #排除重复道路
-    
+
 
 class Map:
     def __init__(self):

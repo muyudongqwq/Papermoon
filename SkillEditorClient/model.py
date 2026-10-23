@@ -68,6 +68,8 @@ def can_use_form(definition):
     """Malformed imports remain repairable in the original JSON editor."""
     if not isinstance(definition.get("skill_id"), str) or not isinstance(definition.get("components"), list):
         return False
+    if "cost" in definition:
+        return False
     for field in ("name", "rank", "description"):
         if field in definition and not isinstance(definition[field], str):
             return False
@@ -79,6 +81,8 @@ def can_use_form(definition):
         for field in ("component_id", "type", "target"):
             if field in component and not isinstance(component[field], str):
                 return False
+        if "casting_requirement" in component and (type(component["casting_requirement"]) is not int or component["casting_requirement"] < 0):
+            return False
         phases = component.get("available_phases", [])
         if not isinstance(phases, list) or not all(isinstance(phase, str) for phase in phases):
             return False
@@ -97,10 +101,12 @@ def can_use_form(definition):
                     return False
                 if "name" in option and not isinstance(option["name"], str):
                     return False
-                for field in ("effects", "additional_cost"):
+                for field in ("effects", "cost"):
                     values = option.get(field, [])
                     if not isinstance(values, list) or not all(isinstance(value, dict) for value in values):
                         return False
+        if "trigger" in component and not isinstance(component["trigger"], dict):
+            return False
     return True
 
 
@@ -170,6 +176,8 @@ def cost_value(text):
 
 
 def validate_component_fields(component):
+    from game.skill.casting import component_casting_requirement
+    requirement = component_casting_requirement(component)
     if not component["component_id"].strip():
         raise ValueError("请填写component_id，每个技能单元需要一个不重复的标识")
     if component["type"] not in TYPES:
@@ -177,7 +185,7 @@ def validate_component_fields(component):
     phases = component.get("available_phases", [])
     if set(phases) - ACTION_PHASES:
         raise ValueError("available_phases包含不支持的阶段")
-    if component["type"] == "active" and "available_phases" in component and not phases:
+    if component["type"] == "active" and not requirement and "available_phases" in component and not phases:
         raise ValueError("主动技能单元请至少选择一个available_phases阶段")
     targets = set(TARGETS) | {"event_actor", "event_source", "event_target", "event_targets"}
     if component.get("target", "self") not in targets:

@@ -7,7 +7,7 @@ class Master(Character):
         #初始化character部分
         super().__init__(name, strength, endurance, flexibility, magic, fortune)
         #把character.py里的东西继承下来
-        
+
         self.talent = FixedRank(talent, allow_plus=False)
         self.command_spell = command_spell
 

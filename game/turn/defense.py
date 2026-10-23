@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from itertools import chain
 
 from game.action.action import Action
+from game.resource.costs import component_activation_costs
 from game.skill.casting import (
     component_casting_requirement,
-    get_base_casting_mp_cost,
     get_casting_config,
 )
 from game.skill.skill_runtime import (
@@ -98,6 +98,7 @@ def _casting_component_ready(character, skill, component):
     return bool(
         state is not None
         and state.skill is skill
+        and state.component_id == component["component_id"]
         and state.layers >= requirement
     )
 
@@ -113,9 +114,9 @@ def _offset_component_available(character, skill, component, turn_number=None):
     )
 
 
-def _prospective_refund(character, skill):
+def _prospective_refund(character, skill, component=None):
     state = getattr(character, "casting_state", None)
-    if state is None or state.skill is skill:
+    if state is None or (state.skill is skill and (component is None or state.component_id == component["component_id"])):
         return 0
     # Refunds return to their original payer. A dead or former master does
     # not fund the replacement action, and ordinary MP cannot exceed mpmax.
@@ -135,24 +136,10 @@ def _prospective_refund(character, skill):
 
 
 def _component_base_costs(character, skill, component):
-    costs = [
-        cost
-        for cost in component.get("cost", [])
-        if cost.get("resource") != "attack_phase_count"
-    ]
-    if component_resolution_channel(skill, component) != "release":
-        return costs
     state = getattr(character, "casting_state", None)
-    prepaid = state is not None and state.skill is skill
-    if not prepaid:
-        costs.append({
-            "resource": "mp",
-            "value": get_base_casting_mp_cost(skill),
-            "cost_id": get_casting_config(skill).get(
-                "cost_id",
-                f"casting:{skill.skill_id}",
-            ),
-        })
+    prepaid = state is not None and state.skill is skill and state.component_id == component["component_id"]
+    costs = component_activation_costs(skill, component, prepaid=prepaid)
+    costs = [cost for cost in costs if cost.get("resource") != "attack_phase_count"]
     return costs
 
 
@@ -225,7 +212,7 @@ def get_offset_attack_options(character, incoming_attack):
                 character,
                 costs,
                 skill,
-                prospective_mp=_prospective_refund(character, skill),
+                prospective_mp=_prospective_refund(character, skill, component),
             ):
                 continue
             component_name = component.get("name")
@@ -313,24 +300,17 @@ def resolve_offset_attack_option(
         if cost.get("resource") != "attack_phase_count"
     ]
     state = getattr(character, "casting_state", None)
-    casting_prepaid = bool(state is not None and state.skill is skill)
-    if option.resolution_channel == "release" and not casting_prepaid:
-        costs.append({
-            "resource": "mp",
-            "value": get_base_casting_mp_cost(skill),
-            "cost_id": get_casting_config(skill).get(
-                "cost_id",
-                f"casting:{skill.skill_id}",
-            ),
-        })
+    casting_prepaid = bool(state is not None and state.skill is skill and state.component_id == component["component_id"])
+    costs.extend(cost for cost in component_activation_costs(skill, component, prepaid=casting_prepaid)
+                 if cost.get("timing") == "casting_start")
 
-    switching_cast = state is not None and state.skill is not skill
+    switching_cast = state is not None and (state.skill is not skill or state.component_id != component["component_id"])
     if not _can_pay_costs(
         character,
         costs,
         skill,
         prospective_mp=(
-            _prospective_refund(character, skill) if switching_cast else 0
+            _prospective_refund(character, skill, component) if switching_cast else 0
         ),
     ):
         raise SkillUnavailableError("抵消攻击的资源不足")

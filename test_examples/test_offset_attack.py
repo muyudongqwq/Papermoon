@@ -171,8 +171,8 @@ class OffsetAttackTests(unittest.TestCase):
             "skill_id": "cast_attack",
             "name": "咏唱攻击",
             "rank": "C",
-            "casting": {"mp_cost": 40},
-            "components": [{
+             "casting": {"activation_mode": "release"},
+            "components": [{"cost": [{"resource": "mp", "value": 40, "timing": "casting_start"}],
                 "component_id": "release",
                 "type": "active",
                 "casting_requirement": 1,
@@ -228,8 +228,8 @@ class OffsetAttackTests(unittest.TestCase):
             "skill_id": "old_chant",
             "name": "旧咏唱",
             "rank": "C",
-            "casting": {"mp_cost": 40},
-            "components": [{
+             "casting": {"activation_mode": "release"},
+            "components": [{"cost": [{"resource": "mp", "value": 40, "timing": "casting_start"}],
                 "component_id": "release",
                 "type": "active",
                 "casting_requirement": 1,

@@ -30,7 +30,7 @@ def reality_marble_skill(*, radius=0, duration=None, maintenance=None):
         },
     }
     if maintenance is not None:
-        data["maintenance"] = maintenance
+        data["cost"] = [{**maintenance, "timing": "maintenance"}]
     return {
         "skill_id": "test_reality_marble_skill",
         "name": "测试固有结界",

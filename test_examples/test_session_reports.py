@@ -76,7 +76,7 @@ class SessionReportTests(unittest.TestCase):
         view = self.view(self.nero)
         json.dumps(view, allow_nan=False)
         laus = next(skill for skill in view["skills"] if skill["skill_id"].endswith(":laus_saint_claudius"))
-        self.assertEqual(laus["casting"]["mp_cost"], 100)
+        self.assertEqual(laus["components"][0]["casting_cost"], 100)
         self.assertIn("150", laus["description"])
         self.assertIn("150", laus["components"][0]["effects"][0]["description"])
         self.assertEqual(before, [skill.component_runtime_states for skill in skills])

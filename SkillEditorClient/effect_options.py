@@ -64,6 +64,7 @@ STRING_FIELDS = {
     "placement_rule", "limit_scope", "at_limit", "name_prefix", "owner_unique_key",
 }
 FIELD_NAMES = {
+    "cost": "维持消耗",
     "maximum_selections": "每次最多选择几项", "allow_duplicate": "允许同一次发动重复选择同一分支",
     "resolution_channel": "解放或一般攻击",
     "value": "数值", "value_source": "数值来源", "damage_type": "伤害类型",

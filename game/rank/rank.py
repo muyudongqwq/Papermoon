@@ -90,7 +90,7 @@ class AttributeRank:
         else: rank = f"Rank {self.value}"
 
         if self.plus == 1: rank +="+"
-        elif self.plus ==2: rank +="++" 
+        elif self.plus ==2: rank +="++"
         return rank
 #加符表达
 
@@ -103,7 +103,7 @@ class FixedRank:
 
           if rank not in self.valid_rank:raise ValueError("天赋Rank录入有误")
           if plus not in [0,1]: raise ValueError("只能有一个加符")
-          if plus == 1: 
+          if plus == 1:
               if not allow_plus: raise ValueError("天赋不允许有加符")
               if rank not in ["C", "B", "A"]: raise ValueError("EX不允许有加符")
 
@@ -148,5 +148,5 @@ class NobleRank:
           return result
 
       def __str__(self): return self.rank
-          
+
 

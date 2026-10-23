@@ -127,7 +127,7 @@ EFFECT_SCHEMAS = {
             "include_area_levels", "remove_on_source_death",
             "remove_with_source",
             "exclusive_center", "owner_unique_key", "owner_vision",
-            "center_target", "requirements", "maintenance",
+            "center_target", "requirements", "cost",
             "selected_targets", "effects", "apply_once",
             "battle_bound", "exit_penalty",
         },
@@ -144,7 +144,7 @@ EFFECT_SCHEMAS = {
     "deploy_reality_marble": _schema(
         required={"reality_marble_id"},
         optional={
-            "name", "entrance", "capture_radius", "duration", "maintenance",
+            "name", "entrance", "capture_radius", "duration", "cost",
             "selected_targets", "interior", "remove_with_source",
         },
     ),
@@ -627,18 +627,6 @@ def _validate_modifier_common(effect, path):
         or effect.get("consumption", {}).get("mode") == "optional"
     ) and effect["effect_type"] not in Modifier.CONTEXTUAL_EFFECT_TYPES:
         _error(path, f"{effect['effect_type']}不支持条件型Modifier")
-
-
-def _validate_maintenance(value, path):
-    _keys(
-        value, path, allowed={"resource", "value", "cost_id"},
-        required={"value"},
-    )
-    if "resource" in value:
-        _string(value["resource"], f"{path}.resource")
-    _number(value["value"], f"{path}.value", minimum=0)
-    if "cost_id" in value:
-        _string(value["cost_id"], f"{path}.cost_id")
 
 
 def _validate_field_target(value, path):
@@ -1347,8 +1335,9 @@ def _validate_field_definition(data, path):
             )
     if "requirements" in data:
         _validate_field_requirements(data["requirements"], f"{path}.requirements")
-    if "maintenance" in data and data["maintenance"] is not None:
-        _validate_maintenance(data["maintenance"], f"{path}.maintenance")
+    if "cost" in data:
+        from game.resource.costs import validate_costs
+        validate_costs(data["cost"], path=f"{path}.cost", timings=("maintenance",), inputs=False)
     if "selected_targets" in data:
         _list(data["selected_targets"], f"{path}.selected_targets")
     if "effects" in data:
@@ -1365,8 +1354,9 @@ def _validate_reality_marble_definition(data, path):
         _integer(data["duration"], f"{path}.duration", positive=True)
     if "remove_with_source" in data:
         _boolean(data["remove_with_source"], f"{path}.remove_with_source")
-    if "maintenance" in data and data["maintenance"] is not None:
-        _validate_maintenance(data["maintenance"], f"{path}.maintenance")
+    if "cost" in data:
+        from game.resource.costs import validate_costs
+        validate_costs(data["cost"], path=f"{path}.cost", timings=("maintenance",), inputs=False)
     if "selected_targets" in data:
         _list(data["selected_targets"], f"{path}.selected_targets")
     if "interior" in data:
@@ -1452,6 +1442,9 @@ def validate_effect_definition(
 
 
 def validate_component_effects(component, *, path="component"):
+    from game.resource.costs import validate_costs
+    validate_costs(component.get("cost", []), path=f"{path}.cost",
+                   timings=("activation", "casting_start") if component.get("type") == "active" else ("activation",))
     """Recursively validate direct and selectable effects in a component."""
     _mapping(component, path)
     component_type = component.get("type")

@@ -37,6 +37,7 @@ def casting_skill(
             "target": target,
             "target_rules": dict(target_rules or {}),
             "casting_requirement": requirement,
+            "cost": [{"resource": "mp", "value": mp_cost, "timing": "casting_start"}],
             "effects": [{
                 "effect_type": "damage",
                 "effect_data": {
@@ -49,7 +50,7 @@ def casting_skill(
         "skill_id": skill_id,
         "name": "仪式魔术",
         "rank": "C",
-        "casting": {"mp_cost": mp_cost},
+        "casting": {"activation_mode": "release"},
         "components": components,
     })
 
@@ -75,7 +76,7 @@ class CastingTests(unittest.TestCase):
         self.assertIn("release", ready_ids)
         self.assertIn("interrupt_casting", ready_ids)
 
-    def test_non_battle_chant_progress_and_composite_release(self):
+    def test_non_battle_chant_progress_and_bound_component_release(self):
         actor = create_master()
         target = create_servant("Target")
         actor.game_manager = SimpleNamespace(characters=[actor, target])
@@ -85,7 +86,7 @@ class CastingTests(unittest.TestCase):
         chant = Action(actor, "chant")
         chant.ap_layer = 1
         chant.game_turn = 1
-        state = chant.chant(ScriptedDecisionProvider([]))
+        state = chant.chant(ScriptedDecisionProvider(["effect_2"]))
 
         self.assertIsNotNone(state)
         self.assertEqual(actor.action_point, 0)
@@ -106,7 +107,6 @@ class CastingTests(unittest.TestCase):
         release.ap_layer = 1
         release.game_turn = 3
         result = release.release(ScriptedDecisionProvider([
-            "effect_2",
             "Target",
         ]))
 
@@ -171,8 +171,8 @@ class CastingTests(unittest.TestCase):
             "skill_id": "instant_heal",
             "name": "即时治疗",
             "rank": "C",
-            "casting": {"mp_cost": 30},
-            "components": [{
+             "casting": {"activation_mode": "release"},
+            "components": [{"cost": [{"resource": "mp", "value": 30, "timing": "casting_start"}],
                 "component_id": "heal",
                 "name": "治疗",
                 "type": "active",

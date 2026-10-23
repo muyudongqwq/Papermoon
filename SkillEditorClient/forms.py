@@ -6,6 +6,10 @@ from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 
 from game.rank.rank import SkillRank
+from game.resource.costs import default_noble_costs, NOBLE_PHANTASM_MP_COSTS
+from SkillEditorClient.cost_editor import CostRow
+from SkillEditorClient.condition_editor import ConditionEditor
+from SkillEditorClient.trigger_editor import TriggerEditor
 from SkillEditorClient.effect_editor import EffectDataEditor
 from SkillEditorClient.effect_options import EFFECT_NAMES, EFFECT_TYPES, FORM_EFFECT_TYPES
 from SkillEditorClient.effect_reference import show_effect_reference
@@ -28,41 +32,6 @@ def extras_box(parent, data, controlled, title="高级设置"):
     section = Collapsible(parent, title, expanded=False)
     section.pack(fill="x", pady=3)
     return JsonBox(section.body, {k: v for k, v in data.items() if k not in controlled}, height=3), section
-
-
-class CostRow(ttk.Frame):
-    fields = {"resource", "value"}
-
-    def __init__(self, parent, data, remove, phases):
-        super().__init__(parent)
-        self.original = deepcopy(data)
-        row = ttk.Frame(self)
-        row.pack(fill="x")
-        ttk.Label(row, text="资源 resource").pack(side="left")
-        self.resource = tk.StringVar(master=self, value=data.get("resource", "mp"))
-        self.resource_box = ttk.Combobox(row, textvariable=self.resource, values=resource_options(phases), width=20)
-        self.resource_box.pack(side="left", padx=5)
-        self.resource_box.bind("<MouseWheel>", lambda _event: "break")
-        ttk.Label(row, text="数值 value").pack(side="left", padx=(8, 0))
-        self.value = tk.StringVar(master=self, value=format_json(data.get("value", 0)).strip())
-        ttk.Entry(row, textvariable=self.value, width=14).pack(side="left", fill="x", expand=True, padx=5)
-        ttk.Button(row, text="删除", command=lambda: remove(self), width=5).pack(side="right")
-        self.extras, section = extras_box(self, data, self.fields, "消耗高级设置（如cost_id）")
-        self.extras.pack(fill="x")
-
-    def update_phases(self, phases):
-        options = resource_options(phases)
-        self.resource_box.configure(values=options)
-        if self.resource.get() == "action_point" and "action_point" not in options:
-            self.resource.set("")
-
-    def read(self):
-        result = merge_extras(self.extras.get(), self.fields, "消耗高级设置")
-        result.update(resource=self.resource.get().strip(), value=cost_value(self.value.get()))
-        return result
-
-    def snapshot(self):
-        return self.resource.get(), self.value.get(), self.extras.get()
 
 
 class EffectPanel(Collapsible):
@@ -131,7 +100,7 @@ class EffectPanel(Collapsible):
 
 
 class ChoicePanel(Collapsible):
-    fields = {"choice_id", "name", "effects", "additional_cost"}
+    fields = {"choice_id", "name", "effects", "cost"}
 
     def __init__(self, parent, data, remove, number, phases, catalogs=None):
         super().__init__(parent, "")
@@ -155,9 +124,10 @@ class ChoicePanel(Collapsible):
         ttk.Label(self.cost_group.body, text="仅选中此分支时支付；同一分支重复选择时，每次分别支付。", wraplength=610).pack(anchor="w")
         self.cost_rows = ttk.Frame(self.cost_group.body)
         self.cost_rows.pack(fill="x", pady=5)
-        self.add_cost_button = ttk.Button(self.cost_group.body, text="添加消耗", command=lambda: self.add_cost({"resource": "mp", "value": 0}))
+        self.add_cost_button = ttk.Button(self.cost_group.body, text="添加消耗", command=lambda: self.add_cost({"resource": "mp", "value": 0,
+                "timing": "activation"}))
         self.add_cost_button.pack(anchor="w")
-        for cost in data.get("additional_cost", []):
+        for cost in data.get("cost", []):
             self.add_cost(cost)
         self.extras, section = extras_box(self.body, data, self.fields, "分支高级设置（条件等）")
         ttk.Label(section.body, text=f"内部标识 choice_id：{self.choice_id}", wraplength=650).pack(anchor="w")
@@ -218,7 +188,7 @@ class ChoicePanel(Collapsible):
         result["effects"] = effects
         costs = [row.read() for row in self.costs]
         validate_cost_fields(costs, self.phases())
-        optional_field(result, self.original, "additional_cost", costs, [])
+        optional_field(result, self.original, "cost", costs, [])
         return result
 
     def snapshot(self):
@@ -306,9 +276,9 @@ class ChoicesEditor(Collapsible):
 
 
 class ComponentPanel(Collapsible):
-    fields = {"component_id", "type", "available_phases", "target", "cost", "effects", "choices"}
+    fields = {"component_id", "type", "available_phases", "target", "cost", "effects", "choices", "casting_requirement"}
 
-    def __init__(self, parent, data, remove, number, catalogs=None, *, release_entry=False):
+    def __init__(self, parent, data, remove, number, catalogs=None, *, release_entry=False, default_requirement=0):
         configure_unit_style(parent)
         super().__init__(parent, f"技能单元 {number}", font=UNIT_FONT, button_style="NewSkillUnit.TButton")
         self.separator = tk.Frame(self, background="#000000", height=1, borderwidth=0, highlightthickness=0)
@@ -320,6 +290,16 @@ class ComponentPanel(Collapsible):
         self.kind, self.kind_box = entry_row(self.body, "技能类型", data.get("type", ""), choices=TYPES, editable=False, compact=True)
         self.type_notice = ttk.Label(self.body, wraplength=650)
         self.type_notice.pack(anchor="w", pady=2)
+        self.default_requirement = default_requirement
+        self.original_requirement = data.get("casting_requirement", default_requirement)
+        self.chant_area = ttk.Frame(self.body)
+        self.chant_choice, self.chant_box = entry_row(self.chant_area, "是否需要咏唱",
+            "是" if self.original_requirement > 0 else "否", choices=("否", "是"), editable=False, compact=True)
+        self.chant_rounds, self.chant_rounds_box = entry_row(self.chant_area, "咏唱所需回合数",
+            str(self.original_requirement or 1), compact=True)
+        self.chant_rounds_row = self.chant_rounds_box.master.master
+        self.chant_notice = ttk.Label(self.chant_area,
+            text="每完成一个全局回合的咏唱累积1回合；完成后按技能的解放设置发动。", wraplength=650)
         self.phase_area = ttk.Frame(self.body, style="PhaseArea.TFrame", padding=(8, 6), borderwidth=1, relief="solid")
         self.phase_area.pack(fill="x", pady=(5, 8))
         row = ttk.Frame(self.phase_area, style="PhaseArea.TFrame")
@@ -328,10 +308,19 @@ class ComponentPanel(Collapsible):
         ttk.Label(row, text="可用阶段", width=22, style="PhaseArea.TLabel").pack(side="left")
         self.phases.pack(side="left", fill="x", expand=True)
         self.phase_notice = ttk.Label(self.phase_area, text="解放：通过“解放”入口发动，可用阶段由解放行动决定。", wraplength=650, style="PhaseArea.TLabel")
+        self.condition_in_form = self.kind.get() == "trigger"
+        self.trigger_in_form = self.kind.get() in {"trigger", "react"}
+        self.trigger_editor = TriggerEditor(self.body, data.get("trigger", {}),
+                                            fallback_event=data.get("trigger_event", ""),
+                                            fallback_priority=data.get("priority", 0))
+        self.trigger_sync_notice = ttk.Label(self.body, wraplength=650)
+        self.condition_editor = ConditionEditor(self.body, data.get("condition", {}), catalogs)
+        self.condition_sync_notice = ttk.Label(self.body, wraplength=650)
         self.target, self.target_box = entry_row(self.body, "目标 target", data.get("target", "self"), choices=TARGETS, editable=False)
         self.target_notice = ttk.Label(self.body, wraplength=650)
         self.target_notice.pack(anchor="w", pady=2)
         self.kind.trace_add("write", lambda *_: self.update_type())
+        self.chant_choice.trace_add("write", lambda *_: self.update_type())
         self.target.trace_add("write", lambda *_: self.update_target())
 
         self.effect_group = Collapsible(self.body, "效果 effects")
@@ -350,10 +339,11 @@ class ComponentPanel(Collapsible):
         self.cost_notice.pack(anchor="w")
         self.cost_rows = ttk.Frame(self.cost_group.body)
         self.cost_rows.pack(fill="x", pady=5)
-        ttk.Button(self.cost_group.body, text="添加消耗", command=lambda: self.add_cost({"resource": "mp", "value": 0})).pack(anchor="w")
+        ttk.Button(self.cost_group.body, text="添加消耗", command=lambda: self.add_cost({"resource": "mp", "value": 0,
+                "timing": "casting_start" if self.chant_choice.get() == "是" else "activation"})).pack(anchor="w")
         for cost in data.get("cost", []):
             self.add_cost(cost)
-        self.extras, section = extras_box(self.body, data, self.fields, "技能单元高级设置（条件、次数、触发等）")
+        self.extras, section = extras_box(self.body, data, self.controlled_fields, "技能单元高级设置（条件、次数、触发等）")
         self.extras.pack(fill="x")
         self.delete_button = ttk.Button(self.body, text="删除此技能单元", command=lambda: remove(self), style="NewSkillUnit.TButton")
         self.delete_button.pack(anchor="w", pady=(6, 2))
@@ -363,12 +353,94 @@ class ComponentPanel(Collapsible):
     def update_type(self):
         values = TARGETS if self.kind.get() in {"", "active"} else (*TARGETS, "event_actor", "event_source", "event_target", "event_targets")
         self.target_box.configure(values=values)
-        self.type_notice.configure(text=TYPE_DESCRIPTIONS.get(self.kind.get(), "选择技能类型"))
+        for row in self.costs:
+            row.timings = ("activation", "casting_start") if self.kind.get() == "active" else ("activation",)
+            from SkillEditorClient.cost_editor import COST_TIMING_NAMES
+            row.timing_box.configure(values=tuple(COST_TIMING_NAMES[value] for value in row.timings))
+        self.type_notice.configure(text=("咏唱达到所需回合数后，按技能的解放设置发动。"
+            if self.kind.get() == "active" and self.chant_choice.get() == "是"
+            else TYPE_DESCRIPTIONS.get(self.kind.get(), "选择技能类型")))
+        error = None
+        try:
+            self.sync_condition_owner()
+        except (ValueError, TypeError) as issue:
+            error = str(issue)
+        trigger_error = None
+        try:
+            self.sync_trigger_owner()
+        except (ValueError, TypeError) as issue:
+            trigger_error = str(issue)
+        if self.kind.get() == "active":
+            self.chant_area.pack(fill="x", before=self.target_box.master, pady=(3, 4))
+        else:
+            self.chant_area.pack_forget()
+        if self.chant_choice.get() == "是":
+            self.chant_rounds_row.pack(fill="x")
+            self.chant_notice.pack(anchor="w", pady=2)
+        else:
+            self.chant_rounds_row.pack_forget()
+            self.chant_notice.pack_forget()
+        if self.kind.get() == "active" and self.chant_choice.get() == "否":
+            self.phase_area.pack(fill="x", before=self.target_box.master, pady=(5, 8))
+        else:
+            self.phase_area.pack_forget()
+        if self.kind.get() == "trigger" or self.condition_in_form:
+            self.condition_editor.pack(fill="x", before=self.target_box.master, pady=(5, 8))
+        else:
+            self.condition_editor.pack_forget()
+        if self.kind.get() in {"trigger", "react"} or self.trigger_in_form:
+            before = self.condition_editor if self.condition_editor.winfo_manager() else self.target_box.master
+            self.trigger_editor.pack(fill="x", before=before, pady=(5, 8))
+        else:
+            self.trigger_editor.pack_forget()
+        if trigger_error:
+            self.trigger_sync_notice.configure(text=f"触发事件尚未同步：{trigger_error}")
+            self.trigger_sync_notice.pack(fill="x", before=self.trigger_editor)
+        else:
+            self.trigger_sync_notice.pack_forget()
+        if error:
+            self.condition_sync_notice.configure(text=f"条件尚未同步：{error}")
+            self.condition_sync_notice.pack(fill="x", before=self.condition_editor)
+        else:
+            self.condition_sync_notice.pack_forget()
         if self.release_entry and self.kind.get() == "active":
             self.phase_notice.pack(anchor="w", pady=(6, 0))
         else:
             self.phase_notice.pack_forget()
         request_layout(self)
+
+    @property
+    def controlled_fields(self):
+        return self.fields | ({"condition"} if self.condition_in_form else set()) | ({"trigger"} if self.trigger_in_form else set())
+
+    def sync_trigger_owner(self):
+        desired = self.kind.get() in {"trigger", "react"}
+        if desired == self.trigger_in_form:
+            return
+        extras = object_value(self.extras.get(), "技能单元高级设置")
+        if desired:
+            self.trigger_editor.load(extras.pop("trigger", {}),
+                                     fallback_event=extras.get("trigger_event", ""),
+                                     fallback_priority=extras.get("priority", 0))
+        else:
+            optional_field(extras, self.original, "trigger", self.trigger_editor.get(), {})
+        self.extras.text.delete("1.0", "end")
+        self.extras.text.insert("1.0", format_json(extras))
+        self.trigger_in_form = desired
+
+    def sync_condition_owner(self):
+        desired = self.kind.get() == "trigger"
+        if desired == self.condition_in_form:
+            return
+        extras = object_value(self.extras.get(), "技能单元高级设置")
+        if desired:
+            self.condition_editor.load(extras.pop("condition", {}))
+        else:
+            condition = self.condition_editor.get()
+            optional_field(extras, self.original, "condition", condition, {})
+        self.extras.text.delete("1.0", "end")
+        self.extras.text.insert("1.0", format_json(extras))
+        self.condition_in_form = desired
 
     def update_target(self):
         self.target_notice.configure(text=TARGET_DESCRIPTIONS.get(self.target.get(), "选择效果目标"))
@@ -381,7 +453,8 @@ class ComponentPanel(Collapsible):
             panel.choices.update_phases()
 
     def add_cost(self, data):
-        row = CostRow(self.cost_rows, data, self.remove_cost, self.phases.get())
+        row = CostRow(self.cost_rows, data, self.remove_cost, self.phases.get(),
+                      timings=("activation", "casting_start") if self.kind.get() == "active" else ("activation",))
         row.pack(fill="x", pady=4)
         self.costs.append(row)
         request_layout(self)
@@ -412,11 +485,27 @@ class ComponentPanel(Collapsible):
         request_layout(self)
 
     def read(self):
-        result = merge_extras(self.extras.get(), self.fields, "技能单元高级设置")
+        self.sync_condition_owner()
+        self.sync_trigger_owner()
+        result = merge_extras(self.extras.get(), self.controlled_fields, "技能单元高级设置")
         result.update(component_id=self.component_id.get().strip(), type=self.kind.get())
+        if self.kind.get() == "active":
+            requirement = 0
+            if self.chant_choice.get() == "是":
+                text = self.chant_rounds.get().strip()
+                if not text.isascii() or not text.isdecimal() or int(text) < 1:
+                    raise ValueError("咏唱所需回合数必须是正整数")
+                requirement = int(text)
+        else:
+            requirement = self.original_requirement
+        optional_field(result, self.original, "casting_requirement", requirement, self.default_requirement)
         optional_field(result, self.original, "available_phases", self.phases.get(), [])
         optional_field(result, self.original, "target", self.target.get(), "self")
         optional_field(result, self.original, "cost", [row.read() for row in self.costs], [])
+        if self.condition_in_form:
+            optional_field(result, self.original, "condition", self.condition_editor.get(), {})
+        if self.trigger_in_form:
+            optional_field(result, self.original, "trigger", self.trigger_editor.get(), {})
         effects, choices = [], []
         for panel in self.effects:
             effect = panel.read()
@@ -429,7 +518,8 @@ class ComponentPanel(Collapsible):
         optional_field(result, self.original, "effects", effects, [])
         if choices:
             result["choices"] = choices[0]
-        return validate_component_fields(result)
+        validate_component_fields({**result, "casting_requirement": requirement})
+        return result
 
     @property
     def choices(self):
@@ -437,11 +527,14 @@ class ComponentPanel(Collapsible):
 
     def snapshot(self):
         return (self.component_id.get(), self.kind.get(), self.phases.get(), self.target.get(),
-                [row.snapshot() for row in self.costs], [panel.snapshot() for panel in self.effects], self.extras.get())
+                [row.snapshot() for row in self.costs], [panel.snapshot() for panel in self.effects], self.extras.get(),
+                self.condition_in_form, self.condition_editor.snapshot(),
+                self.trigger_in_form, self.trigger_editor.snapshot(),
+                self.chant_choice.get(), self.chant_rounds.get())
 
 
 class SkillForm(ttk.Frame):
-    fields = {"skill_id", "name", "description", "rank", "components"}
+    fields = {"skill_id", "name", "description", "rank", "components", "cost"}
 
     def __init__(self, parent, data, catalogs=None):
         super().__init__(parent)
@@ -478,15 +571,21 @@ class SkillForm(ttk.Frame):
         collapse(self)
 
     def add_component(self, data=None):
+        default_requirement = int(bool(self.original.get("noble_phantasm_type") and self.original.get("range_type") != "anti_unit"))
         if data is None:
             used = {panel.component_id.get().strip() for panel in self.components}
             numbers = [int(key[5:]) for key in used if key.startswith("unit_") and key[5:].isascii() and key[5:].isdecimal()]
             number = max([-1, *numbers]) + 1
             data = {"component_id": f"unit_{number}", "type": "", "available_phases": ["AP1", "AP2"],
                     "target": "", "cost": [], "effects": []}
+            if default_requirement:
+                data["casting_requirement"] = 0
         casting = self.original.get("casting", {})
         release_entry = bool(casting or self.original.get("noble_phantasm_type")) and casting.get("activation_mode", "release") == "release"
-        panel = ComponentPanel(self.component_rows, data, self.remove_component, len(self.components) + 1, self.catalogs, release_entry=release_entry)
+        if self.original.get("noble_phantasm_type") and data.get("type", "active") == "active" and "cost" not in data and self.original.get("rank") in NOBLE_PHANTASM_MP_COSTS:
+            data = {**data, "cost": default_noble_costs(self.original["rank"], self.original.get("range_type"))}
+        panel = ComponentPanel(self.component_rows, data, self.remove_component, len(self.components) + 1, self.catalogs,
+                               release_entry=release_entry, default_requirement=default_requirement)
         panel.pack(fill="x", pady=5)
         self.components.append(panel)
         self.renumber_components()
@@ -513,11 +612,23 @@ class SkillForm(ttk.Frame):
         request_layout(self)
 
     def read(self):
+        if "cost" in object_value(self.extras.get(), "技能高级设置"):
+            raise ValueError("不再使用技能公共消耗，请在各技能单元的消耗栏配置")
         result = merge_extras(self.extras.get(), self.fields, "技能高级设置")
         if not self.components:
             raise ValueError("请至少新建一个技能单元，并为它配置效果或可选分支。")
         result.update(skill_id=self.original["skill_id"], name=self.name.get().strip(),
                       components=[panel.read() for panel in self.components])
+        needs_chant = any(component["type"] == "active" and
+                          component.get("casting_requirement", panel.default_requirement) > 0
+                          for component, panel in zip(result["components"], self.components))
+        if needs_chant and not result.get("casting") and not result.get("noble_phantasm_type"):
+            # A requirement alone does not create a chant action. Supply the
+            # smallest complete config for new skills; existing costs/settings
+            # remain owned by the skill's advanced settings.
+            result["casting"] = {"activation_mode": "release"}
+        elif needs_chant and (result.get("casting") or {}).get("activation_mode") == "instant":
+            result["casting"]["activation_mode"] = "release"
         if not result["name"]:
             raise ValueError("请填写技能名称name")
         rank = self.rank.get().strip()

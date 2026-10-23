@@ -404,6 +404,8 @@ class ServantTest0CardTests(unittest.TestCase):
 
     def test_laus_can_be_offset_by_release_magic_and_still_respects_resistance(self):
         skill = self.noble("laus_saint_claudius")
+        state = CastingState.start(self.actor, skill, 1)
+        state.advance_at_global_turn_end(1)
         self.actor.resolve_skill_component(skill.skill_id, "release", target=self.first,
                                           casting_prepaid=True, casting_release=True, turn_number=1)
         attack = self.first.pending_attacks[-1]

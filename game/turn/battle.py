@@ -2593,7 +2593,7 @@ class BattleManager:
         if character.attack_phase_count <= 0:
             print(f"结束{character.name}的攻击阶段")
             return False
-        
+
         print(f"{character.name}的攻击阶段")
         return True
     #攻击阶段
@@ -2622,7 +2622,7 @@ class BattleManager:
         self.current_character = None
     #回合结束阶段
 
-    
 
-    
-            
+
+
+

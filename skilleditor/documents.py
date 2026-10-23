@@ -48,9 +48,9 @@ def new_definition(kind, key):
                             "effects": [{"effect_type": "attack_bonus", "polarity": "buff", "duration": 1,
                                          "effect_data": {"value": 5}}]}]}
     if category == "noble_phantasm":
-        data.update({"noble_phantasm_type": "support", "range_type": "anti_unit", "casting": {"mp_cost": 10}})
+        data.update({"noble_phantasm_type": "support", "range_type": "anti_unit", "casting": {"activation_mode": "release"}})
         data["components"][0].update({"component_id": "release", "casting_requirement": 1,
-            "available_phases": ["attack_phase"], "cost": [{"resource": "attack_phase_count", "value": 1}]})
+            "available_phases": ["attack_phase"], "cost": [{"resource": "attack_phase_count", "value": 1}, {"resource": "mp", "value": 10, "timing": "casting_start"}]})
     return data
 
 

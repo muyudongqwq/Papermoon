@@ -160,6 +160,11 @@ class MasterTest0CardTests(unittest.TestCase):
         territory = actor.load_content(
             "personal_skill", "master_test_0:territory_creation"
         )
+        from game.skill.casting import CastingState
+        state = CastingState.start(actor, territory, 1)
+        state.advance_at_global_turn_end(1)
+        state.continue_for_turn(2)
+        state.advance_at_global_turn_end(2)
         actor.resolve_skill_component(
             territory.skill_id,
             "upgrade_workshop",

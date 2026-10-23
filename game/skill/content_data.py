@@ -136,9 +136,9 @@ PERSONAL_SKILL_DATA = {
         "skill_id": "master_test_0:barrel_replica",
         "name": "Barrel Replica",
         "rank": "B",
-        "casting": {"mp_cost": 300},
+         "casting": {"activation_mode": "release"},
         "components": [
-        {
+        {"cost": [{"resource": "mp", "value": 300, "timing": "casting_start"}],
             "component_id": "release_barrel_battle",
             "name": "解放魔术（战斗）",
             "type": "active",
@@ -168,7 +168,7 @@ PERSONAL_SKILL_DATA = {
                 },
             }],
         },
-        {
+        {"cost": [{"resource": "mp", "value": 300, "timing": "casting_start"}],
             "component_id": "release_barrel_remote",
             "name": "解放魔术（超距）",
             "type": "active",
@@ -211,8 +211,7 @@ PERSONAL_SKILL_DATA = {
         "skill_id": "master_test_0:zabaniya",
         "name": "冥想神经 Zabaniya",
         "rank": "B",
-        "casting": {
-            "mp_cost": 0,
+         "casting": {
             "auto_activate_component_id": "battle_concealment",
         },
         "components": [
@@ -224,7 +223,7 @@ PERSONAL_SKILL_DATA = {
                 "resolution_timing": "immediate",
                 "target": "self",
                 "condition": {"battle_state": False},
-                "cost": [{"resource": "action_point", "value": 1}],
+                "cost": ([{"resource": "action_point", "value": 1}] + [{"resource": "mp", "value": 0, "timing": "casting_start"}]),
                 "cooldown": {
                     "turns": 6,
                     "group": "master_test_0:zabaniya",
@@ -242,7 +241,7 @@ PERSONAL_SKILL_DATA = {
                 "resolution_timing": "immediate",
                 "target": "self",
                 "condition": {"battle_state": False},
-                "cost": [{"resource": "action_point", "value": 2}],
+                "cost": ([{"resource": "action_point", "value": 2}] + [{"resource": "mp", "value": 0, "timing": "casting_start"}]),
                 "cooldown": {
                     "turns": 6,
                     "group": "master_test_0:zabaniya",
@@ -266,7 +265,7 @@ PERSONAL_SKILL_DATA = {
                     },
                 }],
             },
-            {
+            {"cost": [{"resource": "mp", "value": 0, "timing": "casting_start"}],
                 "component_id": "battle_concealment",
                 "name": "圈境",
                 "type": "active",
@@ -308,8 +307,8 @@ PERSONAL_SKILL_DATA = {
         "skill_id": "master_test_0:territory_creation",
         "name": "阵地制作",
         "rank": "B",
-        "casting": {"mp_cost": 0},
-        "components": [{
+         "casting": {"activation_mode": "release"},
+        "components": [{"cost": [{"resource": "mp", "value": 0, "timing": "casting_start"}],
             "component_id": "upgrade_workshop",
             "name": "展开阵地",
             "type": "active",
@@ -491,9 +490,9 @@ NOBLE_PHANTASM_DATA = {
     "servant_test_0:golden_theatre": {
         "skill_id": "servant_test_0:golden_theatre", "name": "招荡的黄金剧场", "rank": "B",
         "description": "40MP、咏唱1回合后自动展开，不消耗攻击阶段，持续至本场战斗结束。自身格挡失败保留攻击阶段，未经许可离场者受到60点无法防御的物理伤害。",
-        "noble_phantasm_type": "support", "range_type": "bounded_field", "mp_cost": 40,
+        "noble_phantasm_type": "support", "range_type": "bounded_field",
         "casting": {"auto_activate_component_id": "open_theatre", "activation_mode": "automatic"},
-        "components": [{
+        "components": [{"cost": [{"resource": "mp", "value": 40, "timing": "casting_start"}],
             "component_id": "open_theatre", "type": "active", "target": "self",
             "casting_requirement": 1, "resolution_timing": "immediate",
             "condition": {"battle_state": True}, "cooldown": {"turns": 1},
@@ -513,9 +512,9 @@ NOBLE_PHANTASM_DATA = {
     "servant_test_0:original_fire": {
         "skill_id": "servant_test_0:original_fire", "name": "陨铁之刃·原初之火", "rank": "B",
         "description": "每场战斗3次，免费即时发动，一回合基础攻击伤害+40。",
-        "noble_phantasm_type": "support", "range_type": "anti_unit", "mp_cost": 0,
+        "noble_phantasm_type": "support", "range_type": "anti_unit",
         "casting": {"activation_mode": "instant"},
-        "components": [{
+        "components": [{"cost": [{"resource": "mp", "value": 0, "timing": "casting_start"}],
             "component_id": "original_fire", "type": "active", "target": "self",
             "available_phases": list(_INSTANT_BATTLE_PHASES), "resolution_timing": "immediate",
             "condition": {"battle_state": True}, "usage_limit": {"scope": "battle", "maximum": 3},
@@ -527,10 +526,10 @@ NOBLE_PHANTASM_DATA = {
         "skill_id": "servant_test_0:laus_saint_claudius", "name": "童女讴歌的华丽帝政", "rank": "A",
         "description": "100MP、咏唱1回合，消耗一个攻击阶段解放。对所选目标造成基础150点魔术伤害，可闪避、抵消，忽略格挡减伤与护盾。",
         "noble_phantasm_type": "magic", "range_type": "anti_fortress",
-        # The engine doubles anti-fortress base cost/damage: final values are
-        # the card's explicit 100MP and 150 magic damage, rather than 200/300.
-        "mp_cost": 50,
-        "components": [{
+        # MP is the explicit final 100. The damage still uses the existing
+        # anti-fortress multiplier: base 75 becomes 150 magic damage.
+
+        "components": [{"cost": [{"resource": "mp", "value": 100, "timing": "casting_start"}],
             "component_id": "release", "type": "active", "casting_requirement": 1,
             "target": "selectable_enemy", "resolution_timing": "defense_phase",
             "cooldown": {"turns": 2},

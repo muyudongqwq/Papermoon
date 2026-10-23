@@ -9,6 +9,7 @@ from core.catalog import parse_json
 from game.skill.effect_validation import EFFECT_SCHEMAS
 from SkillEditorClient.effect_options import FIELD_NAMES, parameter_options, parameter_spec, parse_parameter
 from SkillEditorClient.widgets import JsonBox, configure_gray_area, request_layout
+from SkillEditorClient.cost_editor import CostRow
 from skilleditor.documents import format_json
 
 
@@ -60,6 +61,49 @@ class ParameterRow(ttk.Frame):
             raise ValueError(f"参数{self.key}：{error}") from error
 
 
+class CostParameterRow(ttk.Frame):
+    """Maintenance entries use the same cost controls as every skill."""
+    def __init__(self, parent, editor, value):
+        super().__init__(parent, style="PhaseArea.TFrame")
+        self.editor, self.rows = editor, []
+        header = ttk.Frame(self, style="PhaseArea.TFrame")
+        header.pack(fill="x")
+        self.label = ttk.Label(header, style="PhaseArea.TLabel")
+        self.label.pack(side="left")
+        ttk.Button(header, text="删除参数", command=lambda: editor.remove_field("cost")).pack(side="right")
+        self.area = ttk.Frame(self, style="PhaseArea.TFrame")
+        self.area.pack(fill="x")
+        self.input = ttk.Button(self, text="添加维持消耗", command=lambda: self.add_cost({"resource": "mp", "value": 0, "timing": "maintenance"}))
+        self.input.pack(anchor="w")
+        for cost in value:
+            self.add_cost(cost)
+        self.refresh()
+
+    def add_cost(self, value):
+        row = CostRow(self.area, value, self.remove_cost, (), timings=("maintenance",))
+        row.pack(fill="x", pady=3)
+        self.rows.append(row)
+        request_layout(self)
+        return row
+
+    def remove_cost(self, row):
+        self.rows.remove(row)
+        row.destroy()
+        if not self.rows:
+            self.area.configure(height=1)
+        request_layout(self)
+
+    def read(self):
+        return [row.read() for row in self.rows]
+
+    def snapshot(self):
+        return tuple(row.snapshot() for row in self.rows)
+
+    def refresh(self):
+        supported = "cost" in parameter_options(self.editor.effect_type)
+        self.label.configure(text="回合末维持消耗 · cost" + ("" if supported else "（当前类型不支持）"))
+
+
 class EffectDataEditor(ttk.Frame):
     def __init__(self, parent, effect_type, value, catalogs=None):
         configure_gray_area(parent)
@@ -108,7 +152,11 @@ class EffectDataEditor(ttk.Frame):
     def add_field(self, key, value=None, *, empty=False):
         if key in self.rows:
             return self.rows[key]
-        row = ParameterRow(self.fields, self, key, value, empty=empty)
+        if key == "cost" and self.effect_type in {"create_field", "deploy_reality_marble"} and (empty or (
+                isinstance(value, list) and all(isinstance(cost, dict) for cost in value))):
+            row = CostParameterRow(self.fields, self, [] if empty else value)
+        else:
+            row = ParameterRow(self.fields, self, key, value, empty=empty)
         row.pack(fill="x", pady=2)
         self.rows[key] = row
         self.refresh()
@@ -189,4 +237,5 @@ class EffectDataEditor(ttk.Frame):
             return "value", json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
         except (ValueError, TypeError):
             return ("draft", self.mode, self.raw.get() if self.mode == "json" else
-                    tuple((key, row.value.get()) for key, row in self.rows.items()))
+                    tuple((key, row.snapshot() if isinstance(row, CostParameterRow) else row.value.get())
+                          for key, row in self.rows.items()))

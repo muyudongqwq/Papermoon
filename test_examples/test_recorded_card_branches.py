@@ -137,8 +137,8 @@ class RecordedCardBranchTests(unittest.TestCase):
         self.nero.mp, self.master.mp = 10, 90
         state = CastingState.start(self.nero, self.noble(self.nero, "laus_saint_claudius"), 1)
         alternative = self.nero.create_personal_skill({
-            "skill_id": "audit_instant", "name": "Instant", "rank": "C", "casting": {"mp_cost": 100},
-            "components": [{"component_id": "release", "type": "active", "target": "selectable_enemy",
+            "skill_id": "audit_instant", "name": "Instant", "rank": "C",  "casting": {"activation_mode": "release"},
+            "components": [{"cost": [{"resource": "mp", "value": 100, "timing": "casting_start"}], "component_id": "release", "type": "active", "target": "selectable_enemy",
                             "effects": [{"effect_type": "create_attack_event", "effect_data": {"damage_value": 30}}]}],
         })
         attack = self.incoming(self.nero, channel="release")
@@ -158,8 +158,8 @@ class RecordedCardBranchTests(unittest.TestCase):
         self.nero.mp, self.master.mp = self.nero.mpmax, self.master.mpmax
         alternative = self.nero.create_personal_skill({
             "skill_id": "audit_expensive", "name": "Expensive", "rank": "C",
-            "casting": {"mp_cost": self.nero.get_available_mp() + 1},
-            "components": [{"component_id": "release", "type": "active", "target": "selectable_enemy",
+             "casting": {"activation_mode": "release"},
+            "components": [{"cost": [{"resource": "mp", "value": self.nero.get_available_mp() + 1, "timing": "casting_start"}], "component_id": "release", "type": "active", "target": "selectable_enemy",
                             "effects": [{"effect_type": "create_attack_event", "effect_data": {"damage_value": 30}}]}],
         })
         self.assertNotIn(alternative, [item.skill for item in get_offset_attack_options(self.nero, self.incoming(self.nero, channel="release"))])

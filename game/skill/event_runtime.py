@@ -581,7 +581,7 @@ class EventManager:
             )
             for option in selected:
                 costs.extend(resolve_input_expressions(
-                    option.get("additional_cost", []),
+                    option.get("cost", []),
                     resolved_inputs,
                 ))
             paid = _pay_component_costs(candidate.owner, costs, candidate.skill)

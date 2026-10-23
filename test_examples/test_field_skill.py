@@ -27,7 +27,7 @@ def field_skill_definition(
         "effects": list(effects or []),
     }
     if maintenance is not None:
-        data["maintenance"] = maintenance
+        data["cost"] = [{**maintenance, "timing": "maintenance"}]
     return {
         "skill_id": skill_id,
         "name": field_id,

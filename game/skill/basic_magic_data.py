@@ -168,7 +168,7 @@ BASIC_MAGIC_DATA = {
         "name": "魔弹",
         "rank": "C",
         "skill_category": "basic_magic",
-        "casting": {"mp_cost": 10},
+         "casting": {"activation_mode": "release"},
         "rules_text": "消耗10MP，以魔术攻击骰进行攻击，命中后造成30点魔术伤害。",
         "components": [{
             "component_id": "battle_cast",
@@ -181,7 +181,7 @@ BASIC_MAGIC_DATA = {
                 "must_be_hostile": True,
                 "required_visibility": "own_visible",
             },
-            "cost": [],
+            "cost": ([] + [{"resource": "mp", "value": 10, "timing": "casting_start"}]),
             "effects": [{
                 "effect_type": "create_attack_event",
                 "effect_data": {
@@ -197,7 +197,7 @@ BASIC_MAGIC_DATA = {
         "name": "强化",
         "rank": "C",
         "skill_category": "basic_magic",
-        "casting": {"mp_cost": 10},
+         "casting": {"activation_mode": "release"},
         "rules_text": "消耗10MP，使所选基础属性提高1级，持续1回合。",
         "components": [{
             "component_id": "battle_cast",
@@ -205,7 +205,7 @@ BASIC_MAGIC_DATA = {
             "casting_requirement": 0,
             "resolution_timing": "immediate",
             "target": "selectable_character",
-            "cost": [],
+            "cost": ([] + [{"resource": "mp", "value": 10, "timing": "casting_start"}]),
             "choices": {
                 "maximum_selections": 1,
                 "allow_duplicate": False,
@@ -246,7 +246,7 @@ BASIC_MAGIC_DATA = {
         "name": "治疗",
         "rank": "C",
         "skill_category": "basic_magic",
-        "casting": {"mp_cost": 10},
+         "casting": {"activation_mode": "release"},
         "rules_text": "消耗10MP，使一名角色回复15HP。",
         "components": [{
             "component_id": "battle_cast",
@@ -254,7 +254,7 @@ BASIC_MAGIC_DATA = {
             "casting_requirement": 0,
             "resolution_timing": "immediate",
             "target": "selectable_character",
-            "cost": [],
+            "cost": ([] + [{"resource": "mp", "value": 10, "timing": "casting_start"}]),
             "effects": [{
                 "effect_type": "recover_resource",
                 "effect_data": {

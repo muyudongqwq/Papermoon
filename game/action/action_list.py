@@ -1,3 +1,4 @@
+from game.resource.costs import component_activation_costs
 from copy import deepcopy
 from dataclasses import dataclass, field
 
@@ -253,7 +254,7 @@ class ActionListBuilder:
                         component.get("target_rules", {})
                     ),
                     "condition": deepcopy(component.get("condition", {})),
-                    "cost": deepcopy(component.get("cost", [])),
+                    "cost": component_activation_costs(skill, component),
                     "effects": deepcopy(component.get("effects", [])),
                     "inputs": deepcopy(component.get("inputs", [])),
                     "display_order": component.get("display_order", 50),

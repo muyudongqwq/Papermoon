@@ -15,6 +15,7 @@ VISIBILITY_COLLECTIONS = frozenset({
 })
 
 CONDITION_FIELDS = frozenset({
+    "all", "any", "not",
     "condition_id",
     "actor_alive",
     "actor_type",
@@ -122,12 +123,23 @@ def _context_value(context, name, default=None):
     return getattr(context, name, default)
 
 
-def validate_condition(condition, *, path="condition"):
+def validate_condition(condition, *, path="condition", _depth=0):
+    if _depth > 32:
+        raise ValueError(f"{path}条件嵌套不能超过32层")
     if not isinstance(condition, dict):
         raise TypeError(f"{path}必须是字典")
     unknown = set(condition) - CONDITION_FIELDS
     if unknown:
         raise ValueError(f"{path}包含未知字段：{sorted(unknown)}")
+    for operator in ("all", "any"):
+        if operator in condition:
+            children = condition[operator]
+            if not isinstance(children, list) or not children:
+                raise TypeError(f"{path}.{operator}必须是非空条件列表")
+            for index, child in enumerate(children):
+                validate_condition(child, path=f"{path}.{operator}[{index}]", _depth=_depth + 1)
+    if "not" in condition:
+        validate_condition(condition["not"], path=f"{path}.not", _depth=_depth + 1)
     condition_id = condition.get("condition_id")
     if condition_id is not None and condition_id not in CONDITION_IDS:
         raise ValueError(f"{path}.condition_id未知：{condition_id}")
@@ -361,6 +373,14 @@ def get_condition_reasons(condition, actor, context=None):
         maximum = condition.get("event_value_at_most")
         if maximum is not None and (event.value is None or event.value > maximum):
             reasons.append("event_value_too_large")
+    for child in condition.get("all", []):
+        reasons.extend(get_condition_reasons(child, actor, context))
+    if "any" in condition and not any(
+        not get_condition_reasons(child, actor, context) for child in condition["any"]
+    ):
+        reasons.append("any_condition_failed")
+    if "not" in condition and not get_condition_reasons(condition["not"], actor, context):
+        reasons.append("negated_condition_matched")
     return list(dict.fromkeys(reasons))
 
 

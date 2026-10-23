@@ -27,6 +27,27 @@ Papermoon Skill / Effect 数据规范
 - Modifier：需要留在角色身上的持续结果。
 
 
+统一消耗写法（2026-10-23）
+--------------------------
+所有消耗条目统一为cost列表，基本结构如下：
+{"resource": "mp", "value": 40, "timing": "casting_start", "cost_id": "optional_id"}
+resource为资源ID，value为非负数值；技能单元和分支中也可使用已声明的输入表达式。
+cost_id可省略，用于匹配特定消耗修正。timing可省略，默认为activation。
+- active单元cost：casting_start（该单元的咏唱预付，只支持MP）或activation（该单元发动时支付）。
+- trigger/react等其他单元及choices.options各分支cost：只允许activation；分支费用与本单元发动费用相加。
+- create_field和deploy_reality_marble的effect_data.cost：只允许maintenance，回合末维持时支付。
+每个单元填写完整消耗，技能顶层不再允许cost，没有公共消耗或额外默认费用叠加。
+开始咏唱时选定具体单元并预付，只能解放该单元；更换单元须先中断退款并重新开始。
+分支只在选中时支付，允许重复选择时逐次支付；预付只在开始咏唱时扣一次。
+无需咏唱直接发动时仍支付casting_start费用；已预付的解放不重复支付。
+中断咏唱按原账本退MP，普通MP受上限限制；AP和攻击阶段不退。
+场地冲突等专门退款分支只退该次单元实际支付的MP，不自动退预付咏唱MP。
+技能顶层cost、旧mp_cost、casting.mp_cost、additional_cost及maintenance对象不再接受。
+录入明确cost数值时直接写实际费用，对城宝具的费用不再自动翻倍。
+未提供cost的宝具单元仍沿用原Rank默认费用规则；编辑器可确定Rank时将默认费用显示并保存到该单元。
+明确写cost=[]可使该单元免费；其他单元不会影响其费用。
+行动的固定AP/攻击阶段仍按既有规则支付；解放会跳过单元中重复声明的行动资源费用。
+
 1.  技能描述
 ================
 
@@ -109,6 +130,11 @@ condition
     发动组件前检查的条件。行动、主动技能、被动/触发技能共用
     game/action/action_rules.py中的严格条件字段；特殊条件使用condition_id，
     例如condition_id="master_is_none"。
+    condition支持all（与）、any（或）、not（非）：
+    {"all": [{"event_target_is_self": true}, {"not": {"damage_type": "magic"}}]}
+    all/any接受非空条件列表；not接受一个条件对象，要求其判定结果为False。
+    普通字段与逻辑字段同时存在时整体按与处理；条件最多嵌套32层。
+    此结构用于发动条件condition；Modifier的conditions仍使用原有匹配字段。
 
 cost
     消耗列表：
@@ -171,7 +197,7 @@ choices用于一个效果包含多个可选效果的情况：
             "choice_id": "choice_a",
             "name": "选项A",
             "condition": {},
-            "additional_cost": [],
+            "cost": [],
             "effects": []
         }
     ]
@@ -620,7 +646,7 @@ exit_penalty
     不会使这一固定惩罚减半。死亡清理不触发离场惩罚；惩罚致死后停止瞬移，
     不再将角色放入目的地。多个场地依注册顺序分别处理。
 center_target.requirements
-maintenance
+cost=[]    维持消耗列表，每项timing="maintenance"，创建回合不扣费。
 selected_targets=[]
 effects=[]
 center_rule="actor_position"
@@ -664,7 +690,7 @@ name
 entrance                 默认actor.position
 capture_radius=0
 duration
-maintenance
+cost=[]    维持消耗列表，每项timing="maintenance"，创建回合不扣费。
 selected_targets=[]
 remove_with_source=false
 interior.location_name

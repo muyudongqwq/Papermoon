@@ -31,19 +31,10 @@ from game.turn.decision import (
     TerminalDecisionProvider,
 )
 from game.skill.survival_runtime import resolve_prevent_death_effect
-
-
-class SkillUnavailableError(ValueError):
-    """技能或技能组件在当前状态下不能发动。"""
-
-
-class PaidCosts(dict):
-    """Public cost totals plus private refundable payment ledgers."""
-
-    def __init__(self, *args, ledgers=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.ledgers = dict(ledgers or {})
-        self.refunded_resources = set()
+from game.resource.costs import (
+    SkillUnavailableError, PaidCosts, available_resource as _available_resource,
+    costs_at, pay_costs, resolved_cost, validate_costs, component_activation_costs, default_noble_costs,
+)
 
 
 _SKILL_APPLICATION_SEQUENCE = count()
@@ -1454,6 +1445,10 @@ def _validate_choice_definition(choices):
     options = choices.get("options", [])
     if not options:
         raise ValueError("可选效果至少需要一个option")
+    for option in options:
+        if "additional_cost" in option:
+            raise ValueError("分支额外消耗请使用cost列表")
+        validate_costs(option.get("cost", []), path="choices.options.cost")
     choice_ids = [option.get("choice_id") for option in options]
     if any(not choice_id for choice_id in choice_ids):
         raise ValueError("每个可选效果都必须提供choice_id")
@@ -1536,6 +1531,10 @@ def validate_personal_skill_definition(definition):
     if missing:
         raise ValueError(f"固有技能缺少字段：{sorted(missing)}")
     casting = definition.get("casting", {})
+    if "mp_cost" in definition or (isinstance(casting, dict) and ({"mp_cost", "cost_id"} & casting.keys())):
+        raise ValueError("消耗请使用技能cost列表，不再使用mp_cost或casting.cost_id")
+    if "cost" in definition:
+        raise ValueError("不再支持技能公共消耗，请将完整cost写入各技能单元")
     if not isinstance(casting, dict):
         raise ValueError("casting必须是字典")
     mode = casting.get("activation_mode", "release")
@@ -2267,59 +2266,18 @@ def select_skill_choices(
 
 
 def _collect_component_costs(component, selected_options):
-    costs = list(component.get("cost", []))
+    costs = costs_at(component.get("cost", []))
     for option in selected_options:
-        costs.extend(option.get("additional_cost", []))
+        costs.extend(option.get("cost", []))
     return costs
 
 
 def _resolved_cost(actor, cost, skill):
-    value = cost.get("value", 0)
-    return actor.modifier_manager.calculate_cost(
-        value,
-        resource=cost["resource"],
-        cost_id=cost.get("cost_id", f"skill:{skill.skill_id}"),
-    )
-
-
-def _available_resource(actor, resource):
-    if resource == "mp" and hasattr(actor, "get_available_mp"):
-        return actor.get_available_mp()
-    if getattr(actor, "has_resource", lambda _resource: False)(resource):
-        return actor.get_available_resource(resource)
-    return getattr(actor, resource, None)
+    return resolved_cost(actor, cost, f"skill:{skill.skill_id}")
 
 
 def _pay_component_costs(actor, costs, skill):
-    resolved = [(_resolved_cost(actor, cost, skill), cost) for cost in costs]
-    required_by_resource = {}
-    for value, cost in resolved:
-        resource = cost["resource"]
-        required_by_resource[resource] = (
-            required_by_resource.get(resource, 0) + value
-        )
-    for resource, required in required_by_resource.items():
-        available = _available_resource(actor, resource)
-        if available is None:
-            raise ValueError(f"未知的技能消耗资源：{resource}")
-        if available < required:
-            raise SkillUnavailableError(f"{resource}不足")
-
-    ledgers = {}
-    for resource, required in required_by_resource.items():
-        if resource == "mp":
-            ledger = actor.pay_mp_with_ledger(required)
-            if ledger is None:
-                raise SkillUnavailableError("mp不足")
-            ledgers["mp"] = ledger
-        elif getattr(actor, "has_resource", lambda _resource: False)(
-            resource
-        ):
-            if not actor.pay_resource(resource, required):
-                raise SkillUnavailableError(f"{resource}不足")
-        else:
-            setattr(actor, resource, getattr(actor, resource) - required)
-    return PaidCosts(required_by_resource, ledgers=ledgers)
+    return pay_costs(actor, costs, f"skill:{skill.skill_id}")
 
 
 def resolve_skill_component(
@@ -2347,6 +2305,16 @@ def resolve_skill_component(
         raise ValueError(f"未知的技能组件：{component_id}")
     if component["type"] != "active":
         raise ValueError("只有active组件可以被主动发动")
+    state = getattr(actor, "casting_state", None)
+    if casting_release and state is not None:
+        if state.skill is not skill or state.component_id != component_id or component not in state.eligible_components():
+            raise SkillUnavailableError("当前咏唱尚未完成或不属于该技能单元")
+        casting_prepaid = True
+    if casting_release and component.get("casting_requirement", 0) > 0 and state is None:
+        raise SkillUnavailableError("请先完成该技能单元的咏唱")
+    if casting_prepaid and (state is None or state.skill is not skill or state.component_id != component_id
+                            or component not in state.eligible_components()):
+        raise SkillUnavailableError("当前咏唱尚未完成或不属于该技能单元")
     from game.skill.component_runtime import (
         component_runtime_reasons,
         record_component_use,
@@ -2466,6 +2434,8 @@ def resolve_skill_component(
         _collect_component_costs(component, selected),
         resolved_inputs,
     )
+    costs.extend([cost for cost in component_activation_costs(skill, component, prepaid=casting_prepaid)
+                  if cost.get("timing") == "casting_start"])
     if casting_release:
         costs = [
             cost
@@ -2473,18 +2443,6 @@ def resolve_skill_component(
             if cost.get("resource")
             not in {"action_point", "attack_phase_count"}
         ]
-    casting = getattr(skill, "casting", {}) or {}
-    if casting and not casting_prepaid:
-        from game.skill.casting import get_base_casting_mp_cost
-
-        costs.append({
-            "resource": "mp",
-            "value": get_base_casting_mp_cost(skill),
-            "cost_id": casting.get(
-                "cost_id",
-                f"casting:{skill.skill_id}",
-            ),
-        })
     paid = _pay_component_costs(
         actor,
         costs,
@@ -2744,6 +2702,9 @@ def create_noble_phantasm(character, definition):
     components = deepcopy(definition["components"])
     for component in components:
         component.setdefault("casting_requirement", default_requirement)
+        if "cost" not in component:
+            component["cost"] = (default_noble_costs(definition.get("rank", character.noble.rank), range_type)
+                                 if component.get("type", "active") == "active" else [])
         component_casting_requirement(component)
         component.setdefault("type", "active")
         component.setdefault("target_rules", {})
@@ -2774,8 +2735,6 @@ def create_noble_phantasm(character, definition):
     casting = deepcopy(definition.get("casting", {}))
     casting["noble_phantasm_type"] = noble_type
     casting["range_type"] = range_type
-    if "mp_cost" in definition:
-        casting["mp_cost"] = definition["mp_cost"]
     if "roll_profile" in definition:
         casting["roll_profile"] = deepcopy(definition["roll_profile"])
     skill = Skill(

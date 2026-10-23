@@ -73,6 +73,7 @@ def effect_view(effect, skill=None):
 
 
 def component_view(actor, skill, component, component_index=0):
+    from game.skill.casting import get_casting_mp_cost
     component_id = component.get("component_id", f"component_{component_index}")
     state = get_component_state(skill, component_id, create=False)
     reasons = component_runtime_reasons(actor, skill, component)
@@ -113,7 +114,9 @@ def component_view(actor, skill, component, component_index=0):
         "trigger": deepcopy(component.get("trigger", {})), "limit": deepcopy(component.get("limit")),
         "event_limit": events.component_limit_view(actor, skill, component, component_index=component_index) if events else None,
         "last_used_turn": state.last_used_turn if state else None,
-        "costs": deepcopy(component.get("cost", [])), "inputs": deepcopy(component.get("inputs", [])),
+        "costs": deepcopy(component.get("cost", [])),
+        "casting_cost": get_casting_mp_cost(actor, skill, component),
+        "inputs": deepcopy(component.get("inputs", [])),
         "effects": effects, "choices": choices,
         "description": "；".join(descriptions),
     }
@@ -122,14 +125,10 @@ def component_view(actor, skill, component, component_index=0):
 def skill_view(actor, skill, category):
     components = [component_view(actor, skill, component, index) for index, component in enumerate(skill.definitions)]
     casting = get_casting_config(skill)
-    cost = None
-    if casting:
-        from game.skill.casting import get_casting_mp_cost
-        cost = get_casting_mp_cost(actor, skill)
     return {"skill_id": skill.skill_id, "name": skill.name, "rank": skill.rank_name,
             "category": category, "negative": skill.negative_skill,
             "casting": {"activation_mode": casting.get("activation_mode", "release"),
-                        "range_type": casting.get("range_type"), "mp_cost": cost} if casting else None,
+                        "range_type": casting.get("range_type")} if casting else None,
             "components": components,
             "description": (skill.description or "；".join(component["description"]
                             for component in components if component["description"]))}
@@ -143,10 +142,9 @@ def character_state(character):
         skills.extend(skill_view(character, skill, category) for skill in getattr(character, collection, []))
     state = character.casting_state
     casting = None if state is None else {
-        "skill_id": state.skill.skill_id, "name": state.skill.name, "layers": state.layers,
+        "skill_id": state.skill.skill_id, "component_id": state.component_id, "name": state.skill.name, "layers": state.layers,
         "started_turn": state.started_turn, "continued_turn": state.continued_turn,
-        "maximum_layers": max((component.get("casting_requirement", 0)
-                               for component in state.skill.definitions), default=0),
+        "maximum_layers": state.component.get("casting_requirement", 0) if state.component else 0,
         "paid_mp": sum(item["amount"] for item in state.payment_ledger),
         "activation_mode": get_casting_config(state.skill).get("activation_mode", "release"),
     }

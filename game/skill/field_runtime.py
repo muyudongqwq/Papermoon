@@ -46,7 +46,7 @@ class FieldEffect:
         self.owner_vision = deepcopy(data.get("owner_vision"))
         self.effects = list(data.get("effects", []))
         self.selected_targets = selected_targets
-        self.maintenance = data.get("maintenance")
+        self.cost = data.get("cost", [])
         self.battle_bound = data.get("battle_bound", False)
         self.bound_battle = getattr(owner, "current_battle", None) if self.battle_bound else None
         self.exit_penalty = data.get("exit_penalty")
@@ -65,6 +65,10 @@ class FieldEffect:
         )
 
     def _validate(self):
+        from game.resource.costs import validate_costs
+        if "maintenance" in self.definition:
+            raise ValueError("维持消耗请使用cost列表及maintenance支付时机")
+        validate_costs(self.cost, timings=("maintenance",), inputs=False)
         if not self.field_id:
             raise ValueError("场地必须提供field_id")
         if self.field_type not in FIELD_TYPES:
@@ -256,25 +260,11 @@ class FieldEffect:
             self._active_targets[index] = current
 
     def pay_maintenance(self):
-        if not self.maintenance:
-            return True
-        resource = self.maintenance.get("resource", "mp")
-        value = self.owner.modifier_manager.calculate_cost(
-            self.maintenance.get("value", 0),
-            resource=resource,
-            cost_id=self.maintenance.get(
-                "cost_id",
-                f"field:{self.field_id}:maintenance",
-            ),
-        )
-        if resource == "mp":
-            return self.owner.pay_mp_with_ledger(value) is not None
-        if self.owner.has_resource(resource):
-            return self.owner.pay_resource(resource, value)
-        available = getattr(self.owner, resource, None)
-        if available is None or available < value:
+        from game.resource.costs import costs_at, pay_costs, SkillUnavailableError
+        try:
+            pay_costs(self.owner, costs_at(self.cost, "maintenance"), f"field:{self.field_id}:maintenance")
+        except SkillUnavailableError:
             return False
-        setattr(self.owner, resource, available - value)
         return True
 
     def end_turn(self, characters, turn_number):

@@ -220,7 +220,7 @@ class Character:
     def atk(self):
         return self.strength.value * 10 + self.atk_bonus
     #初始化血量，魔力和ATK，默认为*10
-    
+
     def bonus(self):
         self._derived_manual_adjustments = {
             name: 0 for name in self.DERIVED_STAT_NAMES
@@ -473,7 +473,7 @@ class Character:
 
     def use_luck_reroll(self):
         if self.luck_reroll <= 0: return False
-        self.luck_reroll -=1 
+        self.luck_reroll -=1
         return True
         #检查还能不能用幸运重骰
 
@@ -1328,7 +1328,7 @@ class Character:
 #状态查询器
     def is_alive(self):
         return self.hp > 0
-    
+
     def die(self):
         if self.has_status("dead"):
             return False
@@ -1588,7 +1588,7 @@ class Character:
 
     def get_available_mp(self):
         return self.temporary_mp + self.mp
-    
+
     def consume_mp(self, amount):
         return self.pay_mp_with_ledger(amount) is not None
 

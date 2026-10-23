@@ -533,7 +533,7 @@ class Action:
         if battle is not None:
             battle.mark_stayed(actor)
         return True
-    
+
     def build_attack_profile(self, decision_provider=None, *, for_offset=False):
         """Roll and snapshot one normal attack without assigning a target."""
         attacker = self.actor
@@ -809,6 +809,7 @@ class Action:
     def chant(self, decision_provider=None):
         from game.skill.casting import (
             castable_sources,
+            castable_options, release_option_label, get_casting_mp_cost,
             start_or_continue_casting,
         )
         from game.turn.decision import DecisionOption, DecisionRequest
@@ -856,6 +857,26 @@ class Action:
                     if skill is None:
                         return False
 
+        component_id = state.component_id if state is not None else None
+        if state is None:
+            options = castable_options(actor, skill)
+            if not options:
+                return False
+            if len(options) == 1:
+                component_id = options[0][1]["component_id"]
+            else:
+                if decision_provider is None:
+                    raise ValueError("开始咏唱需要选择技能单元")
+                component_id = decision_provider.choose(DecisionRequest(
+                    character=actor, phase="咏唱单元选择", prompt="请选择本次咏唱并准备解放的技能单元。",
+                    options=tuple(DecisionOption(release_option_label(source, component) +
+                                                 f"（预付{get_casting_mp_cost(actor, source, component)}MP）", component["component_id"],
+                                                 (component["component_id"],)) for source, component in options)
+                    + (DecisionOption("返回行动选择", None, ("back", "返回")),),
+                ))
+                if component_id is None:
+                    return False
+
         turn_number = self.game_turn
         if turn_number is None:
             turn_number = actor.current_global_turn
@@ -863,6 +884,7 @@ class Action:
             actor,
             skill=skill,
             turn_number=turn_number,
+            component_id=component_id,
         )
         if result is None:
             return False
@@ -914,7 +936,7 @@ class Action:
             return False
 
         state = actor.casting_state
-        prepaid = state is not None and state.skill is skill
+        prepaid = state is not None and state.skill is skill and state.component_id == component["component_id"]
         if state is not None and not prepaid:
             return False
         result = resolve_skill_component(
@@ -1030,4 +1052,4 @@ class Action:
 
 
 
-    
+

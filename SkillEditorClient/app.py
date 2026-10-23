@@ -67,7 +67,7 @@ class SkillEditorClient(SkillEditor):
             self.text.configure(state="disabled")
             self.notebook.tab(self.json_tab, text="JSON预览（只读）")
             self.notebook.select(self.form_tab)
-            self.status.set("按需新建技能单元和效果，编辑完成后保存；条件、触发和复杂参数可在相应高级设置中配置。")
+            self.status.set("按需新建技能单元和效果，编辑完成后保存；触发事件可直接选择，复杂参数可在相应高级设置中配置。")
             self.scroll_form.canvas.yview_moveto(0)
         else:
             self.form_message.configure(text="该类型或条目结构本轮沿用JSON编辑方式；新建主动技能可使用表单。")

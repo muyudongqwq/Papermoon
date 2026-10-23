@@ -8,7 +8,7 @@ class Servant(Character):
         #初始化character部分
         super().__init__(name, strength, endurance, flexibility, magic, fortune)
         #把character.py里的东西继承下来
-        
+
         self.servant_class = servant_class
         self.noble = FixedRank(noble, allow_plus = True)
 

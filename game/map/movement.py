@@ -145,7 +145,7 @@ class MovementResolver:
                 if not character1.is_ally(character2):
                     return True
         return False
-    
+
     def can_move(self, state):
         if state.actor.movement_locked or state.actor.has_status("cannot_move"):
             return False
@@ -201,7 +201,7 @@ class MovementResolver:
             state.finished = True
             state.remaining_movement = 0
             return False
-    
+
         state.path.pop(0)
         destination = state.path[0]
         from game.map.ride_group import get_movement_formation
@@ -311,7 +311,7 @@ class MovementResolver:
 
         encounters = [
 
-        ] 
+        ]
         for pos, group in encounter_groups:
             encounter_group, awareness = self.get_encounter_data(group)
             if len(encounter_group) <= 1:
@@ -437,7 +437,7 @@ class Encounter:
         self.position = position
 #保存移动的状态
         self.movement_states = movement_states
-        
+
         self.resolved = False
         self.enter_battle = False
 #是否在等待下个回合开战

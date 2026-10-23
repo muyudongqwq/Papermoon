@@ -69,6 +69,21 @@ class EventRuntimeTests(unittest.TestCase):
             "damage_dealt",
         )
 
+    def test_trigger_with_nested_or_and_not_filters_real_damage_events(self):
+        self.target.create_personal_skill(make_skill("conditional_recovery", {
+            "component_id": "recover", "type": "trigger", "target": "self",
+            "trigger": {"event_type": "damage_received", "timing": "after"},
+            "condition": {"all": [
+                {"event_target_is_self": True},
+                {"any": [{"event_value_at_least": 20}, {"not": {"damage_type": "physical"}}]},
+            ]},
+            "effects": [{"effect_type": "recover_resource", "effect_data": {"resource_id": "hp", "value": 5}}],
+        }))
+        for amount, kind, recovery in ((10, "physical", 0), (20, "physical", 5), (10, "magic", 5)):
+            hp = self.target.hp
+            DamageResolver().resolve(DamageEvent(self.attacker, self.target, amount, kind))
+            self.assertEqual(self.target.hp, hp - amount + recovery)
+
     def test_react_modifies_damage_and_is_once_per_target_per_turn(self):
         self.target.create_personal_skill(make_skill(
             "damage_reaction",

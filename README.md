@@ -42,7 +42,7 @@ python main.py
 python -m unittest discover -s test_examples -p "test_*.py"
 ```
 
-当前源码测试基线为696项，另有62项实际Tk控件检查（旧版14项、新客户端48项）。
+当前源码测试基线为725项，另有94项实际Tk控件检查（旧版14项、新客户端80项）。
 beta 0.1 exe此前通过4项独立运行检查，详见[测试基线](reference/TEST_BASELINE_2026-10-21.md)。
 
 运行本轮完整审计（五轮全量、打乱测试顺序、32个随机种子实战、目录/语法和终端检查）：
@@ -185,7 +185,9 @@ Skill Editor 的“状态”分类统一定义状态，技能通过以下效果�
 
 双击根目录 [SkillEditorClient beta 0.1.exe](<SkillEditorClient beta 0.1.exe>) 打开新客户端，不附带CMD窗口。
 exe自带Python及Tkinter，可独立运行，无需另外安装Python；原版的`skilleditor`与
-`Start_Skill_Editor.cmd`照常使用。旧的新客户端.pyw、.vbs入口已移除。
+`Start_Skill_Editor.cmd`照常使用。
+双击根目录的`Start_SkillEditorClient.vbs`直接运行当前源码，使用电脑现有Python，不显示CMD窗口。
+修改源码后关闭编辑器、再双击该脚本即可看到更新；无需在终端输入命令。
 
 当前源码的新建流程：弹窗填写名称和Rank，点击“开始”（或“取消”返回）。新建固有技能ID从10起，
 在已有最大数字ID之后顺延，0至9保留给测试；数据格式使用数字字符串，例如`"10"`。
@@ -230,6 +232,35 @@ dice_bonus的“调整的属性”可选择攻击骰（物理与魔术）或防�
 阶段勾选项文案修改`SkillEditorClient/model.py`中的`PHASE_LABELS`右侧文字，保留AP1等左侧内部键。
 消耗标题下的提示修改`SkillEditorClient/forms.py`中的`COST_HINT`；目标说明在`model.py`的`TARGET_DESCRIPTIONS`。
 
+active类型下提供“是否需要咏唱”，新建技能单元默认为否；选是后隐藏可用阶段，显示
+“咏唱所需回合数”（正整数），每个完成咏唱的全局回合末累积1回合，映射casting_requirement。
+切回否会恢复原阶段勾选；其他类型隐藏咏唱选项与阶段框。现有技能的咏唱需求自动显示。
+新设咏唱的固有技能/基础魔术若没有casting配置，保存时建立release配置；费用统一使用cost列表。
+已有消耗、自动展开等设置保留。原为instant的技能选是后改为release；其余咏唱设置仍在技能高级设置中编辑。
+引擎目前只对active单元推进咏唱，完成后自动展开的技能也使用active；trigger/react/passive没有独立咏唱流程。
+
+消耗统一写为`cost`列表，每项使用`resource`、`value`、可选`cost_id`与`timing`。
+每个技能单元的消耗栏填写该单元完整费用，可选“开始咏唱时预付”或“技能发动时”，没有公共消耗区域。
+未填timing默认activation（发动时）；casting_start表示咏唱预付，无需咏唱直接发动时支付。
+咏唱预付只支持MP，保留临时MP、自身MP、御主补足及原账本退款；不退行动资源。
+开始咏唱时选定单元，预付该单元费用；达到该单元回合数后只能解放该单元。
+更换单元需要先中断并按原账本退款，再重新选择；不会支付其他单元的费用，也不共享咏唱进度。
+单元的发动时费用和所选分支费用相加支付，分支费用仅选中时支付，重复选择则分别支付。
+场地与固有结界的effect_data.cost使用maintenance，在参数表单内可添加维持消耗，创建回合不扣维持费。
+技能顶层cost、原mp_cost、casting.mp_cost、additional_cost与maintenance对象不再作为数据写法接受。
+华丽帝政的单元直接写100MP，普通自定义cost不再因对城范围被隐藏翻倍；宝具单元未提供cost时保留原Rank默认规则，
+编辑器可确定Rank时会展示默认费用并保存到该单元。明确写cost=[]表示该单元免费。伤害倍率规则保持原样。
+trigger在相同灰底框中显示“发动条件”：选择条件后显示解释及对应取值，可逐行新增、删除，
+连接菜单仅可选择与、或，按从上到下依次组合；每行单独勾选非，表示要求该条件判定为False。
+“删除此条件”位于对应行的“新增条件”上方；只剩一个条件时隐藏删除按钮。
+原有平铺条件完整保留；无法用线性列表表示的嵌套分组在“条件高级设置”中编辑。
+切换技能类型时条件在表单与单元高级设置间同步；未完成的草稿不会被覆盖。
+trigger和react在目标上方显示“触发事件”灰底表单，提供现有36类事件的中文选项和说明，
+例如全局回合开始、受到伤害后、伤害结算前、资源变化、状态施加等。选择事件时自动带入
+当前引擎实际发送的before/after时机；已有配置完整保留，自定义事件ID也可填写。
+优先级等字段在“触发事件高级设置”中编辑；事件决定何时检查，条件表单负责附加筛选。
+事件名称和说明修改`SkillEditorClient/trigger_editor.py`中的`EVENT_OPTIONS`，保留内部事件ID。
+
 工具栏“效果字典”打开独立只读窗口；每条效果的“查看说明”直接定位到对应类型。
 可搜索effect_type、中文名称、参数或说明，查看固定必填/可选参数、编辑器候选值、
 效果字典原文及Modifier公共字段。窗口不阻塞技能编辑，可选择文字并按Ctrl+C复制，
@@ -253,7 +284,7 @@ exe中的Core同样使用自带运行环境；关闭编辑器不会关闭已启�
 exe默认读写自身所在目录的`userdata/catalog.json`，不受启动时工作目录影响。
 如将exe复制给其他GM，需要已有自定义内容时，请一并复制`userdata/catalog.json`。
 可执行文件包含打包时的代码；修改Python源码后需要重新打包，修改外部内容项目无需重新打包。
-源码运行入口仍为`python -m SkillEditorClient`。
+源码可双击`Start_SkillEditorClient.vbs`，也可使用`python -m SkillEditorClient`。
 按用户要求，只有明确要求时才重新打包exe；日常修改可在项目根目录运行
 `pyw -3 -m SkillEditorClient`预览，保存草稿并关闭、重新启动源码窗口即可读取更新。
 当前根目录beta 0.1 exe包含calculation字段统一、字典路径调整及打包时的客户端展示字典。
