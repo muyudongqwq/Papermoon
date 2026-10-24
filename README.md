@@ -4,16 +4,37 @@ Papermoon 是节点地图、全局回合与战斗回合共同驱动的文字规�
 
 ## 目录用途
 
-- `game/`：全部规则实现和规则资料，外层仅保留Python包入口；包含
-  `game/`（整局管理、循环、Session、指令、状态视图与战报）、`action/`、`character/`、
-  `map/`、`modifier/`、`rank/`、`resource/`、`skill/`、`status/`、`turn/`。
-- `core/`：终端界面、菜单与提示、人工测试场景及内容项目加载入口。
-- `skilleditor/`：技能和角色卡编辑窗口。
-- `SkillEditorClient/`：技能、职介技能和状态的图形化编辑器。
-- `CharacterEditorClient/`：独立角色卡编辑器，版本beta 0.1。
-- `test_examples/`：自动测试、手动演示和历届角色卡样本。
-- `reference/`：操作说明、接口文档、交接记录与测试基线。
-- `todo/`：保留原状。
+| 目录 | 实际用途 |
+| --- | --- |
+| [game/](game/) | 游戏规则与运行内核。负责角色、行动、回合、战斗、技能及状态结算，也保存内置内容定义和历史规则资料；外层包入口提供常用类的延迟导入。 |
+| [core/](core/) | 终端运行与内容项目接入层。提供测试菜单、人工决策提示、实战场景和运行记录；`catalog.py`负责加载自定义内容、全项目校验、备份及跨进程保存保护，包入口同时导出常用内核接口。 |
+| [SkillEditorClient/](SkillEditorClient/) | 当前使用的技能与状态编辑器。提供技能单元、可选分支、触发事件、条件、消耗和效果参数表单，以及只读效果参考；职介技能以JSON编辑为主，“测试程序”单独使用表单。还包含源码启动和exe构建入口。 |
+| [CharacterEditorClient/](CharacterEditorClient/) | 独立角色卡编辑器。编辑御主、从者的名称、属性与等级，自动分配ID；选择固有技能，以及御主的基础魔术或从者的职介技能。与技能编辑器共享内容项目，礼装和宝具选择入口预留。 |
+| [skilleditor/](skilleditor/) | 保留的原版JSON编辑器，支持技能、状态及角色卡等目录条目的编辑、校验、导入导出和恢复。其JSON文档工具与DPI显示设置也被两个新编辑器复用。 |
+| [test_examples/](test_examples/) | 自动回归、真实Tk控件检查、exe分发检查、完整审计脚本及人工演示入口。实卡对战脚本用于复现决策过程、验证结算与战报。 |
+| [reference/](reference/) | 项目文档与工作记录：角色卡格式、人工测试说明、Session接口、交接进度、测试基线和代码审计报告。 |
+| [.vscode/](.vscode/) | VS Code调试配置；当前提供从`main.py`启动Papermoon的调试入口。 |
+
+`game/`内部按结算职责划分：
+
+| 子目录 | 实际用途 |
+| --- | --- |
+| [game/game/](game/game/) | 整局协调与调用接口：游戏管理、通用循环、GameSession、队列决策、令咒、GM指令、角色关系、圣杯进度，以及状态快照、可见信息与结构化战报。 |
+| [game/action/](game/action/) | 行动定义、候选行动生成、目标与合法性检查，以及行动提交后的分派执行。包含内置行动和运行时追加的动态行动。 |
+| [game/character/](game/character/) | 角色实体与通用角色卡工厂。实现御主、从者、NPC、使魔，以及属性、主从关系、资源访问等角色行为；`card_data.py`保存内置卡。目录内做卡文本为参考资料。 |
+| [game/map/](game/map/) | 节点地图、距离与高层位置、移动结算，以及同行、骑乘队伍和共同移动规则；同时保存地图文字与图片资料。 |
+| [game/modifier/](game/modifier/) | 底层持续效果实例与生命周期管理。处理属性、骰子、护盾、伤害修正等效果的施加、叠层、刷新、到期、净化、次数消耗与撤销，并提供条件上下文匹配。 |
+| [game/rank/](game/rank/) | 属性、技能、天赋和宝具等级的数值表示与校验，包括加符、临时属性修正和等级取值。 |
+| [game/resource/](game/resource/) | 自定义角色资源及统一消耗工具。定义资源边界、增减、重置和获得规则；`costs.py`集中处理费用计算、支付预检查、扣费及MP支付账本。 |
+| [game/skill/](game/skill/) | 技能定义、校验、装载与执行。保存固有技能、职介技能、基础魔术和宝具的内置数据，实现技能单元、输入表达式、事件与条件、咏唱、场地、固有结界、召唤、陷阱等运行逻辑；开发用效果规范也在此目录。 |
+| [game/status/](game/status/) | 可复用的命名状态仓库。`data.py`定义燃烧、弱体无效等状态，`registry.py`负责查询与校验，`runtime.py`把状态单元接入持续效果和事件系统，保留施加来源、层数、持续时间与剩余次数。 |
+| [game/turn/](game/turn/) | 全局回合和战斗阶段的推进，以及先手、攻击、防御、抵消、伤害、骰子判定和玩家决策请求。 |
+
+[test_examples/samples/](test_examples/samples/)保存测试卡和历史角色卡原文，用作录卡、裁定与回归时的对照资料；
+这些文本不会自动变成可运行角色，实际装载使用内置数据或内容项目中的定义。
+
+本地的`userdata/`保存自定义内容与运行记录，`build/`、`dist/`和缓存目录存放生成结果；它们由`.gitignore`排除，
+不属于GitHub上的源码目录。
 
 规则导入统一使用`game.*`，例如`from game.character import create_character_from_card`。
 整局模块使用`game.game.*`，例如`from game.game.game_manager import GameManager`；
