@@ -18,6 +18,7 @@ class StatusRuntime(Skill):
         self.source_type = "status"
         self.status_modifier = modifier
         self.status_id = definition["status_id"]
+        self.definition_tags = list(definition.get("tags", []))
         self.origin_skill = getattr(modifier.source, "origin_skill", modifier.source)
         self.children = []
 
@@ -48,7 +49,7 @@ class StatusRuntime(Skill):
                     result = parent.target.add_modifier(child)
                     if result:
                         self.children.append(result.modifier)
-        except Exception:
+        except BaseException:
             self.remove_passives()
             raise
 
@@ -78,4 +79,5 @@ def status_view(modifier):
             "source_name": getattr(source, "name", None),
             "source_skill_id": getattr(runtime.origin_skill, "skill_id", modifier.source_id),
             "duration": modifier.duration, "stack_count": modifier.stack_count,
-            "polarity": modifier.polarity, "purifiable": modifier.purifiable}
+            "polarity": modifier.polarity, "purifiable": modifier.purifiable,
+            "tags": list(runtime.definition_tags), "remaining_uses": modifier.remaining_uses}

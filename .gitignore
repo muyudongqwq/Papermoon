@@ -21,6 +21,8 @@ htmlcov/
 /dist/
 /SkillEditorClient.exe
 /SkillEditorClient beta *.exe
+/CharacterEditorClient.exe
+/CharacterEditorClient beta *.exe
 *.log
 .env
 .env.*

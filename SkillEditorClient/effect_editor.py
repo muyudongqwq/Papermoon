@@ -24,13 +24,17 @@ class ParameterRow(ttk.Frame):
         self.value = tk.StringVar(master=self, value="" if empty else (
             value if self.spec.kind == "string" and isinstance(value, str) else format_json(value).strip()))
         self.initial = deepcopy(value)
+        if self.spec.kind == "tags" and isinstance(value, list):
+            self.complex_value = False
+            self.value.set(", ".join(value))
         self.initial_text = self.value.get()
         self.has_initial = not empty
-        self.input = ttk.Combobox(self, textvariable=self.value, state="normal")
-        self.input.pack(side="left", fill="x", expand=True)
-        self.input.bind("<MouseWheel>", lambda _event: "break")
-        ttk.Button(self, text="删除", width=5, command=lambda: editor.remove_field(key)).pack(side="right", padx=(4, 0))
+        self.input = None
+        self.remove_button = ttk.Button(self, text="删除", width=5, command=lambda: editor.remove_field(key))
+        self.remove_button.pack(side="right", padx=(4, 0))
         self.refresh()
+        if self.spec.kind == "tags":
+            self.input.configure(width=25)
 
     def refresh(self):
         value = getattr(self, "choice_values", {}).get(self.value.get(), self.value.get())
@@ -46,7 +50,17 @@ class ParameterRow(ttk.Frame):
         self.label.configure(text=label)
         labels = dict(self.spec.choice_labels)
         self.choice_values = {label: key for key, label in labels.items()}
-        self.input.configure(values=tuple(labels.get(choice, choice) for choice in self.spec.choices) if not self.complex_value else ())
+        choices = tuple(labels.get(choice, choice) for choice in self.spec.choices) if not self.complex_value else ()
+        if self.input is None or isinstance(self.input, ttk.Combobox) != bool(choices):
+            if self.input is not None:
+                self.input.destroy()
+            self.input = (ttk.Combobox(self, textvariable=self.value, state="normal") if choices else
+                          ttk.Entry(self, textvariable=self.value))
+            self.input.pack(side="left", fill="x", expand=True, before=self.remove_button)
+            if choices:
+                self.input.bind("<MouseWheel>", lambda _event: "break")
+        if choices:
+            self.input.configure(values=choices)
         if not self.complex_value:
             self.value.set(labels.get(value, value))
 
@@ -66,6 +80,7 @@ class CostParameterRow(ttk.Frame):
     def __init__(self, parent, editor, value):
         super().__init__(parent, style="PhaseArea.TFrame")
         self.editor, self.rows = editor, []
+        self.has_initial = True
         header = ttk.Frame(self, style="PhaseArea.TFrame")
         header.pack(fill="x")
         self.label = ttk.Label(header, style="PhaseArea.TLabel")
@@ -123,7 +138,7 @@ class EffectDataEditor(ttk.Frame):
         self.notice.pack(anchor="w", pady=(0, 4))
         self.fields = ttk.Frame(self.form, style="PhaseArea.TFrame")
         self.fields.pack(fill="x")
-        controls = ttk.Frame(self.form, style="PhaseArea.TFrame")
+        controls = self.controls = ttk.Frame(self.form, style="PhaseArea.TFrame")
         controls.pack(fill="x", pady=4)
         self.field = tk.StringVar(master=self)
         self.field_box = ttk.Combobox(controls, textvariable=self.field, state="readonly", width=29)
@@ -131,7 +146,8 @@ class EffectDataEditor(ttk.Frame):
         self.field_box.bind("<MouseWheel>", lambda _event: "break")
         self.add_button = ttk.Button(controls, text="添加参数", command=self.add_selected)
         self.add_button.pack(side="left", padx=4)
-        ttk.Label(self.form, text="* 为必填；文本直接填写，数值填写数字。嵌套对象和列表可在效果参数高级设置中编辑。", wraplength=650, style="PhaseArea.TLabel").pack(anchor="w")
+        self.input_hint = ttk.Label(self.form, text="文本直接填写，数值填写数字。嵌套对象和列表可在效果参数高级设置中填写", wraplength=650, style="PhaseArea.TLabel")
+        self.input_hint.pack(anchor="w")
         self.load_rows(value)
         self.notebook.bind("<<NotebookTabChanged>>", self.tab_changed)
         self.notebook.select(self.form if self.mode == "form" else self.raw)
@@ -147,20 +163,39 @@ class EffectDataEditor(ttk.Frame):
             return
         for key, item in value.items():
             self.add_field(key, item)
+        self.fill_available_fields()
         self.refresh()
 
     def add_field(self, key, value=None, *, empty=False):
         if key in self.rows:
-            return self.rows[key]
+            row = self.rows[key]
+            if empty or row.has_initial or not self.is_blank(row):
+                return row
+            # Programmatic fixture/import additions can fill an untouched
+            # automatically displayed field without discarding a user's draft.
+            self.rows.pop(key).destroy()
         if key == "cost" and self.effect_type in {"create_field", "deploy_reality_marble"} and (empty or (
                 isinstance(value, list) and all(isinstance(cost, dict) for cost in value))):
             row = CostParameterRow(self.fields, self, [] if empty else value)
+            row.has_initial = not empty
         else:
             row = ParameterRow(self.fields, self, key, value, empty=empty)
         row.pack(fill="x", pady=2)
         self.rows[key] = row
         self.refresh()
         return row
+
+    @staticmethod
+    def is_blank(row):
+        return not row.rows if isinstance(row, CostParameterRow) else not row.value.get().strip()
+
+    def fill_available_fields(self):
+        options = parameter_options(self.effect_type)
+        for key, row in list(self.rows.items()):
+            if key not in options and not row.has_initial and self.is_blank(row):
+                self.rows.pop(key).destroy()
+        for key in options:
+            self.add_field(key, empty=True)
 
     def remove_field(self, key):
         self.rows.pop(key).destroy()
@@ -172,33 +207,61 @@ class EffectDataEditor(ttk.Frame):
             self.add_field(key, empty=True).input.focus_set()
 
     def refresh(self):
-        options = [key for key in parameter_options(self.effect_type) if key not in self.rows]
+        # resource_id is displayed as the resource name. Keep an older,
+        # separate name losslessly in advanced JSON without a duplicate row.
+        hidden_fields = {"name"} if self.effect_type == "add_resource" else set()
+        options = [key for key in parameter_options(self.effect_type) if key not in self.rows and key not in hidden_fields]
         self.field_choices = {f"{key} · {FIELD_NAMES[key]}" if key in FIELD_NAMES else key: key for key in options}
         self.field_box.configure(values=tuple(self.field_choices))
         if self.field.get() not in self.field_choices:
             self.field.set("")
         self.add_button.configure(state="normal" if options else "disabled")
-        schema = EFFECT_SCHEMAS.get(self.effect_type)
-        if schema is None:
-            text = "请先选择效果类型，才能查看可添加的参数。"
-        elif not schema.allowed_data:
-            text = "此效果没有独立参数，effect_data保留为空对象即可。"
+        if options:
+            self.controls.pack(fill="x", before=self.input_hint, pady=4)
         else:
-            required = ", ".join(sorted(schema.required_data)) or "无固定必填项"
-            text = f"必填参数：{required}。下拉列表只提供当前效果允许且尚未添加的参数。"
-            if {"value", "value_source"} <= schema.allowed_data:
-                text += " 固定数值value与数值来源value_source二选一；具体条件仍由校验检查。"
-        self.notice.configure(text=text)
+            self.controls.pack_forget()
+        schema = EFFECT_SCHEMAS.get(self.effect_type)
+        self.notice.configure(text="带*参数为必填。非必填参数可以留空。" if schema is not None else "")
+        order = [key for key in parameter_options(self.effect_type) if key in self.rows]
+        order.extend(key for key in self.rows if key not in order)
+        if order != list(self.rows):
+            self.rows = {key: self.rows[key] for key in order}
+        visible = [row for key, row in self.rows.items() if key not in hidden_fields]
+        if self.fields.pack_slaves() != visible:
+            for row in self.rows.values():
+                row.pack_forget()
+            for row in visible:
+                row.pack(fill="x", pady=2)
         for row in self.rows.values():
             row.refresh()
         request_layout(self)
 
     def set_effect_type(self, effect_type):
         self.effect_type = effect_type
+        if self.mode == "form":
+            self.fill_available_fields()
         self.refresh()
 
     def read_form(self):
-        return {key: row.read() for key, row in self.rows.items()}
+        result = {}
+        schema = EFFECT_SCHEMAS.get(self.effect_type)
+        required = schema.required_data if schema is not None else ()
+        for key, row in self.rows.items():
+            if self.is_blank(row):
+                if key in required:
+                    if row.has_initial:
+                        raise ValueError(f"请填写必填参数{key}")
+                    # An untouched required field remains missing. Catalog
+                    # validation rejects saving it, but the advanced JSON tab
+                    # must stay accessible for entering nested required data.
+                    continue
+                if isinstance(row, CostParameterRow):
+                    if not row.has_initial:
+                        continue
+                elif not (row.has_initial and row.value.get() == row.initial_text):
+                    continue
+            result[key] = row.read()
+        return result
 
     def show_json(self):
         if self.mode != "json":

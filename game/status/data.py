@@ -29,3 +29,10 @@ STATUS_DATA["burning"] = {
                                  "effect_data": {"damage_type": "magic", "value_source": "status_stack_count",
                                                  "multiplier": 10}}]}],
 }
+STATUS_DATA["debuff_immunity"] = {
+    "status_id": "debuff_immunity", "name": "弱体无效", "polarity": "buff", "purifiable": False,
+    "description": "阻止新施加的负面状态，不清除已有状态。默认1次、1回合，任一耗尽即移除；标签可限定免疫范围。",
+    "duration": 1, "consumption": {"event": "status_blocked", "uses": 1},
+    "components": [{"component_id": "immunity", "type": "passive", "target": "self",
+                    "effects": [{"effect_type": "status_immunity", "effect_data": {"tags": []}}]}],
+}

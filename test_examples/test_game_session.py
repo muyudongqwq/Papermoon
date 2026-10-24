@@ -243,6 +243,28 @@ class GameSessionTests(unittest.TestCase):
         self.assertNotIn("error", session.get_snapshot("p1"))
         self.assertEqual(session.get_snapshot("p1")["result"]["reason"], "session_error")
 
+    def test_worker_base_exception_still_releases_game_ownership(self):
+        session, _ = self.make_session()
+        def broken_start():
+            raise SystemExit("test worker exit")
+        session.game_manager.start_game = broken_start
+        session.start()
+        self.assertTrue(session.join(2))
+        self.assertEqual(session.state, "failed")
+        self.assertIn("SystemExit: test worker exit", session.get_snapshot("gm")["error"])
+        self.assertEqual(session.get_snapshot("p1")["result"]["reason"], "session_error")
+        self.assertIsNone(session.game_manager._active_session)
+
+    def test_thread_start_failure_rolls_back_subscription_and_ownership(self):
+        session, _ = self.make_session()
+        with patch("game.game.game_session.Thread.start", side_effect=RuntimeError("cannot start")):
+            with self.assertRaisesRegex(RuntimeError, "cannot start"):
+                session.start()
+        self.assertEqual(session.state, "created")
+        self.assertIsNone(session._thread)
+        self.assertIsNone(session.game_manager._active_session)
+        self.assertNotIn(session._on_rule_report, session.game_manager.rule_reports._listeners)
+
     def test_gm_commands_use_ids_even_when_names_are_duplicated(self):
         session, actors = self.make_session(two=True)
         actors[0].name = actors[1].name = "Same name"

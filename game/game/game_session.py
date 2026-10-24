@@ -195,10 +195,27 @@ class GameSession:
                 self.game_manager.rule_reports.subscribe(self._on_rule_report)
             self._state = "running"
             self._thread = Thread(target=self._run, name=f"Papermoon-{self.session_id}", daemon=True)
-            self._thread.start()
+            try:
+                self._thread.start()
+            except BaseException:
+                # Thread.start() can fail after ownership and subscriptions have
+                # already been installed.  Roll the transaction back completely
+                # so the same GameManager is not left permanently reserved.
+                self.game_manager.rule_reports.unsubscribe(self._on_rule_report)
+                with self._ownership_lock:
+                    self.game_manager._active_session = None
+                self._thread = None
+                self._state = "created"
+                raise
         return self.session_id
 
     def _run(self):
+        final_state = "failed"
+        result = {
+            "reason": "session_error",
+            "winners": [],
+            "turn": self.game_manager.turn_manager.turn,
+        }
         try:
             self._publish("session_started", {})
             result = self.game_loop.run()
@@ -207,11 +224,17 @@ class GameSession:
             self.game_manager.force_end_game(reason="session_stopped")
             result = self.game_loop.get_result()
             final_state = "stopped"
-        except Exception as error:
+        except BaseException as error:
+            # This is the outer boundary of a daemon worker.  SystemExit and
+            # other BaseExceptions must still close decisions, publish a final
+            # state and release GameManager ownership.
             self.game_manager.rule_reports.unsubscribe(self._on_rule_report)
             self._error = f"{type(error).__name__}: {error}"
-            self.game_manager.force_end_game(reason="session_error")
-            result = self.game_loop.get_result()
+            try:
+                self.game_manager.force_end_game(reason="session_error")
+                result = self.game_loop.get_result()
+            except BaseException as cleanup_error:
+                self._error += f"; cleanup {type(cleanup_error).__name__}: {cleanup_error}"
             final_state = "failed"
         finally:
             with self._condition:
@@ -221,7 +244,7 @@ class GameSession:
                 self._result = {**result, "winners": [actor.character_id for actor in result["winners"]]}
                 try:
                     self._publish("session_ended", {"state": final_state, **self._result})
-                except Exception as error:
+                except BaseException as error:
                     # A broken view must not prevent clients learning that the
                     # worker failed, or leave ownership of this game locked.
                     self._state = "failed"

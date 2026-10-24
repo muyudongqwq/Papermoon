@@ -1349,6 +1349,7 @@ EFFECT_HANDLERS = {
     "add_resource": resolve_add_resource_effect,
     "add_skill": resolve_skill_mutation_effect,
     "add_status": apply_modifier_effect,
+    "status_immunity": apply_modifier_effect,
     "attribute_bonus": apply_modifier_effect,
     "attack_bonus": apply_modifier_effect,
     "cancel_event": resolve_cancel_event_effect,

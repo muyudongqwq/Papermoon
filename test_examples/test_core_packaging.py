@@ -4,17 +4,39 @@ import contextlib
 from copy import deepcopy
 import io
 import json
+import multiprocessing
 from pathlib import Path
+from queue import Empty
 import random
 import tempfile
 import unittest
 
 from game.character import create_character_from_card
 from game.character.card_data import CHARACTER_CARD_DATA
-from core.catalog import BUILTINS, CatalogProject, LIVE_CATALOGS, parse_json
+from core.catalog import (
+    BUILTINS,
+    CatalogProject,
+    LIVE_CATALOGS,
+    _catalog_file_lock,
+    parse_json,
+)
 from core.__main__ import run_manual
 from core.scenarios import create_manual_scenario
 from skilleditor.documents import KINDS, copy_definition, format_json, new_definition, parse_entry
+
+
+def _save_loaded_catalog(path, ready, start, result):
+    """Spawn-safe helper: load before the competing writer changes the file."""
+    project = CatalogProject(Path(path))
+    project.put("personal_skill", "child_skill", new_definition("固有技能", "child_skill"))
+    ready.set()
+    start.wait(5)
+    try:
+        project.save()
+    except BaseException as error:
+        result.put(("error", type(error).__name__, str(error)))
+    else:
+        result.put(("saved", None, None))
 
 
 class CorePackagingTests(unittest.TestCase):
@@ -120,6 +142,44 @@ class CorePackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "其他程序"):
             self.project.save()
         self.assertEqual(self.project.path.read_bytes(), written)
+
+    def test_save_lock_turns_simultaneous_process_write_into_conflict(self):
+        self.project.save()
+        context = multiprocessing.get_context("spawn")
+        ready, start = context.Event(), context.Event()
+        result = context.Queue()
+        process = context.Process(
+            target=_save_loaded_catalog,
+            args=(str(self.project.path), ready, start, result),
+        )
+        process.start()
+        self.addCleanup(lambda: process.kill() if process.is_alive() else None)
+        self.assertTrue(ready.wait(5), "子进程未完成旧版本加载")
+
+        with _catalog_file_lock(self.project.path):
+            start.set()
+            with self.assertRaises(Empty):
+                result.get(timeout=0.2)
+            competing = CatalogProject(self.project.path)
+            competing.put(
+                "personal_skill",
+                "parent_skill",
+                new_definition("固有技能", "parent_skill"),
+            )
+            payload = (
+                json.dumps(competing.data, ensure_ascii=False, indent=2, allow_nan=False)
+                + "\n"
+            ).encode("utf-8")
+            self.project.path.write_bytes(payload)
+
+        outcome = result.get(timeout=5)
+        process.join(5)
+        self.assertFalse(process.is_alive(), "子进程保存未结束")
+        self.assertEqual(outcome[0:2], ("error", "ValueError"))
+        self.assertIn("其他程序", outcome[2])
+        loaded = CatalogProject(self.project.path)
+        self.assertIn("parent_skill", loaded.data["personal_skill"])
+        self.assertNotIn("child_skill", loaded.data["personal_skill"])
 
     def test_invalid_saved_project_and_duplicate_json_fields_are_rejected(self):
         for text in ('{"key":1,"key":2}', '{"key":NaN}', '{"key":Infinity}'):

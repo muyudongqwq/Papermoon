@@ -1580,3 +1580,38 @@ game/skill/effect_validation.py已经检查：
 7. component、choices.options和场地内部嵌套effect全部递归验证。
 8. 旧字段不做兼容，必须直接迁移为标准字段。
 9. inputs的类型、边界、重复ID和未声明input_id引用。
+
+45. status_immunity
+-------------------
+
+弱体无效：在状态施加前，阻止最终polarity为debuff的新状态，不清除已有负面状态。
+此效果是持续Modifier，可放在状态的passive单元中，不通过trigger/react执行拦截，
+不受每回合一次的反应次数限制。被阻止的状态不会先施加，也不执行其持续效果或施加后事件。
+
+effect_data只接受可选tags列表，例如：
+    {"tags": ["poison", "mental"]}
+tags读取待施加状态仓库条目自身的tags；双方至少有一个标签相同时匹配。
+省略tags或填写[]表示匹配全部debuff。标签区分大小写，没有特殊all标签，不读取角色标签。
+编辑器允许用逗号分隔输入标签，也接受JSON列表；保存时统一为列表。
+不匹配、buff和neutral状态正常施加，不消耗免疫次数。
+
+状态仓库新增可选字段：
+    tags: ["poison", "mental"]
+    consumption: {"event": "status_blocked", "uses": 3}
+consumption表示整个状态共享的阻止次数，不是每层、每个passive单元分别计数。
+只接受automatic模式及remove_when_empty=true；允许uses正整数和原有use_refresh_rule。
+uses省略为1，consumption整体省略则不限次数。duration沿用状态全局回合末扣时规则。
+次数耗尽或持续时间到期，任一满足即移除父状态及其全部持续效果。
+新增施加、再次施加、刷新或叠层尝试符合筛选时，每项尝试消耗1次；同回合可连续阻止。
+多份免疫同时匹配时，仅消耗一份：先按父状态stacking.priority从高到低，再按生效先后。
+同来源刷新次数沿用use_refresh_rule（默认reset；另有keep_more、extend、unchanged）。
+技能通过add_status施加时，可在effect顶层覆盖duration和consumption；tags来自仓库定义。
+
+内置示例debuff_immunity（弱体无效）默认1次、1回合，可在状态表单中修改：
+    {
+        "status_id": "debuff_immunity", "name": "弱体无效", "polarity": "buff",
+        "duration": 1, "consumption": {"event": "status_blocked", "uses": 1},
+        "components": [{"component_id": "immunity", "type": "passive", "target": "self",
+            "effects": [{"effect_type": "status_immunity", "effect_data": {"tags": []}}]}]
+    }
+状态视图显示tags与remaining_uses；结构化战报status_blocked记录被阻止状态及剩余次数。

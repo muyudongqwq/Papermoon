@@ -19,7 +19,7 @@ from SkillEditorClient.model import (
 )
 from SkillEditorClient.widgets import (
     Collapsible, JsonBox, PhaseSelect, UNIT_FONT, configure_gray_area,
-    configure_unit_style, entry_row, request_layout,
+    configure_unit_style, entry_row, request_layout, combobox_placeholder,
 )
 from skilleditor.documents import format_json
 
@@ -45,6 +45,7 @@ class EffectPanel(Collapsible):
             show_effect_reference(self, self.effect_type.get().strip(), catalogs))
         self.reference_button.pack(side="right", padx=4)
         self.effect_type, self.type_box = entry_row(self.body, "效果类型 effect_type", data.get("effect_type", ""), choices=FORM_EFFECT_TYPES if allow_choices else EFFECT_TYPES)
+        combobox_placeholder(self.type_box, self.effect_type, "（在这里选择效果类型）")
         self.type_name = ttk.Label(self.body)
         self.type_name.pack(anchor="w")
         configure_gray_area(self)
@@ -62,7 +63,9 @@ class EffectPanel(Collapsible):
 
     def type_changed(self):
         kind = self.effect_type.get().strip()
-        self.type_name.configure(text=EFFECT_NAMES.get(kind, "请选择效果类型"))
+        self.type_name.configure(text=EFFECT_NAMES.get(kind, ""))
+        if kind == "status_immunity":
+            self.type_name.configure(text=EFFECT_NAMES[kind] + "：只拦截新负面状态。标签可用逗号分隔，任一匹配；留空表示全部。", wraplength=650)
         self.data.set_effect_type(kind)
         self.extras_section.pack(fill="x", pady=3)
         if self.choices is not None:
@@ -115,7 +118,7 @@ class ChoicePanel(Collapsible):
         self.effect_group.pack(fill="x", pady=4)
         self.effect_rows = ttk.Frame(self.effect_group.body)
         self.effect_rows.pack(fill="x")
-        self.add_effect_button = ttk.Button(self.effect_group.body, text="新建效果", command=lambda: self.add_effect({"effect_type": "", "effect_data": {}}))
+        self.add_effect_button = ttk.Button(self.effect_group.body, text="新建效果", command=lambda: self.add_effect({"effect_type": "", "effect_data": {}}, expanded=True))
         self.add_effect_button.pack(anchor="w")
         for effect in data.get("effects", []):
             self.add_effect(effect)
@@ -141,10 +144,12 @@ class ChoicePanel(Collapsible):
         self.label.configure(text=f"分支 {self.number}" + (f"：{name}" if name else ""))
         request_layout(self)
 
-    def add_effect(self, data):
+    def add_effect(self, data, *, expanded=False):
         panel = EffectPanel(self.effect_rows, data, self.remove_effect, len(self.effects) + 1, self.catalogs)
         panel.pack(fill="x", pady=3)
         self.effects.append(panel)
+        if expanded:
+            panel.toggle()
         request_layout(self)
         return panel
 
@@ -288,6 +293,7 @@ class ComponentPanel(Collapsible):
         self.costs, self.effects = [], []
         self.component_id = tk.StringVar(master=self, value=data.get("component_id", ""))
         self.kind, self.kind_box = entry_row(self.body, "技能类型", data.get("type", ""), choices=TYPES, editable=False, compact=True)
+        combobox_placeholder(self.kind_box, self.kind, "（在这里选择技能类型）")
         self.type_notice = ttk.Label(self.body, wraplength=650)
         self.type_notice.pack(anchor="w", pady=2)
         self.default_requirement = default_requirement
@@ -317,6 +323,7 @@ class ComponentPanel(Collapsible):
         self.condition_editor = ConditionEditor(self.body, data.get("condition", {}), catalogs)
         self.condition_sync_notice = ttk.Label(self.body, wraplength=650)
         self.target, self.target_box = entry_row(self.body, "目标 target", data.get("target", "self"), choices=TARGETS, editable=False)
+        combobox_placeholder(self.target_box, self.target, "（在这里选择效果目标）")
         self.target_notice = ttk.Label(self.body, wraplength=650)
         self.target_notice.pack(anchor="w", pady=2)
         self.kind.trace_add("write", lambda *_: self.update_type())
@@ -327,7 +334,7 @@ class ComponentPanel(Collapsible):
         self.effect_group.pack(fill="x", pady=4)
         self.effect_rows = ttk.Frame(self.effect_group.body)
         self.effect_rows.pack(fill="x")
-        self.add_effect_button = ttk.Button(self.effect_group.body, text="新建效果", command=lambda: self.add_effect({"effect_type": "", "effect_data": {}}))
+        self.add_effect_button = ttk.Button(self.effect_group.body, text="新建效果", command=lambda: self.add_effect({"effect_type": "", "effect_data": {}}, expanded=True))
         self.add_effect_button.pack(anchor="w")
         for effect in data.get("effects", []):
             self.add_effect(effect)
@@ -359,7 +366,7 @@ class ComponentPanel(Collapsible):
             row.timing_box.configure(values=tuple(COST_TIMING_NAMES[value] for value in row.timings))
         self.type_notice.configure(text=("咏唱达到所需回合数后，按技能的解放设置发动。"
             if self.kind.get() == "active" and self.chant_choice.get() == "是"
-            else TYPE_DESCRIPTIONS.get(self.kind.get(), "选择技能类型")))
+            else TYPE_DESCRIPTIONS.get(self.kind.get(), "")))
         error = None
         try:
             self.sync_condition_owner()
@@ -443,7 +450,7 @@ class ComponentPanel(Collapsible):
         self.condition_in_form = desired
 
     def update_target(self):
-        self.target_notice.configure(text=TARGET_DESCRIPTIONS.get(self.target.get(), "选择效果目标"))
+        self.target_notice.configure(text=TARGET_DESCRIPTIONS.get(self.target.get(), ""))
         request_layout(self)
 
     def phases_changed(self):
@@ -467,11 +474,13 @@ class ComponentPanel(Collapsible):
             self.cost_rows.configure(height=1)
         request_layout(self)
 
-    def add_effect(self, data):
+    def add_effect(self, data, *, expanded=False):
         panel = EffectPanel(self.effect_rows, data, self.remove_effect, len(self.effects) + 1, self.catalogs,
                             allow_choices=True, phases=self.phases.get)
         panel.pack(fill="x", pady=3)
         self.effects.append(panel)
+        if expanded:
+            panel.toggle()
         request_layout(self)
         return panel
 
@@ -571,6 +580,7 @@ class SkillForm(ttk.Frame):
         collapse(self)
 
     def add_component(self, data=None):
+        is_new = data is None
         default_requirement = int(bool(self.original.get("noble_phantasm_type") and self.original.get("range_type") != "anti_unit"))
         if data is None:
             used = {panel.component_id.get().strip() for panel in self.components}
@@ -588,6 +598,8 @@ class SkillForm(ttk.Frame):
                                release_entry=release_entry, default_requirement=default_requirement)
         panel.pack(fill="x", pady=5)
         self.components.append(panel)
+        if is_new:
+            panel.toggle()
         self.renumber_components()
         request_layout(self)
         return panel

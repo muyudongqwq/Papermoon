@@ -74,7 +74,7 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
 
     def test_left_catalog_matches_original_project_and_classes_stay_json(self):
         self.assertEqual(set(self.app.items.values()), {
-            (category, key) for category, entries in self.app.project.effective().items() for key in entries})
+            (category, key) for category, entries in self.app.project.effective().items() if category != "character_card" for key in entries})
         self.app.load("class_skill", "对魔力")
         self.assertFalse(self.app.form_mode)
         self.assertEqual(parse(self.app.text), self.app.project.effective()["class_skill"]["对魔力"])
@@ -214,7 +214,7 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
             actor.resolve_skill_component("101", "unit_0", target=actor, turn_number=1)
             self.assertEqual(actor.atk, attack + 5)
 
-    def test_units_and_effects_are_added_on_demand_and_start_collapsed(self):
+    def test_new_units_and_effects_expand_with_unsaved_placeholder_hints(self):
         self.app.kind.set("固有技能")
         self.mock("SkillEditorClient.app.ask_new_skill", return_value=("火焰护盾", "B"))
         self.app.new()
@@ -227,20 +227,21 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
         self.assertEqual(panel.costs, [])
         self.assertEqual(panel.effects, [])
         self.assertEqual(panel.kind.get(), "")
-        self.assertEqual(panel.type_notice.cget("text"), "选择技能类型")
+        self.assertEqual(panel.type_notice.cget("text"), "")
+        self.assertEqual(panel.kind_box.get(), "（在这里选择技能类型）")
         self.assertEqual(panel.target.get(), "")
-        self.assertEqual(panel.target_notice.cget("text"), "选择效果目标")
+        self.assertEqual(panel.target_notice.cget("text"), "")
+        self.assertEqual(panel.target_box.get(), "（在这里选择效果目标）")
+        self.assertTrue(panel.expanded)
+        self.assertFalse(panel.effect_group.expanded)
+        panel.effect_group.toggle()
         panel.add_effect_button.invoke()
         self.assertEqual(len(panel.effects), 1)
-
-        def check_collapsed(widget):
-            if isinstance(widget, Collapsible):
-                self.assertFalse(widget.expanded)
-                self.assertEqual(widget.body.winfo_manager(), "")
-            for child in widget.winfo_children():
-                check_collapsed(child)
-
-        check_collapsed(form)
+        self.assertTrue(panel.effects[0].expanded)
+        self.assertEqual(panel.effects[0].effect_type.get(), "")
+        self.assertEqual(panel.effects[0].type_box.get(), "（在这里选择效果类型）")
+        self.assertEqual(panel.effects[0].type_name.cget("text"), "")
+        self.assertFalse(self.app.save())
         panel.effects[0].effect_type.set("attack_bonus")
         panel.effects[0].data.add_field("value", 5)
         panel.kind.set("active")
@@ -424,7 +425,7 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
         panel = self.new().components[0]
         effect = panel.add_effect({"effect_type": "", "effect_data": {}})
         self.assertEqual(effect.parameter_group.winfo_manager(), "")
-        self.assertEqual(effect.type_name.cget("text"), "请选择效果类型")
+        self.assertEqual(effect.type_name.cget("text"), "")
         effect.effect_type.set("damage")
         self.assertEqual(effect.parameter_group.winfo_manager(), "pack")
         style = ttk.Style(self.root)
@@ -528,11 +529,158 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
         effect = self.new().components[0].effects[0]
         self.assertEqual(tuple(effect.type_box.cget("values")), FORM_EFFECT_TYPES)
         effect.effect_type.set("damage")
-        self.assertEqual(set(effect.data.field_choices.values()), set(parameter_options("damage")) - {"value"})
-        effect.data.field.set("damage_type")
-        effect.data.add_selected()
+        self.assertEqual(set(effect.data.rows), set(parameter_options("damage")))
+        self.assertEqual(effect.data.field_choices, {})
+        self.assertEqual(next(iter(effect.data.rows)), "damage_type")
+        self.assertIn("*", effect.data.rows["damage_type"].label.cget("text"))
         self.assertEqual(set(effect.data.rows["damage_type"].input.cget("values")), {"physical", "magic", "true_damage"})
         self.assertNotIn("damage_type", effect.data.field_choices.values())
+
+    def test_all_effect_parameters_are_displayed_required_first_without_creating_values(self):
+        from game.skill.effect_validation import EFFECT_SCHEMAS
+        from SkillEditorClient.effect_editor import EffectDataEditor
+        for kind, schema in EFFECT_SCHEMAS.items():
+            with self.subTest(kind=kind):
+                editor = EffectDataEditor(self.root, kind, {}, self.app.project.effective())
+                try:
+                    self.assertEqual(list(editor.rows), list(parameter_options(kind)))
+                    for key in schema.required_data:
+                        self.assertIn("*", editor.rows[key].label.cget("text"))
+                    self.assertEqual(json.loads(editor.get()), {})
+                    editor.show_json()
+                    editor.show_form()
+                    self.assertEqual(json.loads(editor.get()), {})
+                    self.assertEqual(editor.notice.cget("text"), "带*参数为必填。非必填参数可以留空。")
+                    self.assertEqual(editor.input_hint.cget("text"), "文本直接填写，数值填写数字。嵌套对象和列表可在效果参数高级设置中填写")
+                finally:
+                    editor.destroy()
+
+    def test_optional_blanks_are_omitted_but_zero_false_and_empty_lists_are_saved(self):
+        component = self.new().components[0]
+        component.remove_effect(component.effects[0])
+        effect = component.add_effect({"effect_type": "damage", "effect_data": {}})
+        for key, value in {"damage_type": "magic", "value": "0", "ignore_shield": "false", "source_tags": "[]"}.items():
+            effect.data.rows[key].value.set(value)
+        self.assertTrue(self.app.save())
+        effect = self.app.form.components[0].effects[0]
+        expected = {"damage_type": "magic", "value": 0, "ignore_shield": False, "source_tags": []}
+        self.assertEqual(json.loads(effect.data.get()), expected)
+        self.assertFalse(self.app.dirty())
+        effect.data.rows["flat"].value.set("bad-number")
+        original = self.path.read_bytes()
+        self.assertFalse(self.app.save())
+        self.assertEqual(self.path.read_bytes(), original)
+        effect.data.rows["flat"].value.set("")
+        effect.data.rows["ignore_shield"].value.set("")
+        self.assertTrue(self.app.save())
+        self.assertNotIn("ignore_shield", json.loads(self.app.form.components[0].effects[0].data.get()))
+
+    def test_new_resource_uses_one_chinese_name_and_plain_numeric_inputs(self):
+        component = self.new().components[0]
+        component.remove_effect(component.effects[0])
+        effect = component.add_effect({"effect_type": "add_resource", "effect_data": {}})
+        self.assertEqual(effect.data.rows["name"].winfo_manager(), "")
+        self.assertNotIn("name", effect.data.field_choices.values())
+        for key, value in {"resource_id": "怒气", "initial_value": "3", "maximum": "10"}.items():
+            row = effect.data.rows[key]
+            self.assertIsInstance(row.input, ttk.Entry)
+            self.assertNotIsInstance(row.input, ttk.Combobox)
+            row.value.set(value)
+        self.assertIn("资源名称", effect.data.rows["resource_id"].label.cget("text"))
+        self.assertTrue(self.app.save())
+        saved = self.app.definition()["components"][0]["effects"][0]["effect_data"]
+        self.assertEqual(saved, {"resource_id": "怒气", "initial_value": 3, "maximum": 10})
+        with CatalogProject(self.path).activate():
+            actor = Master("Actor", 3, 3, 3, 3, 3, "C", 3)
+            actor.load_content("personal_skill", "user_example")
+            actor.resolve_skill_component("user_example", "active", target=actor, turn_number=1)
+            self.assertEqual(actor.get_resource("怒气").name, "怒气")
+            self.assertEqual(actor.get_resource_value("怒气"), 3)
+
+    def test_choice_inputs_change_to_plain_entries_without_losing_drafts(self):
+        effect = self.new().components[0].effects[0]
+        effect.effect_type.set("hidden")
+        row = effect.data.rows["value"]
+        self.assertNotIsInstance(row.input, ttk.Combobox)
+        row.value.set("自定义状态")
+        effect.effect_type.set("presence_concealment")
+        rank = effect.data.rows["rank"]
+        self.assertIsInstance(rank.input, ttk.Combobox)
+        rank.value.set("A")
+        effect.effect_type.set("add_resource")
+        self.assertNotIsInstance(rank.input, ttk.Combobox)
+        self.assertEqual(rank.value.get(), "A")
+        effect.effect_type.set("presence_concealment")
+        self.assertIsInstance(rank.input, ttk.Combobox)
+        self.assertEqual(rank.value.get(), "A")
+        self.assertEqual(row.value.get(), "自定义状态")
+
+    def test_old_separate_resource_name_is_preserved_in_advanced_json(self):
+        component = self.new().components[0]
+        definition = {"resource_id": "charges", "name": "原资源名", "initial_value": 3}
+        effect = component.add_effect({"effect_type": "add_resource", "effect_data": definition})
+        self.assertEqual(effect.data.rows["name"].winfo_manager(), "")
+        self.assertEqual(json.loads(effect.data.get()), definition)
+        effect.data.show_json()
+        effect.data.show_form()
+        self.assertEqual(effect.data.rows["name"].winfo_manager(), "")
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.definition()["components"][0]["effects"][-1]["effect_data"], definition)
+        effect = self.app.form.components[0].effects[-1]
+        effect.effect_type.set("create_field")
+        self.assertEqual(effect.data.rows["name"].winfo_manager(), "pack")
+        self.assertEqual(effect.data.rows["name"].value.get(), "原资源名")
+
+    def test_placeholder_display_does_not_enter_data_and_combobox_selection_updates_values(self):
+        form = self.new()
+        panel = form.add_component()
+        panel.kind_box.set("active")
+        panel.target_box.set("self")
+        self.assertEqual(panel.kind.get(), "active")
+        self.assertEqual(panel.target.get(), "self")
+        panel.add_effect_button.invoke()
+        effect = panel.effects[0]
+        effect.type_box.set("damage")
+        self.assertEqual(effect.effect_type.get(), "damage")
+        self.assertFalse(self.app.save())
+        effect.data.show_json()
+        effect.data.text.delete("1.0", "end")
+        effect.data.text.insert("1.0", '{"damage_type": "magic", "value": 3}')
+        effect.data.show_form()
+        self.assertTrue(self.app.save())
+        saved = self.path.read_text(encoding="utf-8")
+        self.assertNotIn("在这里选择", saved)
+        self.assertEqual(self.app.definition()["components"][-1]["type"], "active")
+
+    def test_blank_placeholder_comboboxes_can_open_popdown_without_callback_errors(self):
+        panel = self.new().add_component()
+        panel.effect_group.toggle()
+        panel.add_effect_button.invoke()
+        effect = panel.effects[0]
+        errors = []
+        self.root.report_callback_exception = lambda *error: errors.append(error)
+        self.root.deiconify()
+        self.root.update()
+        for box, variable in ((panel.kind_box, panel.kind), (panel.target_box, panel.target),
+                              (effect.type_box, effect.effect_type)):
+            with self.subTest(box=box):
+                try:
+                    box.focus_force()
+                    self.root.update()
+                    box.tk.call("ttk::combobox::Post", str(box))
+                    popdown = box.tk.call("ttk::combobox::PopdownWindow", str(box))
+                    box.tk.call("focus", "-force", f"{popdown}.f.l")
+                    self.root.update()
+                    self.assertTrue(str(box.tk.call("focus")).startswith(str(popdown)))
+                    self.assertEqual(variable.get(), "")
+                    self.assertFalse(errors, [(kind.__name__, str(error)) for kind, error, tb in errors])
+                finally:
+                    box.tk.call("ttk::combobox::Unpost", str(box))
+                    self.root.focus_force()
+                    self.root.update()
+                box.current(0)
+                self.assertEqual(variable.get(), box.cget("values")[0])
+                variable.set("")
 
     def test_damage_created_with_dropdown_fields_saves_and_executes(self):
         component = self.new().components[0]
@@ -555,7 +703,7 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
         component = self.new().components[0]
         effect = component.add_effect({"effect_type": "modify_resource", "effect_data": {
             "resource_id": "charges", "value": 3}})
-        self.assertIn("calculation", effect.data.field_choices.values())
+        self.assertIn("calculation", effect.data.rows)
         self.assertNotIn("operation", effect.data.field_choices.values())
         row = effect.data.add_field("calculation", empty=True)
         self.assertIn("set", row.input.cget("values"))
@@ -757,6 +905,58 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
         self.assertTrue(self.app.save())
         self.assertFalse(self.app.form_mode)
         self.assertEqual(CatalogProject(self.path).data["class_skill"]["对魔力"], original)
+
+    def test_debug_class_skill_uses_form_and_round_trips_without_schema_changes(self):
+        original = deepcopy(self.app.project.effective()["class_skill"]["测试程序"])
+        self.app.load("class_skill", "测试程序")
+        self.assertTrue(self.app.form_mode)
+        self.assertEqual(set(self.app.form.rank_forms), {"GM"})
+        self.assertEqual(self.app.definition(), original)
+        self.assertFalse(self.app.dirty())
+        self.assertTrue(all(not panel.expanded for panel in self.app.form.components))
+        self.app.update_preview()
+        self.assertEqual(parse(self.app.text), original)
+        reference = self.app.open_effect_reference()
+        self.addCleanup(reference.destroy)
+        self.assertEqual(reference.current_effect, "add_status")
+
+    def test_debug_class_skill_effect_edit_saves_reopens_and_loads_in_core(self):
+        self.app.load("class_skill", "测试程序")
+        component = self.app.form.components[0]
+        component.add_effect({"effect_type": "attack_bonus", "effect_data": {"value": 9}})
+        self.assertTrue(self.app.dirty())
+        self.assertTrue(self.app.save())
+        saved = CatalogProject(self.path).data["class_skill"]["测试程序"]
+        self.assertEqual(set(saved), {"name", "ranks"})
+        self.assertEqual(saved["ranks"]["GM"][0]["effects"][-1]["effect_data"], {"value": 9})
+        self.assertEqual(self.app.definition(), saved)
+        self.assertFalse(self.app.dirty())
+        project = CatalogProject(self.path)
+        card = deepcopy(project.effective()["character_card"]["servant_test_0"])
+        card["class_skills"] = [{"name": "测试程序", "rank": "GM"}]
+        project.put("character_card", "servant_test_0", card)
+        with project.activate():
+            actor = create_character_from_card("servant_test_0")
+            self.assertEqual(len(actor.class_skills), 1)
+            self.assertEqual(actor.get_effective_atk(), actor.strength.value * 10 + 9)
+
+    def test_debug_class_skill_empty_rank_is_preserved_and_other_classes_stay_json(self):
+        original = deepcopy(self.app.project.effective()["class_skill"]["测试程序"])
+        original["ranks"]["C"] = []
+        self.app.load("class_skill", "测试程序", original)
+        self.assertEqual(self.app.definition(), original)
+        self.assertTrue(self.app.save())
+        self.app.load("class_skill", "对魔力")
+        self.assertFalse(self.app.form_mode)
+
+    def test_debug_class_skill_invalid_draft_stays_in_form(self):
+        self.app.load("class_skill", "测试程序")
+        self.app.form.components[0].kind.set("")
+        self.assertFalse(self.app.save())
+        self.assertTrue(self.app.dirty())
+        self.assertFalse(self.path.exists())
+        self.app.update_preview()
+        self.assertIn("表单尚未填写完整", self.app.text.get("1.0", "end"))
 
     def test_deleting_optional_rows_is_preserved(self):
         form = self.new()

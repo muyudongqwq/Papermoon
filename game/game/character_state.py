@@ -11,6 +11,7 @@ _STATS = {"attack": "攻击骰", "defense": "防御骰", "physical_attack": "物
           "perceive": "感知骰", "strength": "筋力", "endurance": "耐久", "flexibility": "敏捷",
           "magic": "魔力", "fortune": "幸运"}
 _EFFECTS = {
+    "status_immunity": "弱体无效",
     "damage": "直接伤害", "create_attack_event": "攻击", "attack_bonus": "基础攻击伤害",
     "dice_bonus": "判定加成", "attribute_bonus": "属性加成", "numeric_attribute_bonus": "数值加成",
     "magic_resistance": "对魔力", "shield": "护盾", "hp_floor": "HP下限",
@@ -38,6 +39,8 @@ def effect_view(effect, skill=None):
     if kind in {"damage", "create_attack_event"} and isinstance(value, (int, float)):
         value *= noble_damage_multiplier(skill)
     description = label
+    if kind == "status_immunity":
+        description += "：" + ("、".join(data["tags"]) if data.get("tags") else "全部负面状态")
     if data.get("value_source") == "status_stack_count":
         description += f"：状态层数×{data.get('multiplier', 1):g}"
         if data.get("flat", 0):

@@ -17,6 +17,27 @@ def core_command(catalog):
     return [*command, "--menu", "--pause-on-exit", "--catalog", str(catalog)]
 
 
+def character_editor_command(catalog):
+    from core.catalog import DATA_ROOT
+    if getattr(sys, "frozen", False):
+        folder = Path(sys.executable).resolve().parent
+        choices = (folder / "CharacterEditorClient beta 0.1.exe", folder / "CharacterEditorClient.exe")
+        executable = next((path for path in choices if path.is_file()), None)
+        if executable is None:
+            raise FileNotFoundError(f"同文件夹下未找到可用角色卡编辑器：{choices[0]}")
+        command = [str(executable)]
+    else:
+        entry = DATA_ROOT / "CharacterEditorClient" / "__main__.py"
+        if not entry.is_file():
+            raise FileNotFoundError(f"同文件夹下未找到角色卡编辑器入口：{entry}")
+        python = Path(sys.executable)
+        windowed = python.with_name("pythonw.exe")
+        if sys.platform == "win32" and windowed.is_file():
+            python = windowed
+        command = [str(python), "-m", "CharacterEditorClient"]
+    return [*command, "--catalog", str(Path(catalog).resolve())]
+
+
 def terminal_main(argv):
     # A windowed executable starts with no Python standard streams. Only the
     # explicit Core child acquires a console; the editor never allocates one.
@@ -100,6 +121,16 @@ def check_installation(output):
                 "core_command": core_command(catalog),
                 "validated": reopened.validate(),
             }
+            app.load("status", "debuff_immunity")
+            status = app.form.read()
+            report["status_round_trip"] = status == app.project.effective()["status"]["debuff_immunity"]
+            report["status_effect"] = status["components"][0]["effects"][0]["effect_type"]
+            report["status_form"] = type(app.form).__name__ == "StatusForm"
+            report["cards_hidden"] = all(category != "character_card" for category, key in app.items.values())
+            try:
+                report["character_editor_command"] = character_editor_command(catalog)
+            except FileNotFoundError as error:
+                report["character_editor_missing_error"] = str(error)
             root.update()
             output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     finally:

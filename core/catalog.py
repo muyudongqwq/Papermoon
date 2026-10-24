@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 from threading import RLock
+import time
 
 from game.character.card_data import CHARACTER_CARD_DATA
 from game.character.card_factory import validate_character_card_catalog
@@ -27,6 +28,8 @@ BUILTINS = deepcopy(LIVE_CATALOGS)
 BUILTINS["class_skill"] = {name: {"name": name, "ranks": deepcopy(ranks)}
                            for name, ranks in CLASS_SKILL_DATA.items()}
 _CATALOG_LOCK = RLock()
+_FILE_LOCK_TIMEOUT = 10.0
+_FILE_LOCK_POLL_INTERVAL = 0.05
 
 
 def empty_project():
@@ -46,6 +49,49 @@ def parse_json(text):
     def invalid_constant(value):
         raise ValueError(f"JSON不允许非有限数值：{value}")
     return json.loads(text, object_pairs_hook=_unique_object, parse_constant=invalid_constant)
+
+
+@contextmanager
+def _catalog_file_lock(path, *, timeout=_FILE_LOCK_TIMEOUT):
+    """Serialize catalog writes across the two independent editor processes."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    stream = lock_path.open("a+b")
+    locked = False
+    try:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+            os.fsync(stream.fileno())
+        deadline = time.monotonic() + timeout
+        while True:
+            stream.seek(0)
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+                break
+            except OSError as error:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("等待项目文件写入锁超时，请稍后重试") from error
+                time.sleep(_FILE_LOCK_POLL_INTERVAL)
+        yield
+    finally:
+        if locked:
+            stream.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        stream.close()
 
 
 @contextmanager
@@ -147,20 +193,20 @@ class CatalogProject:
 
     def save(self):
         self.validate()
-        current = self.path.read_bytes() if self.path.exists() else None
-        if current != self._saved_bytes:
-            raise ValueError("项目文件已被其他程序修改，请重新打开后再编辑，避免覆盖")
         payload = (json.dumps(self.data, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        if current is not None:
-            self.path.with_suffix(self.path.suffix + ".bak").write_bytes(current)
-        descriptor, temporary = tempfile.mkstemp(prefix=".catalog-", suffix=".tmp", dir=self.path.parent)
-        try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, self.path)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
-        self._saved_bytes = payload
+        with _CATALOG_LOCK, _catalog_file_lock(self.path):
+            current = self.path.read_bytes() if self.path.exists() else None
+            if current != self._saved_bytes:
+                raise ValueError("项目文件已被其他程序修改，请重新打开后再编辑，避免覆盖")
+            if current is not None:
+                self.path.with_suffix(self.path.suffix + ".bak").write_bytes(current)
+            descriptor, temporary = tempfile.mkstemp(prefix=".catalog-", suffix=".tmp", dir=self.path.parent)
+            try:
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(payload)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, self.path)
+            finally:
+                Path(temporary).unlink(missing_ok=True)
+            self._saved_bytes = payload

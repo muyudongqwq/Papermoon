@@ -41,6 +41,7 @@ class Modifier:
         "damage_resolved",
         "damage_received",
         "attack_resolved",
+        "status_blocked",
     }
     VALID_CONSUMPTION_MODES = {"automatic", "optional"}
     VALID_USE_REFRESH_RULES = {
@@ -535,12 +536,38 @@ class BonusModifier(Modifier):
         self.value = self.effect_data["value"]
 
 
-class AttributeModifier(BonusModifier):
-    """修改AttributeRank的持续效果加成，并同步相关派生资源。"""
+class _EffectTargetBonusModifier(BonusModifier):
+    """Common loader for numeric effects which name one target field."""
 
     def __init__(self, effect, target, **kwargs):
         super().__init__(effect, target, **kwargs)
         self.effect_target = self.effect_data["effect_target"]
+
+
+class _ScalarAttributeModifier(BonusModifier):
+    """Reversible stack-aware adjustment of one scalar Character field."""
+
+    target_attribute = None
+
+    def _adjust(self, amount):
+        attribute = self.target_attribute
+        setattr(self.target, attribute, getattr(self.target, attribute) + amount)
+
+    def _apply_effect(self):
+        if not self.is_contextual:
+            self._adjust(self.value * self.stack_count)
+
+    def _remove_effect(self):
+        if not self.is_contextual:
+            self._adjust(-self.value * self.stack_count)
+
+    def _change_stack_effect(self, difference):
+        if not self.is_contextual:
+            self._adjust(self.value * difference)
+
+
+class AttributeModifier(_EffectTargetBonusModifier):
+    """修改AttributeRank的持续效果加成，并同步相关派生资源。"""
 
     def modify(self, amount):
         if self.applied:
@@ -575,28 +602,11 @@ class AttributeModifier(BonusModifier):
         )
 
 
-class AttackModifier(BonusModifier):
-    def _apply_effect(self):
-        if self.is_contextual:
-            return
-        self.target.atk_bonus += self.value * self.stack_count
-
-    def _remove_effect(self):
-        if self.is_contextual:
-            return
-        self.target.atk_bonus -= self.value * self.stack_count
-
-    def _change_stack_effect(self, difference):
-        if self.is_contextual:
-            return
-        self.target.atk_bonus += self.value * difference
+class AttackModifier(_ScalarAttributeModifier):
+    target_attribute = "atk_bonus"
 
 
-class DiceModifier(BonusModifier):
-    def __init__(self, effect, target, **kwargs):
-        super().__init__(effect, target, **kwargs)
-        self.effect_target = self.effect_data["effect_target"]
-
+class DiceModifier(_EffectTargetBonusModifier):
     def _adjust_targets(self, amount):
         for stat in dice_targets(self.effect_target):
             if stat in getattr(self.target, "DERIVED_STAT_NAMES", ()):
@@ -654,12 +664,8 @@ class PlusModifier(Modifier):
         attribute.adjust_plus_bonus(self.value * difference)
 
 
-class NumericAttributeModifier(BonusModifier):
+class NumericAttributeModifier(_EffectTargetBonusModifier):
     """对角色身上的普通数值字段施加可恢复的临时修正。"""
-
-    def __init__(self, effect, target, **kwargs):
-        super().__init__(effect, target, **kwargs)
-        self.effect_target = self.effect_data["effect_target"]
 
     def _apply_effect(self):
         current_value = getattr(self.target, self.effect_target)
@@ -686,61 +692,19 @@ class NumericAttributeModifier(BonusModifier):
         )
 
 
-class MagicResistanceModifier(BonusModifier):
+class MagicResistanceModifier(_ScalarAttributeModifier):
     """修改角色受到魔术伤害时使用的对魔力比例。"""
-
-    def _apply_effect(self):
-        if self.is_contextual:
-            return
-        self.target.magic_resistance += self.value * self.stack_count
-
-    def _remove_effect(self):
-        if self.is_contextual:
-            return
-        self.target.magic_resistance -= self.value * self.stack_count
-
-    def _change_stack_effect(self, difference):
-        if self.is_contextual:
-            return
-        self.target.magic_resistance += self.value * difference
+    target_attribute = "magic_resistance"
 
 
-class MovementPointModifier(BonusModifier):
+class MovementPointModifier(_ScalarAttributeModifier):
     """修改角色每次消耗AP转换得到的移动力。"""
-
-    def _apply_effect(self):
-        if self.is_contextual:
-            return
-        self.target.move_conversion += self.value * self.stack_count
-
-    def _remove_effect(self):
-        if self.is_contextual:
-            return
-        self.target.move_conversion -= self.value * self.stack_count
-
-    def _change_stack_effect(self, difference):
-        if self.is_contextual:
-            return
-        self.target.move_conversion += self.value * difference
+    target_attribute = "move_conversion"
 
 
-class VisibilityModifier(BonusModifier):
+class VisibilityModifier(_ScalarAttributeModifier):
     """修改角色常时视野距离。"""
-
-    def _apply_effect(self):
-        if self.is_contextual:
-            return
-        self.target.visibility += self.value * self.stack_count
-
-    def _remove_effect(self):
-        if self.is_contextual:
-            return
-        self.target.visibility -= self.value * self.stack_count
-
-    def _change_stack_effect(self, difference):
-        if self.is_contextual:
-            return
-        self.target.visibility += self.value * difference
+    target_attribute = "visibility"
 
 
 class DamageModifier(Modifier):
@@ -831,6 +795,23 @@ class CostModifier(Modifier):
         return self.value * self.stack_count
 
 
+class StatusImmunityModifier(Modifier):
+    """Reject matching debuff status applications before any effects run."""
+
+    def __init__(self, effect, target, **kwargs):
+        super().__init__(effect, target, **kwargs)
+        tags = self.effect_data.get("tags", [])
+        if not isinstance(tags, list) or any(not isinstance(tag, str) or not tag.strip() for tag in tags):
+            raise ValueError("免疫tags必须是非空字符串组成的列表，允许空列表")
+        self.tags = frozenset(tags)
+
+    def blocks(self, incoming):
+        owner = getattr(self, "status_parent", self)
+        return (self.applied and owner.applied and owner in self.target.modifiers and owner.has_uses and incoming.effect_type == "add_status"
+                and incoming.polarity == "debuff"
+                and (not self.tags or bool(self.tags.intersection(incoming.tags))))
+
+
 class ShieldModifier(Modifier):
     """保存独立护盾池；相同modifier_id默认互相替换。"""
 
@@ -893,6 +874,24 @@ class StatusModifier(Modifier):
         from game.status.registry import get_status_definition
         from game.status.runtime import StatusRuntime
         self.status_runtime = StatusRuntime(self, get_status_definition(self.status))
+        self.tags = frozenset(self.status_runtime.definition_tags)
+
+    def apply(self):
+        if self.applied:
+            return False
+        # A status may install passive modifiers which synchronously emit
+        # events.  Those callbacks must observe the parent status as active;
+        # otherwise a newly installed status-immunity passive can be bypassed
+        # during its own modifier_applied event.
+        self.applied = True
+        try:
+            self._apply_effect()
+        except BaseException:
+            self.applied = False
+            raise
+        # A synchronous callback may legitimately consume and remove this
+        # status while its passives are being installed.
+        return self.applied
 
     def _apply_effect(self):
         register = getattr(self.target, "_register_status_source", None)
@@ -902,7 +901,7 @@ class StatusModifier(Modifier):
             register(self.status, self)
         try:
             self.status_runtime.apply_passives()
-        except Exception:
+        except BaseException:
             self.target._unregister_status_source(self.status, self)
             raise
 
@@ -990,9 +989,6 @@ class HiddenModifier(StatusModifier):
 
     def update(self, timing=Modifier.DEFAULT_DURATION_TIMING, turn_number=None):
         return Modifier.update(self, timing, turn_number)
-
-    def _change_stack_effect(self, difference):
-        pass
 
     def conceals_from(self, observer):
         return observer is not self.target and observer not in self.revealed_to
@@ -1120,6 +1116,7 @@ MODIFIER_TYPES = {
     "presence_concealment": PresenceConcealmentModifier,
     "carry_capacity": CarryCapacityModifier,
     "hp_floor": HPFloorModifier,
+    "status_immunity": StatusImmunityModifier,
 }
 
 

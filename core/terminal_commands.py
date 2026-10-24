@@ -117,7 +117,8 @@ class TerminalCommandHandler:
         from game.status.runtime import iter_status_runtimes, status_view
         instances = [status_view(runtime.status_modifier) for runtime in iter_status_runtimes(character)]
         details = [f"{s['name']}（来源：{s['source_name'] or '系统'}；"
-                   f"{'永久' if s['duration'] is None else str(s['duration']) + '回合'}；{s['stack_count']}层）"
+                   f"{'永久' if s['duration'] is None else str(s['duration']) + '回合'}；{s['stack_count']}层"
+                   + (f"；剩余{s['remaining_uses']}次" if s.get('remaining_uses') is not None else "") + "）"
                    for s in instances]
         represented = {s['status_id'] for s in instances}
         details.extend(sorted(character.status_flags - represented))

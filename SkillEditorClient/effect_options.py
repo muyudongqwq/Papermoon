@@ -11,6 +11,7 @@ from game.turn.damage_types import VALID_DAMAGE_TYPES
 
 
 EFFECT_NAMES = {
+    "status_immunity": "弱体无效",
     "choices": "可选发动",
     "hp_floor": "设置生命下限", "prevent_death": "死亡免疫", "add_content": "获得已入库技能",
     "add_simple_round": "追加简易战斗轮", "add_resource": "创建自定义资源",
@@ -64,11 +65,12 @@ STRING_FIELDS = {
     "placement_rule", "limit_scope", "at_limit", "name_prefix", "owner_unique_key",
 }
 FIELD_NAMES = {
+    "tags": "匹配状态标签",
     "cost": "维持消耗",
     "maximum_selections": "每次最多选择几项", "allow_duplicate": "允许同一次发动重复选择同一分支",
     "resolution_channel": "解放或一般攻击",
     "value": "数值", "value_source": "数值来源", "damage_type": "伤害类型",
-    "damage_types": "适用伤害类型", "resource_id": "资源ID", "status_id": "状态ID",
+    "damage_types": "适用伤害类型", "resource_id": "资源名称", "status_id": "状态ID",
     "multiplier": "倍率", "flat": "额外数值",
     "calculation": "计算方式", "direction": "生效方向", "effect_target": "调整的属性",
     "attribute": "来源属性", "ignore_shield": "忽略护盾", "ignore_block": "忽略格挡减伤",
@@ -93,6 +95,9 @@ def parameter_options(effect_type):
 
 
 def parameter_spec(effect_type, field, catalogs=None):
+    if effect_type == "status_immunity" and field == "tags":
+        tags = {tag for status in (catalogs or {}).get("status", {}).values() for tag in status.get("tags", [])}
+        return ParameterSpec("tags", tuple(sorted(tags)))
     if effect_type == "choices":
         return ParameterSpec("json", ("true", "false") if field == "allow_duplicate" else ())
     if effect_type == "dice_bonus" and field == "effect_target":
@@ -161,6 +166,13 @@ def parameter_spec(effect_type, field, catalogs=None):
 
 
 def parse_parameter(text, spec):
+    if spec.kind == "tags":
+        if text.strip().startswith("["):
+            value = parse_json(text)
+            if not isinstance(value, list) or any(not isinstance(tag, str) or not tag.strip() for tag in value):
+                raise ValueError("标签必须是非空文本组成的列表")
+            return value
+        return list(dict.fromkeys(tag.strip() for tag in text.replace("，", ",").split(",") if tag.strip()))
     if spec.kind == "string":
         return text
     if spec.kind == "number_or_all" and text.strip() == "all":

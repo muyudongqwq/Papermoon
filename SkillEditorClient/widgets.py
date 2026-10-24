@@ -18,6 +18,37 @@ def request_layout(widget):
         parent = parent.master
 
 
+def combobox_placeholder(widget, variable, text):
+    """Display a hint without putting it in the form's saved value."""
+    display = tk.StringVar(widget)
+    widget.configure(textvariable=display)
+    widget.placeholder_display = display
+    changing = False
+
+    def render(*_):
+        nonlocal changing
+        if changing:
+            return
+        changing = True
+        try:
+            # The ttk popdown exists only in Tcl; focus_get() attempts to
+            # resolve it as a Python widget and raises KeyError('popdown').
+            focused = str(widget.tk.call("focus")) == str(widget)
+            display.set(variable.get() or ("" if focused else text))
+        finally:
+            changing = False
+
+    def edited(*_):
+        if not changing:
+            variable.set("" if display.get() == text else display.get())
+
+    variable.trace_add("write", render)
+    display.trace_add("write", edited)
+    widget.bind("<FocusIn>", render, add=True)
+    widget.bind("<FocusOut>", render, add=True)
+    render()
+
+
 class Collapsible(ttk.Frame):
     def __init__(self, parent, title, *, expanded=False, font=None, button_style="TButton"):
         super().__init__(parent, padding=(3, 2))

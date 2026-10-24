@@ -7,13 +7,20 @@ from game.status.data import STATUS_DATA
 
 
 STATUS_FIELDS = {"status_id", "name", "description", "polarity", "purifiable", "duration",
-                 "duration_timing", "persist_after_death", "stacking", "components"}
+                 "duration_timing", "persist_after_death", "stacking", "components", "tags", "consumption"}
 
 
 def get_status_definition(status_id):
     if not isinstance(status_id, str) or status_id not in STATUS_DATA:
         raise ValueError(f"未知的状态status_id：{status_id}")
     return deepcopy(STATUS_DATA[status_id])
+
+
+def validate_status_consumption(consumption):
+    if (not isinstance(consumption, dict) or consumption.get("event") != "status_blocked"
+            or consumption.get("mode", "automatic") != "automatic"
+            or consumption.get("remove_when_empty", True) is not True):
+        raise ValueError("状态次数只支持自动消耗status_blocked，耗尽必须移除状态")
 
 
 def validate_status_definition(definition):
@@ -33,7 +40,12 @@ def validate_status_definition(definition):
         raise ValueError("状态name必须是非空字符串")
     if "description" in definition and not isinstance(definition["description"], str):
         raise ValueError("状态description必须是字符串")
+    if "consumption" in definition:
+        validate_status_consumption(definition["consumption"])
     _validate_modifier_common(definition, f"status[{status_id}]")
+    tags = definition.get("tags", [])
+    if not isinstance(tags, list) or any(not isinstance(tag, str) or not tag.strip() for tag in tags):
+        raise ValueError("状态tags必须是非空字符串组成的列表，允许空列表")
     if definition.get("duration_timing", "global_turn_end") != "global_turn_end":
         raise ValueError("状态持续时间统一按global_turn_end扣减")
     components = definition["components"]

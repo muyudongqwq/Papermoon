@@ -15,13 +15,13 @@ import tempfile
 import time
 import unittest
 
-from SkillEditorClient.effect_options import EFFECT_TYPES
+from SkillEditorClient.effect_options import FORM_EFFECT_TYPES as EFFECT_TYPES
 from SkillEditorClient import EXECUTABLE_NAME, VERSION
 from SkillEditorClient.effect_reference import read_dictionary
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXE = ROOT / EXECUTABLE_NAME
+EXE = Path(os.environ.get("PAPERMOON_EDITOR_DIST", ROOT)) / EXECUTABLE_NAME
 
 
 @unittest.skipUnless(os.name == "nt" and EXE.is_file(), "Build the Windows exe first")
@@ -77,8 +77,18 @@ class SkillEditorExeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
 
     def test_normal_entry_shows_editor_window_and_closes_cleanly(self):
-        executable = self.directory / EXE.name
-        shutil.copy2(EXE, executable)
+        self.check_normal_window(EXE, "Papermoon · SkillEditorClient")
+
+    def test_character_entry_shows_editor_window_and_closes_cleanly(self):
+        from CharacterEditorClient import EXECUTABLE_NAME
+        character = EXE.parent / EXECUTABLE_NAME
+        if not character.is_file():
+            self.skipTest("Build the character editor first")
+        self.check_normal_window(character, "Papermoon · CharacterEditorClient")
+
+    def check_normal_window(self, source, title_prefix):
+        executable = self.directory / source.name
+        shutil.copy2(source, executable)
         user32 = ctypes.windll.user32
         callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
         user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
@@ -93,7 +103,7 @@ class SkillEditorExeTests(unittest.TestCase):
             def visit(window, _parameter):
                 title = ctypes.create_unicode_buffer(512)
                 user32.GetWindowTextW(window, title, len(title))
-                if "Papermoon · SkillEditorClient" in title.value:
+                if title_prefix in title.value:
                     # Verify it belongs to this exe before sending WM_CLOSE.
                     pid = wintypes.DWORD()
                     user32.GetWindowThreadProcessId(window, ctypes.byref(pid))

@@ -141,6 +141,7 @@ EFFECT_SCHEMAS = {
         optional={"damage_types", "action_ids", "skill_ids", "source_tags"},
         modifier=True,
     ),
+    "status_immunity": _schema(optional={"tags"}, modifier=True),
     "deploy_reality_marble": _schema(
         required={"reality_marble_id"},
         optional={
@@ -1160,6 +1161,9 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         for field in ("action_ids", "skill_ids", "source_tags"):
             if field in data:
                 _string_list(data[field], f"{path}.{field}")
+    elif effect_type == "status_immunity":
+        if "tags" in data:
+            _string_list(data["tags"], f"{path}.tags")
     elif effect_type == "damage":
         _validate_damage_type(data["damage_type"], f"{path}.damage_type")
         _validate_value_source(data, path, required=True)
@@ -1421,9 +1425,11 @@ def validate_effect_definition(
     if schema.modifier:
         _validate_modifier_common(effect, path)
     if effect_type == "add_status":
-        from game.status.registry import get_status_definition
+        from game.status.registry import get_status_definition, validate_status_consumption
         _string(data["status_id"], f"{data_path}.status_id")
         get_status_definition(data["status_id"])
+        if "consumption" in effect:
+            validate_status_consumption(effect["consumption"])
         if effect.get("duration_timing", "global_turn_end") != "global_turn_end" or "phase_window" in effect:
             _error(path, "状态持续时间统一按global_turn_end扣减，不接受phase_window")
     if effect_type in {

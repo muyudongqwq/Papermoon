@@ -182,6 +182,9 @@ class ModifierManager:
         if modifier in self.owner.modifiers:
             return ModifierApplicationResult("rejected", modifier)
 
+        if modifier.effect_type == "add_status" and self._block_status(modifier):
+            return ModifierApplicationResult("rejected", modifier)
+
         # Buffs produced by a skill share the skill's stable id. A later use
         # replaces every buff from an earlier use of the same named skill,
         # while multiple effects belonging to the same use may coexist.
@@ -219,6 +222,34 @@ class ModifierManager:
         if rule == "strongest":
             return self._keep_strongest(existing, modifier)
         raise ValueError(f"未知的Modifier叠加规则：{rule}")
+
+    def _block_status(self, incoming):
+        guards = sorted((item for item in self.owner.modifiers[:]
+                         if item.effect_type == "status_immunity" and item.blocks(incoming)),
+                        key=lambda item: (-getattr(item, "status_parent", item).priority,
+                                          item.application_order if item.application_order is not None else float("inf")))
+        if not guards:
+            return False
+        guard = guards[0]
+        owner = getattr(guard, "status_parent", guard)
+        previous = owner.remaining_uses
+        consumed = owner.consume_use()
+        # Reserve the charge and detach an exhausted parent before callbacks
+        # can try another application in this same synchronous event chain.
+        if consumed and owner.remaining_uses <= 0:
+            if owner.remove_when_empty:
+                self.remove(owner, reason="consumed")
+            else:
+                owner.remove()
+        if consumed:
+            self._emit("modifier_consumed", owner, payload={"consumption_event": "status_blocked",
+                       "old_uses": previous, "remaining_uses": owner.remaining_uses})
+        from game.game.rule_report import report
+        report(self.owner, "status_blocked", actor=incoming.source_actor, targets=[self.owner], private=True,
+               target_data={"status_id": incoming.status, "tags": sorted(incoming.tags),
+                            "protection_status_id": getattr(owner, "status", None),
+                            "remaining_uses": owner.remaining_uses})
+        return True
 
     def remove(self, modifier, reason="removed"):
         if modifier not in self.owner.modifiers or modifier in self._removing_modifiers:
@@ -363,15 +394,16 @@ class ModifierManager:
         for modifier in candidates:
             if modifier not in self.owner.modifiers:
                 continue
-            if modifier.consumption_mode == "optional":
+            if (
+                modifier.consumption_mode == "optional"
+                and not modifier._optional_consumption_active
+            ):
                 matched_context = next(
                     item
                     for item in contexts
                     if modifier.matches_consumption(event, item)
                 )
-                if modifier._optional_consumption_active:
-                    pass
-                elif optional_decider is None:
+                if optional_decider is None:
                     pending_optional.append(modifier)
                     continue
                 elif not optional_decider(modifier, event, matched_context):
@@ -685,17 +717,42 @@ class ModifierManager:
         old_resources = self._resource_state()
         old_capacities = self._capacity_state()
         was_alive = self.owner.is_alive()
-        if not modifier.applied:
-            modifier.apply()
+        provisional_status = modifier.effect_type == "add_status" and not modifier.applied
+        if provisional_status:
+            # Register the parent before installing its passive children.  A
+            # child modifier_applied callback may immediately query or consume
+            # the parent (notably status immunity).
+            if index is None:
+                self.owner.modifiers.append(modifier)
+            else:
+                self.owner.modifiers.insert(index, modifier)
+        try:
+            if not modifier.applied:
+                modifier.apply()
+        except BaseException:
+            if provisional_status and modifier in self.owner.modifiers:
+                self.owner.modifiers.remove(modifier)
+            raise
+        if provisional_status and (
+            not modifier.applied or modifier not in self.owner.modifiers
+        ):
+            # It was consumed, killed or otherwise removed by a synchronous
+            # callback during installation.  Children appended after that
+            # removal must not survive as detached effects.
+            modifier.status_runtime.remove_passives()
+            if modifier in self.owner.modifiers:
+                self.owner.modifiers.remove(modifier)
+            return ModifierApplicationResult("rejected", modifier)
         # Applying a withdrawal can synchronously trigger a lethal field exit.
         # Death cleanup ran before this modifier could enter the owner's list.
         if was_alive and not self.owner.is_alive() and not modifier.persist_after_death:
             modifier.remove()
             return ModifierApplicationResult("rejected", modifier)
-        if index is None:
-            self.owner.modifiers.append(modifier)
-        else:
-            self.owner.modifiers.insert(index, modifier)
+        if not provisional_status:
+            if index is None:
+                self.owner.modifiers.append(modifier)
+            else:
+                self.owner.modifiers.insert(index, modifier)
         self._sync_capacity_state(old_capacities, modifier)
         self._refresh_visibility_if_needed(modifier)
         self._emit(

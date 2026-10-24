@@ -6,7 +6,7 @@ from SkillEditorClient.app import main
 
 
 def run():
-    parser = argparse.ArgumentParser(description="Papermoon SkillEditorClient 表单试验版")
+    parser = argparse.ArgumentParser(description="Papermoon SkillEditorClient")
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     args = parser.parse_args()
     return main(args.catalog)
