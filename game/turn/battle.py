@@ -1511,6 +1511,11 @@ class BattleManager:
         was_in_brink = guarder.has_status("brink_of_death")
         # 援护只能使用格挡；此限制高于random_defense等防御选择效果。
         defense_type = "block"
+        attack.change_target(
+            guarder,
+            reason=f"{guard_kind}_guard",
+            decision_provider=decision_provider,
+        )
         result = DefenseResolver().resolve_phase(
             guarder,
             defense_type,
@@ -1532,6 +1537,11 @@ class BattleManager:
 
         if residual_damage > 0:
             self._prepare_guard_residual(attack, residual_damage)
+            attack.change_target(
+                original_target,
+                reason="guard_residual",
+                decision_provider=decision_provider,
+            )
         elif attack in original_target.pending_attacks:
             original_target.pending_attacks.remove(attack)
 
@@ -2172,6 +2182,19 @@ class BattleManager:
             if character not in self.participants or not character.is_alive():
                 self.continue_after_current_removed()
                 continue
+
+            game_manager = getattr(character, "game_manager", None)
+            delay_manager = getattr(game_manager, "delay_manager", None)
+            if delay_manager is not None:
+                delay_manager.resolve_checkpoint(
+                    self.global_turn,
+                    self.current_phase,
+                    character=character,
+                    decision_provider=decision_provider,
+                )
+                if character not in self.participants or not character.is_alive():
+                    self.continue_after_current_removed()
+                    continue
 
             if self.current_phase == "turn_start":
                 self.request_battle_plus_actions(

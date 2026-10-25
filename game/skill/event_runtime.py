@@ -225,6 +225,27 @@ class EventManager:
             self.history.append(event)
             return event
 
+        # Event names are also valid delay checkpoints.  This lets a
+        # delay_effect created by a trigger/react wait for the next matching
+        # event of the saved character instead of being forced into a battle
+        # or AP phase.
+        delay_manager = getattr(self.game_manager, "delay_manager", None)
+        if delay_manager is not None:
+            checkpoint_characters = []
+            for character in (event.actor, event.target):
+                if (
+                    character is not None
+                    and character not in checkpoint_characters
+                ):
+                    checkpoint_characters.append(character)
+            for character in checkpoint_characters:
+                delay_manager.resolve_checkpoint(
+                    event.global_turn,
+                    event.event_type,
+                    character=character,
+                    decision_provider=decision_provider,
+                )
+
         self._stack.append(event)
         try:
             candidates = self._collect_candidates(event)

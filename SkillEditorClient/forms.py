@@ -18,7 +18,8 @@ from SkillEditorClient.model import (
     optional_field, resource_options, validate_component_fields, validate_cost_fields,
 )
 from SkillEditorClient.widgets import (
-    Collapsible, JsonBox, PhaseSelect, UNIT_FONT, configure_gray_area,
+    Collapsible, JsonBox, PhaseSelect, SECTION_SEPARATOR_COLOR, SECTION_SEPARATOR_HEIGHT,
+    UNIT_FONT, configure_gray_area,
     configure_unit_style, entry_row, request_layout, combobox_placeholder,
 )
 from skilleditor.documents import format_json
@@ -286,7 +287,8 @@ class ComponentPanel(Collapsible):
     def __init__(self, parent, data, remove, number, catalogs=None, *, release_entry=False, default_requirement=0):
         configure_unit_style(parent)
         super().__init__(parent, f"技能单元 {number}", font=UNIT_FONT, button_style="NewSkillUnit.TButton")
-        self.separator = tk.Frame(self, background="#000000", height=1, borderwidth=0, highlightthickness=0)
+        self.separator = tk.Frame(self, background=SECTION_SEPARATOR_COLOR,
+                                  height=SECTION_SEPARATOR_HEIGHT, borderwidth=0, highlightthickness=0)
         self.original = deepcopy(data)
         self.catalogs = catalogs
         self.release_entry = release_entry
@@ -550,10 +552,10 @@ class SkillForm(ttk.Frame):
         self.original = deepcopy(data)
         self.catalogs = catalogs
         self.components = []
-        self.name, self.name_box = entry_row(self, "名称 name", data.get("name", ""), compact=True, font=("Microsoft YaHei UI", 11))
-        self.rank, self.rank_box = entry_row(self, "等级 rank", data.get("rank", ""), choices=RANKS, compact=True, font=("Microsoft YaHei UI", 11))
+        self.name, self.name_box = entry_row(self, "名称 name", data.get("name", ""), compact=True, font=UNIT_FONT)
+        self.rank, self.rank_box = entry_row(self, "等级 rank", data.get("rank", ""), choices=RANKS, compact=True, font=UNIT_FONT)
         ttk.Label(self, text="技能说明 description").pack(anchor="w", pady=(5, 3))
-        self.description = ScrolledText(self, height=3, wrap="word", undo=True, font=("Microsoft YaHei UI", 10))
+        self.description = ScrolledText(self, height=3, wrap="word", undo=True, font=("Microsoft YaHei UI", 11))
         self.description.pack(fill="x")
         self.description.insert("1.0", data.get("description", ""))
         self.component_rows = ttk.Frame(self)

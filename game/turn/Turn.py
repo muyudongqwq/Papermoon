@@ -68,6 +68,7 @@ class TurnManager:
         if self.game_manager is not None:
             self.game_manager.relationship_manager.apply_turn_start()
             self.game_manager.information_manager.begin_turn(self.turn)
+            self.game_manager.event_manager.clear_turn_usage(self.turn)
 
         for character in self.characters:
             character.current_global_turn = self.turn
@@ -80,7 +81,6 @@ class TurnManager:
             if character.can_act_on_turn(self.turn)
         ])
         if self.game_manager is not None:
-            self.game_manager.event_manager.clear_turn_usage(self.turn)
             self.game_manager.event_manager.emit(
                 "global_turn_start",
                 phase="global_turn_start",
@@ -1099,6 +1099,20 @@ class TurnManager:
         if self.current_ap_layer != ap_layer:
             raise ValueError(f"当前不是AP{ap_layer}行动层")
 
+        if self.game_manager is not None:
+            for character in self.non_battle_order:
+                if (
+                    character.is_alive()
+                    and not character.in_battle
+                    and character.can_act_on_turn(self.turn)
+                ):
+                    self.game_manager.delay_manager.resolve_checkpoint(
+                        self.turn,
+                        f"AP{ap_layer}",
+                        character=character,
+                        decision_provider=decision_provider,
+                    )
+
         self.prepare_travel_layer(ap_layer)
 
         if self.waiting_encounters:
@@ -1353,6 +1367,10 @@ class TurnManager:
             )
 
         if self.game_manager is not None:
+            self.game_manager.delay_manager.resolve_turn_end_fallback(
+                self.turn,
+                decision_provider=decision_provider,
+            )
             self.game_manager.resolve_turn_end_event(self.turn, decision_provider=decision_provider)
         else:
             for character in [*self.characters, *self.dead_characters]:

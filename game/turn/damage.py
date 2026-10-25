@@ -1,4 +1,5 @@
 from game.turn.damage_types import normalize_damage_type
+from copy import copy
 from uuid import uuid4
 
 
@@ -40,6 +41,9 @@ class AttackProfile:
       damage_segments=None,
       target_lock=False,
       ignore_block=False,
+      attack_group_id=None,
+      target_type=None,
+      target_rules=None,
    ):
       if resolution_channel not in self.VALID_RESOLUTION_CHANNELS:
          raise ValueError(
@@ -77,6 +81,10 @@ class AttackProfile:
       self.roll_result = roll_result
       self.resolution_channel = resolution_channel
       self.target_lock = bool(target_lock)
+      self.attack_group_id = attack_group_id or uuid4().hex
+      self.target_type = target_type
+      self.target_rules = dict(target_rules or {})
+      self.redirect_history = []
 
    @property
    def total_base_damage(self):
@@ -116,7 +124,17 @@ class AttackProfile:
          target_lock=self.target_lock,
          source_statuses_snapshotted=True,
          attack_profile=self,
+         attack_group_id=self.attack_group_id,
+         target_type=self.target_type,
+         target_rules=self.target_rules,
       )
+
+   def redirected_copy(self, source):
+      """Clone the snapshotted attack without recalculating its numbers."""
+      profile = copy(self)
+      profile.source = source
+      profile.redirect_history = list(self.redirect_history)
+      return profile
 
 
 class DamageEvent:
@@ -136,6 +154,8 @@ class DamageEvent:
        ignore_shield=False,
        source_statuses_snapshotted=False,
        attack_id=None,
+       target_type=None,
+       target_rules=None,
     ):
       self.source = source
       self.target = target
@@ -151,6 +171,9 @@ class DamageEvent:
       self.ignore_shield = ignore_shield
       self.source_statuses_snapshotted = source_statuses_snapshotted
       self.attack_id = attack_id
+      self.target_type = target_type
+      self.target_rules = dict(target_rules or {})
+      self.redirect_history = []
       self.calculated_value = None
       self.shield_absorptions = []
       self.final_value = None
@@ -217,9 +240,6 @@ class DamageResolver:
       return max(0, int(damage))
 
    def resolve(self, event, decision_provider=None):
-      hp_before = event.target.hp
-      position = event.target.position
-      battle = event.target.current_battle
       damage = self.calculate(event)
       event.calculated_value = damage
       game_manager = getattr(event.target, "game_manager", None)
@@ -248,6 +268,12 @@ class DamageResolver:
             if before_event.cancelled
             else max(0, int(before_event.value))
          )
+      # Redirect reactions may have changed the actual DamageEvent target.
+      # Snapshot reporting and downstream defenses only after that window.
+      hp_before = event.target.hp
+      position = event.target.position
+      battle = event.target.current_battle
+      event.target_was_in_brink = event.target.has_status("brink_of_death")
       modifier_manager = getattr(event.target, "modifier_manager", None)
       if modifier_manager is not None:
          damage, absorptions = modifier_manager.absorb_damage(damage, event)
@@ -349,6 +375,9 @@ class AttackEvent:
       attack_profile=None,
       target_lock=False,
       ignore_block=False,
+      attack_group_id=None,
+      target_type=None,
+      target_rules=None,
    ):
       self.attack_id = uuid4().hex
       self.source = source
@@ -381,6 +410,20 @@ class AttackEvent:
       self.final_hit_segments = self.original_hit_segments
       self.attack_profile = attack_profile
       self.target_lock = bool(target_lock)
+      self.attack_group_id = attack_group_id or (
+         getattr(attack_profile, "attack_group_id", None) or uuid4().hex
+      )
+      self.target_type = target_type or getattr(
+         attack_profile, "target_type", None,
+      )
+      self.target_rules = dict(
+         target_rules
+         if target_rules is not None
+         else getattr(attack_profile, "target_rules", {})
+      )
+      self.redirect_history = list(getattr(
+         attack_profile, "redirect_history", [],
+      ))
       self.defense_roll_started = False
       self.resolution_reason = None
       self._resolution_consumption_done = False
@@ -391,6 +434,62 @@ class AttackEvent:
              involved={"damage_type": self.damage_type, "attack_roll": attack_roll},
              actor_data={"skill_id": skill_id, "action_id": action_id,
                          "base_damage": self.value})
+
+   @property
+   def name(self):
+      """Human-readable label when an attack itself is a selectable target."""
+      source_name = getattr(self.source, "name", "未知来源")
+      effect_name = getattr(self.skill, "name", None)
+      if effect_name is None:
+         effect_name = self.skill_id or self.action_id or "攻击"
+      return f"{source_name}:{effect_name}"
+
+   def change_target(
+      self,
+      target,
+      *,
+      reason="external",
+      decision_provider=None,
+   ):
+      """Change the pending target and publish the transition once."""
+      old_target = self.target
+      if old_target is target:
+         return False
+      self.target = target
+      game_manager = next((
+         getattr(character, "game_manager", None)
+         for character in (self.source, target, old_target)
+         if character is not None
+         and getattr(character, "game_manager", None) is not None
+      ), None)
+      event_manager = getattr(game_manager, "event_manager", None)
+      if event_manager is not None:
+         battle = (
+            getattr(target, "current_battle", None)
+            or getattr(old_target, "current_battle", None)
+            or getattr(self.source, "current_battle", None)
+         )
+         event_manager.emit(
+            "attack_target_changed",
+            actor=self.source,
+            source=self,
+            target=target,
+            phase=getattr(battle, "current_phase", None),
+            battle=battle,
+            position=getattr(target, "position", None),
+            payload={
+               "attack_id": self.attack_id,
+               "reason": reason,
+               "old_target": old_target,
+               "new_target": target,
+               "old_target_id": getattr(old_target, "character_id", None),
+               "new_target_id": getattr(target, "character_id", None),
+               "old_target_name": getattr(old_target, "name", None),
+               "new_target_name": getattr(target, "name", None),
+            },
+            decision_provider=decision_provider,
+         )
+      return True
 
    def miss_because_target_moved(self):
       if self.resolved or self.defense_roll_started:

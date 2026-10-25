@@ -239,6 +239,48 @@ class MovementResolver:
                 decision_provider=decision_provider,
             )
         state.remaining_movement -=1
+        state.steps_completed += 1
+        if game_manager is not None:
+            ap_layer = getattr(
+                getattr(game_manager, "turn_manager", None),
+                "current_ap_layer",
+                None,
+            )
+            for index, character in enumerate(
+                [state.actor, *state.companions]
+            ):
+                common = {
+                    "actor": character,
+                    "source": state,
+                    "target": character,
+                    "phase": ap_layer,
+                    "position": destination,
+                    "decision_provider": decision_provider,
+                    "payload": {
+                        "origin": current,
+                        "destination": destination,
+                        "origin_name": getattr(current, "name", str(current)),
+                        "destination_name": getattr(
+                            destination,
+                            "name",
+                            str(destination),
+                        ),
+                        "step_index": state.steps_completed,
+                        "remaining_movement": state.remaining_movement,
+                        "is_companion": index > 0,
+                    },
+                }
+                game_manager.event_manager.emit(
+                    "movement_step",
+                    value=1,
+                    **common,
+                )
+                if len(state.path) == 1:
+                    game_manager.event_manager.emit(
+                        "movement_completed",
+                        value=state.steps_completed,
+                        **common,
+                    )
         if not state.actor.is_alive():
             state.finished = True
             state.remaining_movement = 0
@@ -418,6 +460,8 @@ class MovementState:
         )
         self.paused = False
         self.finished = False
+        # Resumed movement continues the same event sequence.
+        self.steps_completed = 0
 
     def create_movement_state(self, actor, path):
         if not self.convert_movement(actor):

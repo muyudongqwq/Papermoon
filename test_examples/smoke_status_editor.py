@@ -253,6 +253,7 @@ class StatusEditorSmokeTests(unittest.TestCase):
         form = self.load_marker()
         first, second = form.add_component(), form.add_component()
         self.assertEqual(second.separator.winfo_manager(), "pack")
+        self.assertEqual(second.separator.cget("height"), 2)
         first.toggle()
         second.toggle()
         self.root.update()

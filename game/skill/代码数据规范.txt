@@ -321,6 +321,9 @@ characters_within_distance
 incoming_attacks
     待处理攻击。
 
+delayed_attacks
+    选择自己延迟、由自己发动或以自己为目标的尚未到期攻击，用于再次延迟。
+
 selectable_attribute
     由玩家选择属性。默认候选为strength、endurance、flexibility、magic、fortune；
     target_rules.allowed_attributes可显式限制候选，include_noble=true时额外允许宝具。
@@ -433,6 +436,39 @@ effect_data.resolution_channel
     attack | release
 
 damage_segments存在时必须为非空列表，总伤害为各段之和。
+
+
+delay_attack / delay_effect
+---------------------------
+
+delay_attack推迟一个已经进入pending_attacks、尚未开始防御且尚未结算的AttackEvent。
+到期时沿用原攻击者、目标、攻击骰、伤害和修正，在目标下次相同防御判定时间点
+进入包含援护与防御的简易战斗轮。
+再次延迟同一攻击时，在原到期回合上继续累加；不重新生成攻击，也不重复支付原攻击消耗。
+
+delay_attack参数：
+
+effect_data.delay_turns
+    必填，必须是大于1的整数。
+
+delay_effect保存发动时的actor与目标快照，在到期时按书写顺序执行effects。目标之后
+移动不会改变这份角色目标快照。某条效果到期时不再可用，只跳过该条并继续后续效果；
+已支付消耗不返还。嵌套create_attack_event会在生成后立即进入简易防御流程。
+
+delay_effect参数：
+
+effect_data.delay_turns
+    必填，必须是大于1的整数。
+effect_data.effects
+    必填，非空效果列表。嵌套效果继承外层目标，不能填写effect_target，也不能直接
+    再嵌套delay_attack或delay_effect。
+
+二者记录被延迟内容原本即将进入的判定时间点，并在到期回合中该角色的下一个同名
+判定时间点结算。若该角色在到期回合不存在该阶段（例如未进入战斗而没有防御阶段），
+则在该全局回合结束时补结算。它们不再固定于global_turn_start结算。
+简易战斗轮阶段不形成独立的延迟目标：simple_round_attack、simple_round_guard、
+simple_round_defense分别映射到下一回合的一般attack、guard、defense阶段。
+第一版不提供驱散、提前引爆或改变已保存目标的字段。
 
 
 3. add_resource
@@ -657,6 +693,32 @@ maximum
 可选：
 
 effect_data.reason
+
+
+redirect_event
+--------------
+
+只能在trigger/react事件结算中使用。第一版只允许重定向尚未开始防御的攻击，
+或before_damage时机尚未扣除的伤害。
+
+effect_data.redirect_type
+    必填：attack | damage。
+effect_data.new_target
+    必填：self | event_actor | event_source | event_target | selected_target。
+effect_data.reason
+    可选，写入重定向历史和规则日志的稳定原因。
+
+attack会将同一attack_group_id下的全部AttackEvent整体作废，并视为重定向者使用
+原目标规则重新发动一次攻击。新攻击保留原骰值、伤害段、伤害类型、出口、技能、
+标签和全部数值修正；不再次支付资源或阶段，也不重新消耗或获得下一次攻击修正。
+新目标必须满足原target及target_rules。攻击组内任意攻击已经开始防御后，整组不能
+重定向。
+
+damage只改变本次DamageEvent的承受者，伤害来源不变；新目标会重新计算受到伤害
+修正、对魔力、护盾、濒死和死亡，不重新进行攻击、防御或援护。
+
+同一事件内按反应队列依次处理，最后一次合法重定向生效。非法重定向只记录跳过，
+不会撤销此前已经生效的合法重定向。
 
 
 14. trap
@@ -1503,6 +1565,15 @@ components只支持passive、trigger、react，复用现有effects和condition�
 self（承受状态者），也支持event_actor、event_source、event_target、event_targets。
 trigger只接受event_type、timing和priority；before_damage等前置事件需timing=before。
 不接受主动行动、cost、choices、inputs、limit、usage_limit或cooldown。
+
+新增通用after事件：movement_step（每走完一条道路；传送不触发）、
+movement_completed（抵达本次移动终点）、raw_die_generated（每次产生原始1d10，
+重骰会再次触发而翻转不会）、roll_resolved（最终骰面与总值确定）、
+defense_resolved（单项攻击的防御结算完毕）和attack_target_changed（援护等使
+待结算攻击更换目标）。movement_step.value固定为1；movement_completed.value为
+本次实际步数；raw_die_generated.value为该次原始骰面；roll_resolved.value为最终
+骰值总和；defense_resolved.value为该项攻击实际造成的伤害。具体字段可在事件payload
+中读取。以上事件只补充触发点，不改变原有移动、掷骰、防御和伤害公式。
 
 passive只接受无条件self持续数值修正（含护盾、HP下限等Modifier），不接受hidden、
 add_status或其他即时效果；效果自身不能另设duration、stacking、净化、消耗次数等

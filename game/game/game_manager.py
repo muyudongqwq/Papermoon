@@ -9,6 +9,7 @@ from game.game.command_spell_transfer import CommandSpellTransferManager
 from game.skill.event_runtime import EventManager
 from game.skill.trap_runtime import TrapManager
 from game.skill.summon_runtime import SummonManager
+from game.skill.delay_runtime import DelayManager
 from game.game.relationship import InformationManager, RelationshipManager
 from game.game.rule_report import RuleReportManager
 
@@ -76,6 +77,7 @@ class GameManager:
         self.information_manager = InformationManager(self)
         self.trap_manager = TrapManager(self)
         self.summon_manager = SummonManager(self)
+        self.delay_manager = DelayManager(self)
 
     @property
     def field_effects(self):

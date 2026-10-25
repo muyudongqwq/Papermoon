@@ -54,6 +54,7 @@ TARGET_TYPES = {
     "selectable_enemy",
     "characters_within_distance",
     "incoming_attacks",
+    "delayed_attacks",
     "selectable_travel_group",
     "selectable_battle_participant",
     "guardable_battle_participant",

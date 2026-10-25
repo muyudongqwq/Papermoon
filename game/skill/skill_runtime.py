@@ -266,6 +266,12 @@ def resolve_cancel_event_effect(effect, target, skill, **context):
     return event.cancel(effect.get("effect_data", {}).get("reason"))
 
 
+def resolve_redirect_event_effect(effect, target, skill, **context):
+    from game.skill.redirect_runtime import resolve_redirect_event
+
+    return resolve_redirect_event(effect, target, skill, **context)
+
+
 def resolve_change_damage_type_effect(effect, target, skill, **context):
     game_event = context.get("game_event") or context.get("event")
     if (
@@ -574,6 +580,8 @@ def resolve_damage_effect(effect, target, skill, **context):
         skill_id=skill_id,
         source_tags=source_tags,
         ignore_shield=data.get("ignore_shield", False),
+        target_type=context.get("attack_target_type"),
+        target_rules=context.get("attack_target_rules"),
     )
     modifier_manager = getattr(actor, "modifier_manager", None)
     if modifier_manager is not None:
@@ -587,19 +595,69 @@ def resolve_damage_effect(effect, target, skill, **context):
         event.percentage_modifiers.extend(percentages)
         event.flat_modifiers.extend(flats)
 
-    was_in_brink = target.has_status("brink_of_death")
     final_damage = DamageResolver().resolve(
         event,
         decision_provider=context.get("decision_provider"),
     )
+    resolved_target = event.target
     return {
         "event": event,
         "damage": final_damage,
         "entered_brink_of_death": (
-            not was_in_brink and target.has_status("brink_of_death")
+            not getattr(event, "target_was_in_brink", False)
+            and resolved_target.has_status("brink_of_death")
         ),
-        "target_defeated": not target.is_alive(),
+        "target_defeated": not resolved_target.is_alive(),
     }
+
+
+def resolve_delay_effect(effect, target, skill, **context):
+    data = effect.get("effect_data", {})
+    actor = context.get("actor") or target
+    game_manager = getattr(actor, "game_manager", None)
+    if game_manager is None:
+        game_manager = getattr(target, "game_manager", None)
+    if game_manager is None:
+        raise SkillUnavailableError("delay_effect需要已加入游戏的发动者或目标")
+    return game_manager.delay_manager.schedule_effects(
+        actor=actor,
+        target=target,
+        skill=skill,
+        effects=data["effects"],
+        delay_turns=data["delay_turns"],
+        context=context,
+        decision_provider=context.get("decision_provider"),
+    )
+
+
+def resolve_delay_attack_effect(effect, target, skill, **context):
+    from game.turn.damage import AttackEvent
+
+    attack = target if isinstance(target, AttackEvent) else None
+    game_event = context.get("game_event") or context.get("event")
+    if attack is None and isinstance(
+        getattr(game_event, "source", None),
+        AttackEvent,
+    ):
+        attack = game_event.source
+    if attack is None:
+        raise SkillUnavailableError(
+            "delay_attack需要选择一项尚未开始防御的pending attack"
+        )
+    actor = context.get("actor") or attack.target
+    game_manager = getattr(actor, "game_manager", None)
+    if game_manager is None:
+        game_manager = getattr(attack.target, "game_manager", None)
+    if game_manager is None:
+        raise SkillUnavailableError("delay_attack需要已加入游戏的攻击参与者")
+    return game_manager.delay_manager.schedule_attack(
+        attack,
+        actor=actor,
+        skill=skill,
+        delay_turns=effect["effect_data"]["delay_turns"],
+        context=context,
+        decision_provider=context.get("decision_provider"),
+    )
 
 
 def resolve_create_field_effect(effect, target, skill, **context):
@@ -1000,6 +1058,9 @@ def build_attack_profile_from_effect(effect, skill, target=None, **context):
             context.get("resolution_channel", default_channel),
         ),
         damage_segments=damage_segments,
+        attack_group_id=context.get("attack_group_id"),
+        target_type=context.get("attack_target_type"),
+        target_rules=context.get("attack_target_rules"),
     )
     profile.modifier_context = {**modifier_context, "event": profile}
     if not context.get("defer_attack_commit_consumption", False):
@@ -1358,6 +1419,8 @@ EFFECT_HANDLERS = {
     "create_field": resolve_create_field_effect,
     "deploy_reality_marble": resolve_deploy_reality_marble_effect,
     "create_attack_event": resolve_create_attack_event_effect,
+    "delay_attack": resolve_delay_attack_effect,
+    "delay_effect": resolve_delay_effect,
     "damage": resolve_damage_effect,
     "damage_modifier": apply_modifier_effect,
     "dice_bonus": apply_modifier_effect,
@@ -1377,6 +1440,7 @@ EFFECT_HANDLERS = {
     "plus_bonus": apply_modifier_effect,
     "purify": resolve_purify_effect,
     "recover_resource": resolve_recover_resource_effect,
+    "redirect_event": resolve_redirect_event_effect,
     "remove_content": resolve_remove_content_effect,
     "remove_skill": resolve_skill_mutation_effect,
     "restore_component": resolve_restore_component_effect,
@@ -2568,6 +2632,15 @@ def resolve_skill_component(
         effect_context.setdefault(
             "skill_component_id",
             component.get("component_id"),
+        )
+        effect_context.setdefault(
+            "attack_group_id",
+            f"{skill_application_id}:{id(effect)}",
+        )
+        effect_context.setdefault("attack_target_type", target_type)
+        effect_context.setdefault(
+            "attack_target_rules",
+            dict(component.get("target_rules", {})),
         )
         effect_context.setdefault(
             "defer_attack_commit_consumption",

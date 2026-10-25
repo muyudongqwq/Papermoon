@@ -52,6 +52,7 @@ TARGET_DESCRIPTIONS = {
     "guardable_battle_participant": "选择当前可以被援护的战斗参与者。",
     "characters_within_distance": "以指定距离内、符合规则的角色为目标。",
     "incoming_attacks": "以当前待处理的攻击为目标。",
+    "delayed_attacks": "选择自己延迟、由自己发动或以自己为目标的延迟攻击。",
     "selectable_attribute": "选择一项属性供效果使用，具体允许选择哪些属性由目标规则决定。",
     "selectable_travel_group": "选择符合条件的同行队伍。",
     "travel_group_members": "以同行队伍中的成员为目标。",

@@ -454,26 +454,120 @@ class DefenseResolver:
         defense_type=None,
         decision_provider=None,
     ):
+        game_manager = getattr(defender, "game_manager", None)
+        event_manager = getattr(game_manager, "event_manager", None)
+        if event_manager is not None:
+            before_event = event_manager.emit(
+                "before_attack_defense",
+                timing="before",
+                actor=attack.source,
+                source=attack,
+                target=defender,
+                phase=getattr(
+                    getattr(defender, "current_battle", None),
+                    "current_phase",
+                    "defense",
+                ),
+                battle=getattr(defender, "current_battle", None),
+                position=getattr(defender, "position", None),
+                payload={
+                    "attack_event": attack,
+                    "attack_group_id": attack.attack_group_id,
+                },
+                decision_provider=decision_provider,
+            )
+            if before_event.cancelled:
+                return {
+                    "hit": False,
+                    "damage": 0,
+                    "redirected": (
+                        before_event.payload.get("cancel_reason")
+                        == "attack_redirected"
+                    ),
+                }
         attack.defense_roll_started = True
         attack.defense_type = "offset" if isinstance(defense_type, OffsetAttempt) else defense_type
+        previous_roll = getattr(defender, "last_defense_roll_result", None)
         if isinstance(defense_type, OffsetAttempt):
-            return self.resolve_offset_attempt(
+            result = self.resolve_offset_attempt(
                 defender,
                 attack,
                 defense_type,
                 decision_provider,
             )
-        if defense_type == "dodge":
-            return self.resolve_dodge(defender, attack, decision_provider)
-        if defense_type == "block":
-            return self.resolve_block(defender, attack, decision_provider)
-        if defense_type == "offset":
-            return self.resolve_legacy_offset(
+        elif defense_type == "dodge":
+            result = self.resolve_dodge(defender, attack, decision_provider)
+        elif defense_type == "block":
+            result = self.resolve_block(defender, attack, decision_provider)
+        elif defense_type == "offset":
+            result = self.resolve_legacy_offset(
                 defender,
                 attack,
                 decision_provider,
             )
-        raise ValueError(f"未知的防御指令：{defense_type}")
+        else:
+            raise ValueError(f"未知的防御指令：{defense_type}")
+        self._emit_defense_resolved(
+            defender,
+            attack,
+            defense_type,
+            result,
+            previous_roll=previous_roll,
+            decision_provider=decision_provider,
+        )
+        return result
+
+    @staticmethod
+    def _emit_defense_resolved(
+        defender,
+        attack,
+        defense_type,
+        result,
+        *,
+        previous_roll=None,
+        decision_provider=None,
+    ):
+        game_manager = getattr(defender, "game_manager", None)
+        event_manager = getattr(game_manager, "event_manager", None)
+        if event_manager is None:
+            return None
+        defense_name = (
+            "offset" if isinstance(defense_type, OffsetAttempt) else defense_type
+        )
+        roll_result = getattr(defender, "last_defense_roll_result", None)
+        if isinstance(defense_type, OffsetAttempt):
+            success = bool(defense_type.success)
+            roll_result = defense_type.roll_result
+        elif roll_result is not None and roll_result is not previous_roll:
+            success = roll_result.total >= attack.attack_roll
+        else:
+            success = False
+            roll_result = None
+        battle = getattr(defender, "current_battle", None)
+        return event_manager.emit(
+            "defense_resolved",
+            actor=defender,
+            source=attack,
+            target=defender,
+            value=result["damage"],
+            phase=getattr(battle, "current_phase", "defense"),
+            battle=battle,
+            position=getattr(defender, "position", None),
+            payload={
+                "attack_id": attack.attack_id,
+                "defense_type": defense_name,
+                "success": success,
+                "hit": result["hit"],
+                "damage": result["damage"],
+                "attack_roll": attack.attack_roll,
+                "defense_roll": (
+                    None if roll_result is None else roll_result.total
+                ),
+                "attacker_id": getattr(attack.source, "character_id", None),
+                "attacker_name": getattr(attack.source, "name", None),
+            },
+            decision_provider=decision_provider,
+        )
 
     def resolve_offset_attempt(
         self,
@@ -655,6 +749,8 @@ class DefenseResolver:
             ignore_shield=attack.ignore_shield,
             source_statuses_snapshotted=True,
             attack_id=attack.attack_id,
+            target_type=attack.target_type,
+            target_rules=attack.target_rules,
         )
 
     def preview_damage(
@@ -707,21 +803,24 @@ class DefenseResolver:
             percentage_modifiers=percentage_modifiers,
             flat_modifiers=flat_modifiers,
         )
-        was_in_brink = defender.has_status("brink_of_death")
         final_damage = DamageResolver().resolve(
             damage_event,
             decision_provider=decision_provider,
         )
+        resolved_target = damage_event.target
         attack.final_damage = final_damage
         for shield, absorbed in damage_event.shield_absorptions:
-            print(f"{defender.name}的{shield.name}吸收了{absorbed}点伤害。")
-        print(f"{attack.source.name}对{defender.name}造成了{final_damage}点HP伤害")
-        if not was_in_brink and defender.has_status("brink_of_death"):
-            print(f"{defender.name}进入了濒死状态。")
+            print(f"{resolved_target.name}的{shield.name}吸收了{absorbed}点伤害。")
+        print(f"{attack.source.name}对{resolved_target.name}造成了{final_damage}点HP伤害")
+        if (
+            not getattr(damage_event, "target_was_in_brink", False)
+            and resolved_target.has_status("brink_of_death")
+        ):
+            print(f"{resolved_target.name}进入了濒死状态。")
         self.consume_attack_resolved(defender, attack)
         return {"hit": True, "damage": final_damage}
 
     @staticmethod
     def consume_attack_resolved(defender, attack):
-        attack.target = defender
+        attack.change_target(defender, reason="defense_resolution")
         attack.consume_resolution_modifiers()

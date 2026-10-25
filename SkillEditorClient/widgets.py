@@ -92,7 +92,9 @@ class JsonBox(ttk.Frame):
 
 
 PHASE_BACKGROUND = "#e4e4e4"
-UNIT_FONT = ("Microsoft YaHei UI", 11)
+SECTION_SEPARATOR_COLOR = "#707070"
+SECTION_SEPARATOR_HEIGHT = 2
+UNIT_FONT = ("Microsoft YaHei UI", 12)
 
 
 def configure_unit_style(widget):

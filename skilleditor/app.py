@@ -11,7 +11,7 @@ from tkinter.scrolledtext import ScrolledText
 
 from core.catalog import BUILTINS, CATEGORIES, CatalogProject, DEFAULT_CATALOG, ROOT, parse_json
 from skilleditor.documents import KINDS, LABELS, copy_definition, format_json, new_definition, parse_entry
-from skilleditor.display import configure_display, enable_high_dpi
+from skilleditor.display import configure_display, enable_high_dpi, configure_skill_editor_icon
 
 
 class SkillEditor:
@@ -24,6 +24,7 @@ class SkillEditor:
         self._loading = False
         self.root.title("Papermoon · Skill Editor")
         configure_display(root)
+        configure_skill_editor_icon(root)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self._build()
         self.refresh()
@@ -40,7 +41,7 @@ class SkillEditor:
         self.path_label.pack(fill="x")
         pane = ttk.Panedwindow(self.root, orient="horizontal")
         pane.pack(fill="both", expand=True, padx=10)
-        left = ttk.Frame(pane, width=310)
+        left = ttk.Frame(pane, width=340)
         right = ttk.Frame(pane)
         pane.add(left, weight=1)
         pane.add(right, weight=3)
@@ -63,7 +64,7 @@ class SkillEditor:
         ttk.Button(tools, text="新建", command=self.new).pack(side="left", padx=4)
         ttk.Button(left, text="复制为新条目", command=self.duplicate).pack(fill="x", pady=2)
         ttk.Button(left, text="恢复内置 / 删除自定义条目", command=self.remove).pack(fill="x", pady=2)
-        ttk.Label(left, text="* 表示本地覆盖；内置定义保留。\n职介技能在ranks中定义各等级。\n状态在仓库中定义，由技能通过status_id引用。", wraplength=300).pack(fill="x", pady=8)
+        ttk.Label(left, text="* 表示本地覆盖；内置定义保留。\n职介技能在ranks中定义各等级。\n状态在仓库中定义，由技能通过status_id引用。", wraplength=330).pack(fill="x", pady=8)
         notebook = ttk.Notebook(right)
         notebook.pack(fill="both", expand=True)
         edit = ttk.Frame(notebook)
@@ -72,13 +73,13 @@ class SkillEditor:
         notebook.add(reference, text="效果字典与格式参考")
         self.entry_label = ttk.Label(edit, text="选择左侧条目，或新建 / 导入。", padding=6)
         self.entry_label.pack(fill="x")
-        self.text = ScrolledText(edit, wrap="none", undo=True, font=("Consolas", 11))
+        self.text = ScrolledText(edit, wrap="none", undo=True, font=("Consolas", 12))
         self.text.pack(fill="both", expand=True)
         horizontal = ttk.Scrollbar(edit, orient="horizontal", command=self.text.xview)
         self.text.configure(xscrollcommand=horizontal.set)
         horizontal.pack(fill="x")
         ttk.Label(edit, text="保存会校验整个项目及角色引用；修改在下次启动Core时生效。", padding=6).pack(fill="x")
-        reference_text = ScrolledText(reference, wrap="word", font=("Microsoft YaHei UI", 10))
+        reference_text = ScrolledText(reference, wrap="word", font=("Microsoft YaHei UI", 11))
         reference_text.pack(fill="both", expand=True)
         reference_text.insert("1.0", self.read_reference_dictionary())
         reference_text.configure(state="disabled")

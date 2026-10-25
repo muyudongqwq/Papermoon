@@ -33,6 +33,10 @@ Papermoon 是节点地图、全局回合与战斗回合共同驱动的文字规�
 [test_examples/samples/](test_examples/samples/)保存测试卡和历史角色卡原文，用作录卡、裁定与回归时的对照资料；
 这些文本不会自动变成可运行角色，实际装载使用内置数据或内容项目中的定义。
 
+[skilleditor/assets/](skilleditor/assets/)保存技能编辑器共用的Papermoon图标：透明PNG用于窗口，
+多尺寸ICO用于Windows标题栏、任务栏与exe图标，含20px、40px等九种尺寸，各尺寸均直接从原图生成。
+窗口按自身DPI分别加载大小图标，子窗口与跨屏DPI变化沿用同一处理；SkillEditorClient打包脚本会收录运行时资源。
+
 本地的`userdata/`保存自定义内容与运行记录，`build/`、`dist/`和缓存目录存放生成结果；它们由`.gitignore`排除，
 不属于GitHub上的源码目录。
 
@@ -353,6 +357,7 @@ python -m venv .venv-build
 生成的exe、独立构建环境及中间产物不提交到Git；如需分发可直接复制exe。
 
 新客户端检查：`python -m test_examples.smoke_skill_editor_client`（需要正常桌面环境）。
+Windows图标尺寸与资源释放检查：`python -m test_examples.smoke_skill_editor_icons`。
 实验状态表单检查：`python -m test_examples.smoke_status_editor`。
 角色卡编辑器检查：`python -m test_examples.smoke_character_editor_client`。
 exe打包检查：`python -m test_examples.smoke_skill_editor_exe`。

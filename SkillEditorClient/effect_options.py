@@ -19,6 +19,7 @@ EFFECT_NAMES = {
     "attribute_bonus": "属性增减", "attack_bonus": "基础攻击增减", "cancel_event": "取消事件",
     "change_damage_type": "改变伤害类型", "cost_modifier": "消耗增减",
     "create_attack_event": "生成攻击（可防御）", "create_field": "创建阵地", "damage": "直接伤害",
+    "delay_attack": "延迟既有攻击", "delay_effect": "延迟执行效果",
     "damage_modifier": "伤害增减", "deploy_reality_marble": "展开固有结界",
     "dice_bonus": "判定骰值增减", "gain_resource": "增加自定义资源", "grant_temporary_mp": "获得临时MP",
     "growing": "成长型效果", "hidden": "隐蔽", "magic_resistance": "对魔力",
@@ -28,6 +29,7 @@ EFFECT_NAMES = {
     "perception_check": "感知判定", "order_change": "先手顺序调整",
     "plus_bonus": "属性加符增减", "purify": "净化", "recover_resource": "资源回复",
     "remove_content": "移除已入库技能", "remove_skill": "移除技能",
+    "redirect_event": "重定向攻击或伤害",
     "restore_component": "恢复技能单元次数或冷却", "shield": "护盾", "summon": "召唤",
     "switch_skill_set": "切换技能组", "trap": "设置陷阱", "visibility_bonus": "视野调整",
     "presence_concealment": "气息遮断",
@@ -55,6 +57,7 @@ NUMBER_FIELDS = {
     "minimum", "maximum", "multiplier", "flat", "attack_stat_multiplier", "attack_stat_flat",
     "attack_roll_bonus", "damage_value", "damage_multiplier", "damage_flat", "initial_die",
     "attempts", "count", "maximum_active", "base_damage", "usage_amount", "cooldown_turns",
+    "delay_turns",
 }
 STRING_FIELDS = {
     "name", "resource", "subject", "anchor", "attacker_rule", "defender_rule", "trigger_target",
@@ -63,6 +66,7 @@ STRING_FIELDS = {
     "damage_value_source", "attribute", "damage_attribute", "effect_target", "reason", "rank",
     "scope", "usage_scope", "collection", "skill", "content_type", "duplicate_policy",
     "placement_rule", "limit_scope", "at_limit", "name_prefix", "owner_unique_key",
+    "redirect_type", "new_target",
 }
 FIELD_NAMES = {
     "tags": "匹配状态标签",
@@ -77,6 +81,7 @@ FIELD_NAMES = {
     "maximum": "数量上限", "duration": "持续回合", "template_id": "召唤模板",
     "count": "数量", "damage_value": "伤害数值", "attack_stat": "攻击判定属性",
     "rank": "等级", "scope": "范围", "name": "名称",
+    "delay_turns": "延迟回合数", "effects": "到期执行的效果列表",
 }
 
 
@@ -128,6 +133,11 @@ def parameter_spec(effect_type, field, catalogs=None):
         "at_limit": ("reject", "replace_oldest", "select"),
         "usage_scope": ("global_turn", "battle", "game"),
         "collection": ("personal_skills",), "skill": ("self",),
+        "redirect_type": ("attack", "damage"),
+        "new_target": (
+            "self", "event_actor", "event_source", "event_target",
+            "selected_target",
+        ),
     }.get(field, ())
     if field == "calculation":
         choices = {

@@ -120,6 +120,8 @@ EFFECT_SCHEMAS = {
             "ignore_block",
         } | _DAMAGE_VALUE_FIELDS | _DAMAGE_EVENT_FIELDS,
     ),
+    "delay_attack": _schema(required={"delay_turns"}),
+    "delay_effect": _schema(required={"delay_turns", "effects"}),
     "create_field": _schema(
         required={"field_id"},
         optional={
@@ -197,6 +199,10 @@ EFFECT_SCHEMAS = {
     "recover_resource": _schema(
         required={"resource_id"},
         optional={"value", "value_source", "calculation"},
+    ),
+    "redirect_event": _schema(
+        required={"redirect_type", "new_target"},
+        optional={"reason"},
     ),
     "remove_content": _schema(
         required={"content_type", "content_id"},
@@ -787,7 +793,30 @@ def _validate_dynamic_action_definition(definition, path):
 
 
 def _validate_effect_data(effect_type, data, path, component_type=None):
-    if effect_type in {"add_content", "remove_content"}:
+    if effect_type in {"delay_attack", "delay_effect"}:
+        _integer(data["delay_turns"], f"{path}.delay_turns", minimum=2)
+        if effect_type == "delay_effect":
+            effects = _list(data["effects"], f"{path}.effects", nonempty=True)
+            for index, nested in enumerate(effects):
+                nested_path = f"{path}.effects[{index}]"
+                if not isinstance(nested, dict):
+                    _error(nested_path, "必须是效果字典", TypeError)
+                if nested.get("effect_type") in {
+                    "delay_attack",
+                    "delay_effect",
+                }:
+                    _error(nested_path, "延迟效果不能直接嵌套另一个延迟效果")
+                if "effect_target" in nested:
+                    _error(
+                        nested_path,
+                        "嵌套效果固定继承delay_effect的目标，不接受effect_target",
+                    )
+                validate_effect_definition(
+                    nested,
+                    path=nested_path,
+                    component_type=component_type,
+                )
+    elif effect_type in {"add_content", "remove_content"}:
         _enum(
             data["content_type"],
             f"{path}.content_type",
@@ -1287,6 +1316,22 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
     elif effect_type == "cancel_event":
         if "reason" in data and data["reason"] is not None:
             _string(data["reason"], f"{path}.reason")
+    elif effect_type == "redirect_event":
+        _enum(
+            data["redirect_type"],
+            f"{path}.redirect_type",
+            {"attack", "damage"},
+        )
+        _enum(
+            data["new_target"],
+            f"{path}.new_target",
+            {
+                "self", "event_actor", "event_source",
+                "event_target", "selected_target",
+            },
+        )
+        if "reason" in data:
+            _string(data["reason"], f"{path}.reason")
     elif effect_type == "change_damage_type":
         _validate_damage_type(data["damage_type"], f"{path}.damage_type")
     elif effect_type == "create_field":
@@ -1434,6 +1479,7 @@ def validate_effect_definition(
             _error(path, "状态持续时间统一按global_turn_end扣减，不接受phase_window")
     if effect_type in {
         "modify_event_value", "cancel_event", "change_damage_type",
+        "redirect_event",
     } and component_type not in {
         None, "trigger", "react",
     }:

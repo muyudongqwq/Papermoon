@@ -172,7 +172,7 @@ class SkillEditorSmokeTests(unittest.TestCase):
     def test_original_fonts_and_spacing_are_preserved_with_native_dpi(self):
         text_font = tkfont.Font(root=self.root, font=self.app.text.cget("font"))
         self.assertEqual(text_font.actual("family"), "Consolas")
-        self.assertEqual(text_font.actual("size"), 11)
+        self.assertEqual(text_font.actual("size"), 12)
         ui_font = tkfont.nametofont("TkDefaultFont", root=self.root)
         self.assertEqual(ui_font.actual(), self.original_ui_font)
         self.assertGreater(text_font.measure("职介技能"), 0)
@@ -181,7 +181,7 @@ class SkillEditorSmokeTests(unittest.TestCase):
         from tkinter import ttk
         row_height = ttk.Style(self.root).lookup("Treeview", "rowheight")
         scale = max(1.0, self.root.winfo_fpixels("1i") / 96)
-        self.assertAlmostEqual(int(row_height) / scale, self.original_rowheight, delta=1)
+        self.assertAlmostEqual(int(row_height) / scale, max(self.original_rowheight, 22), delta=1)
         if __import__("sys").platform == "win32":
             import ctypes
             awareness = ctypes.c_int()

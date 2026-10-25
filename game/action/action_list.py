@@ -573,6 +573,26 @@ class ActionListBuilder:
             ]
         if target_type == "incoming_attacks":
             return list(context.incoming_attacks)
+        if target_type == "delayed_attacks":
+            game_manager = context.game_manager or getattr(
+                actor,
+                "game_manager",
+                None,
+            )
+            if game_manager is None:
+                return []
+            return [
+                entry.attack
+                for entry in game_manager.delay_manager.entries
+                if entry.kind == "attack"
+                and not entry.resolved
+                and not entry.cancelled
+                and (
+                    entry.actor is actor
+                    or entry.attack.source is actor
+                    or entry.attack.target is actor
+                )
+            ]
         if target_type == "selectable_path":
             if (
                 actor.position is None

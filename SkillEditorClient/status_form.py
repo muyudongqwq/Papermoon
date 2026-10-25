@@ -11,7 +11,8 @@ from SkillEditorClient.forms import EffectPanel, extras_box
 from SkillEditorClient.model import merge_extras, optional_field
 from SkillEditorClient.trigger_editor import TriggerEditor
 from SkillEditorClient.widgets import (
-    Collapsible, UNIT_FONT, configure_gray_area, configure_unit_style, entry_row, request_layout,
+    Collapsible, SECTION_SEPARATOR_COLOR, SECTION_SEPARATOR_HEIGHT, UNIT_FONT,
+    configure_gray_area, configure_unit_style, entry_row, request_layout,
 )
 
 
@@ -115,7 +116,8 @@ class StatusUnit(Collapsible):
         self.component_id = data["component_id"]
         self.catalogs, self.effects = catalogs, []
         self.choices = None  # Shared reference-window traversal; statuses have no choices.
-        self.separator = tk.Frame(self, background="#000000", height=1)
+        self.separator = tk.Frame(self, background=SECTION_SEPARATOR_COLOR,
+                                  height=SECTION_SEPARATOR_HEIGHT, borderwidth=0, highlightthickness=0)
         self.kind, _ = entry_row(self.body, "状态单元类型", STATUS_TYPES.get(data.get("type"), ""), choices=tuple(STATUS_TYPES.values()), editable=False, compact=True)
         self.type_notice = ttk.Label(self.body, wraplength=650)
         self.type_notice.pack(anchor="w", pady=3)
@@ -209,7 +211,7 @@ class StatusForm(ttk.Frame):
         ttk.Label(self, text=f"状态标识 status_id：{data['status_id']}").pack(anchor="w", pady=3)
         self.name, _ = entry_row(self, "名称 name", data["name"], compact=True, font=UNIT_FONT)
         ttk.Label(self, text="状态说明 description").pack(anchor="w", pady=3)
-        self.description = tk.Text(self, height=4, wrap="word", undo=True, font=("Microsoft YaHei UI", 10))
+        self.description = tk.Text(self, height=4, wrap="word", undo=True, font=("Microsoft YaHei UI", 11))
         self.description.pack(fill="x")
         self.description.insert("1.0", data.get("description", ""))
         self.tags, _ = entry_row(self, "状态标签 tags", ", ".join(data.get("tags", [])))

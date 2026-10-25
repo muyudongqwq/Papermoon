@@ -48,6 +48,18 @@ EVENT_OPTIONS = {
     "character_died": ("角色死亡", "after", "角色死亡时通知；死亡角色自身是否仍可触发由allow_when_dead决定。"),
     "position_left": ("离开地点", "after", "角色离开地点时通知，包含原地点和新地点。"),
     "position_entered": ("进入地点", "after", "角色进入地点时通知，包含原地点和新地点。"),
+    "movement_step": ("完成一步移动", "after", "正常路径移动完成一条道路后通知；传送不会触发。事件目标为实际移动的角色。"),
+    "movement_completed": ("移动行动完成", "after", "正常路径移动抵达本次行动终点后通知；事件数值为本次实际移动步数。"),
+    "raw_die_generated": ("产生原始骰面", "after", "每次实际生成1d10骰面后通知；幸运重骰会再次触发，幸运加符翻转不会触发。"),
+    "roll_resolved": ("掷骰结算完成", "after", "幸运重骰与翻转全部处理完毕、总值确定后通知；事件数值为最终总值。"),
+    "defense_resolved": ("单次防御结算完成", "after", "针对一项攻击完成格挡、闪避或抵消后通知；事件目标为防御者，数值为实际伤害。"),
+    "attack_target_changed": ("攻击目标改变", "after", "待结算攻击因援护等原因改换目标时通知；事件目标为新目标。"),
+    "delayed_attack_scheduled": ("攻击进入延迟队列", "after", "尚未开始防御的攻击被延迟或再次延迟时通知。"),
+    "delayed_attack_resolved": ("延迟攻击到期", "after", "延迟攻击完成到期防御流程后通知。"),
+    "delayed_effect_scheduled": ("效果进入延迟队列", "after", "一组效果保存发动者与目标快照并进入延迟队列时通知。"),
+    "delayed_effect_resolved": ("延迟效果到期", "after", "延迟效果列表完成到期结算后通知。"),
+    "before_attack_defense": ("攻击开始防御前", "before", "攻击尚未开始防御，可用于整组重定向。"),
+    "attack_group_redirected": ("攻击组完成重定向", "after", "范围或单体攻击已经由新来源重新生成。"),
 }
 TIMING_NAMES = {"before": "事件发生前", "after": "事件发生后"}
 

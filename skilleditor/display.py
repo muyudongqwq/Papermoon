@@ -1,8 +1,25 @@
 """Native DPI rendering while preserving the editor's original typography."""
 
 import ctypes
+from pathlib import Path
 import sys
+import tkinter as tk
 from tkinter import ttk
+
+
+ICON_DIRECTORY = Path(__file__).resolve().with_name("assets")
+
+
+def configure_skill_editor_icon(root):
+    """Use bundled artwork for the window, its child dialogs and taskbar."""
+    photo = tk.PhotoImage(master=root, file=str(ICON_DIRECTORY / "papermoon.png"))
+    root.iconphoto(True, photo)
+    root._papermoon_icon = photo
+    if sys.platform == "win32":
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ctypes.c_wchar_p("Papermoon.SkillEditor"))
+        root.iconbitmap(default=str(ICON_DIRECTORY / "papermoon.ico"))
+        from skilleditor.window_icon import WindowsWindowIcons
+        root._papermoon_native_icons = WindowsWindowIcons(root, ICON_DIRECTORY / "papermoon.ico")
 
 
 def enable_high_dpi():
@@ -41,7 +58,7 @@ def configure_display(root):
     # of adding extra leading or replacing the system's named fonts.
     style = ttk.Style(root)
     rowheight = int(style.lookup("Treeview", "rowheight") or 20)
-    style.configure("Treeview", rowheight=round(rowheight * scale))
+    style.configure("Treeview", rowheight=max(round(rowheight * scale), round(22 * scale)))
     width, height = max(480, root.winfo_screenwidth() - 80), max(360, root.winfo_screenheight() - 100)
-    root.geometry(f"{min(width, round(1180 * scale))}x{min(height, round(800 * scale))}")
-    root.minsize(min(width, round(900 * scale)), min(height, round(600 * scale)))
+    root.geometry(f"{min(width, round(1320 * scale))}x{min(height, round(880 * scale))}")
+    root.minsize(min(width, round(1024 * scale)), min(height, round(680 * scale)))

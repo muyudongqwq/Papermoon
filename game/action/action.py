@@ -630,6 +630,8 @@ class Action:
             ignore_shield=self.ignore_shield,
             target_lock=self.target_lock,
             resolution_channel="attack",
+            target_type=self.definition.get("target"),
+            target_rules=self.definition.get("target_rules", {}),
         )
         self.created_attack_profile = profile
         attacker.modifier_manager.consume_event(

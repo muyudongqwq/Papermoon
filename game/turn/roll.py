@@ -28,6 +28,39 @@ class RollResult:
 class RollResolver:
     """Resolve a battle d10, including optional luck choices and final-face criticals."""
 
+    @staticmethod
+    def _emit_raw_die(
+        character,
+        stat_name,
+        die,
+        *,
+        phase,
+        reason,
+        roll_index,
+        decision_provider=None,
+    ):
+        game_manager = getattr(character, "game_manager", None)
+        event_manager = getattr(game_manager, "event_manager", None)
+        if event_manager is None:
+            return None
+        return event_manager.emit(
+            "raw_die_generated",
+            actor=character,
+            source=character,
+            target=character,
+            value=die,
+            phase=phase,
+            battle=getattr(character, "current_battle", None),
+            position=getattr(character, "position", None),
+            payload={
+                "stat_name": stat_name,
+                "die": die,
+                "reason": reason,
+                "roll_index": roll_index,
+            },
+            decision_provider=decision_provider,
+        )
+
     def roll(
         self,
         character,
@@ -46,6 +79,15 @@ class RollResolver:
         history = [("roll", die)]
         rerolls_used = 0
         flips_used = 0
+        self._emit_raw_die(
+            character,
+            stat_name,
+            die,
+            phase=phase,
+            reason="initial",
+            roll_index=0,
+            decision_provider=decision_provider,
+        )
 
         if allow_luck and character.in_battle and decision_provider is not None:
             while character.luck_reroll > 0 or character.fortune.plus > 0:
@@ -82,6 +124,15 @@ class RollResolver:
                     die = roller()
                     rerolls_used += 1
                     history.append(("reroll", die))
+                    self._emit_raw_die(
+                        character,
+                        stat_name,
+                        die,
+                        phase=phase,
+                        reason="reroll",
+                        roll_index=rerolls_used,
+                        decision_provider=decision_provider,
+                    )
                     continue
                 if choice == "flip":
                     if not character.consume_attribute_plus("fortune"):
@@ -167,6 +218,31 @@ class RollResolver:
             "roll_committed",
             context,
         )
+        game_manager = getattr(character, "game_manager", None)
+        event_manager = getattr(game_manager, "event_manager", None)
+        if event_manager is not None:
+            event_manager.emit(
+                "roll_resolved",
+                actor=character,
+                source=result,
+                target=character,
+                value=total,
+                phase=phase,
+                battle=getattr(character, "current_battle", None),
+                position=getattr(character, "position", None),
+                payload={
+                    "stat_name": stat_name,
+                    "initial_die": first_die,
+                    "die": die,
+                    "total": total,
+                    "critical_success": critical_success,
+                    "critical_failure": critical_failure,
+                    "rerolls_used": rerolls_used,
+                    "flips_used": flips_used,
+                    "roll_result": result,
+                },
+                decision_provider=decision_provider,
+            )
         from game.game.rule_report import report
         report(character, "roll_resolved", actor=character, private=True, phase=phase,
                actor_data={"stat_name": stat_name, "initial_die": first_die, "die": die,

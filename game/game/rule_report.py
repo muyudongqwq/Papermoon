@@ -87,6 +87,16 @@ class RuleReportManager:
             "status_added": ("status", "reason"), "status_removed": ("status", "reason"),
             "skill_added": ("skill_id", "skill_name", "source_type"),
             "skill_removed": ("skill_id", "skill_name", "reason"),
+            "movement_step": ("origin_name", "destination_name", "step_index", "remaining_movement", "is_companion"),
+            "movement_completed": ("origin_name", "destination_name", "step_index", "remaining_movement", "is_companion"),
+            "raw_die_generated": ("stat_name", "die", "reason", "roll_index"),
+            "defense_resolved": ("attack_id", "defense_type", "success", "hit", "damage", "attack_roll", "defense_roll", "attacker_id", "attacker_name"),
+            "attack_target_changed": ("attack_id", "reason", "old_target_id", "new_target_id", "old_target_name", "new_target_name"),
+            "attack_group_redirected": ("attack_group_id", "reason", "old_source", "new_source", "old_targets", "new_targets"),
+            "delayed_attack_scheduled": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner"),
+            "delayed_attack_resolved": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "used_turn_end_fallback"),
+            "delayed_effect_scheduled": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner"),
+            "delayed_effect_resolved": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "used_turn_end_fallback"),
         }
         public_fields = {
             "global_turn_start": ("turn_number",),

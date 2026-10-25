@@ -358,13 +358,13 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
             self.assertAlmostEqual(widget.winfo_width() / widget.master.winfo_width(), 0.5, delta=0.03)
         self.assertFalse(hasattr(panel, "id_box"))
         for widget in (form.name_box, form.rank_box):
-            self.assertEqual(font.Font(root=self.root, font=widget.cget("font")).actual()["size"], 11)
-        self.assertEqual(font.Font(root=self.root, font=form.description.cget("font")).actual()["size"], 10)
+            self.assertEqual(font.Font(root=self.root, font=widget.cget("font")).actual()["size"], 12)
+        self.assertEqual(font.Font(root=self.root, font=form.description.cget("font")).actual()["size"], 11)
         button_font = ttk.Style(self.root).lookup(form.add_component_button.cget("style"), "font")
-        self.assertEqual(font.Font(root=self.root, font=button_font).actual()["size"], 11)
+        self.assertEqual(font.Font(root=self.root, font=button_font).actual()["size"], 12)
         for button in (panel.toggle_button, panel.delete_button):
             self.assertEqual(ttk.Style(self.root).lookup(button.cget("style"), "font"), button_font)
-        self.assertEqual(font.Font(root=self.root, font=panel.label.cget("font")).actual()["size"], 11)
+        self.assertEqual(font.Font(root=self.root, font=panel.label.cget("font")).actual()["size"], 12)
         self.assertIs(form.description.frame.master, form)
         self.assertTrue(form.description.winfo_ismapped())
         for kind in ("active", "passive", "react", "trigger"):
