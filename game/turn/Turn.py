@@ -1,4 +1,5 @@
 from game.action.action_resolver import ActionResolver
+from game.action.action_restriction import action_restriction_reasons
 from game.turn.initialivemanager import InitiativeManager
 from game.turn.battle import BattleManager
 from game.map.movement import MovementAction, MovementResolver
@@ -1049,6 +1050,13 @@ class TurnManager:
             and action.actor.movement_locked
         ):
             return "movement_locked_by_battle_request"
+        restriction_reasons = action_restriction_reasons(
+            action,
+            phase=f"AP{self.current_ap_layer}",
+            battle=None,
+        )
+        if restriction_reasons:
+            return f"action_restricted:{restriction_reasons[0]}"
         return None
 
     def ignore_action(self, action, reason, ap_layer):

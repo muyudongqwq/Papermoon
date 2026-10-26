@@ -356,6 +356,31 @@ python -m venv .venv-build
 
 生成的exe、独立构建环境及中间产物不提交到Git；如需分发可直接复制exe。
 
+### Qt / PySide6开发环境
+
+Qt界面开发使用独立的`.venv`环境，不与仅用于旧版Tk编辑器打包的
+`.venv-build`混用。首次建立或重新建立环境：
+
+```powershell
+py -3.10 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+.\.venv\Scripts\python.exe -m pip install -r requirements-qt.txt
+```
+
+VS Code打开本目录时会默认选择`.venv`。Qt Designer、UI转换和资源编译工具分别为：
+
+```powershell
+.\.venv\Scripts\pyside6-designer.exe
+.\.venv\Scripts\pyside6-uic.exe input.ui -o output.py
+.\.venv\Scripts\pyside6-rcc.exe resources.qrc -o resources_rc.py
+```
+
+运行测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest test_examples
+```
+
 新客户端检查：`python -m test_examples.smoke_skill_editor_client`（需要正常桌面环境）。
 Windows图标尺寸与资源释放检查：`python -m test_examples.smoke_skill_editor_icons`。
 实验状态表单检查：`python -m test_examples.smoke_status_editor`。

@@ -31,6 +31,8 @@ class Modifier:
         "cost_modifier",
         "magic_resistance",
         "movement_point_bonus",
+        "action_restriction",
+        "defense_flow_modifier",
         "visibility_bonus",
     }
     VALID_CONSUMPTION_EVENTS = {
@@ -812,6 +814,119 @@ class StatusImmunityModifier(Modifier):
                 and (not self.tags or bool(self.tags.intersection(incoming.tags))))
 
 
+class ActionRestrictionModifier(Modifier):
+    """Prevent matching active actions while leaving system exits available."""
+
+    SAFE_ACTION_IDS = frozenset({"pass", "stay"})
+
+    def __init__(self, effect, target, **kwargs):
+        super().__init__(effect, target, **kwargs)
+        data = self.effect_data
+        self.all_actions = bool(data.get("all_actions", False))
+        self.action_ids = frozenset(data.get("action_ids", []))
+        self.action_types = frozenset(data.get("action_types", []))
+        self.skill_ids = frozenset(data.get("skill_ids", []))
+        self.component_ids = frozenset(data.get("component_ids", []))
+        self.phases = frozenset(data.get("phases", []))
+        self.phase_scopes = frozenset(data.get("phase_scopes", []))
+        self.match_mode = data.get("match_mode", "any")
+        self.exclude_action_ids = frozenset(
+            data.get("exclude_action_ids", [])
+        )
+        self.exclude_skill_ids = frozenset(
+            data.get("exclude_skill_ids", [])
+        )
+        self.reason = data.get("reason", "无法执行该行动")
+
+    def blocks_action(
+        self,
+        *,
+        action_id,
+        action_type=None,
+        skill_id=None,
+        component_id=None,
+        phase=None,
+        phase_scope=None,
+        context=None,
+    ):
+        if (
+            not self.applied
+            or not self.has_uses
+            or action_id in self.SAFE_ACTION_IDS
+            or action_id in self.exclude_action_ids
+            or (skill_id is not None and skill_id in self.exclude_skill_ids)
+        ):
+            return False
+        if self.phases and phase not in self.phases:
+            return False
+        if self.phase_scopes and phase_scope not in self.phase_scopes:
+            return False
+        if not self.matches_context(
+            context,
+            actor=self.target,
+            phase=phase,
+            phase_scope=phase_scope,
+            action_id=action_id,
+            skill_id=skill_id,
+            component_id=component_id,
+        ):
+            return False
+        if self.all_actions:
+            return True
+        matches = []
+        if self.action_ids:
+            matches.append(action_id in self.action_ids)
+        if self.action_types:
+            matches.append(action_type in self.action_types)
+        if self.skill_ids:
+            matches.append(skill_id in self.skill_ids)
+        if self.component_ids:
+            matches.append(component_id in self.component_ids)
+        if not matches:
+            return False
+        return all(matches) if self.match_mode == "all" else any(matches)
+
+
+class DefenseFlowModifier(Modifier):
+    """Insert, prepend, or replace the ordered defenses for one attack."""
+
+    VALID_OPERATIONS = {"append", "prepend", "replace"}
+    VALID_SELECTION_MODES = {"defender_choice", "fixed", "random"}
+    VALID_DEFENSE_TYPES = {"dodge", "block", "offset"}
+    VALID_CONTINUATIONS = {
+        "always",
+        "success",
+        "failure",
+        "damage_remaining",
+        "attack_remaining",
+    }
+    VALID_UNAVAILABLE_RULES = {"skip", "end"}
+
+    def __init__(self, effect, target, **kwargs):
+        super().__init__(effect, target, **kwargs)
+        data = self.effect_data
+        self.operation = data.get("calculation", "append")
+        self.steps = tuple(dict(step) for step in data.get("steps", ()))
+
+    def matches_attack(self, attack, *, phase=None, phase_scope=None):
+        return (
+            self.applied
+            and self.has_uses
+            and self.matches_context(
+                actor=self.target,
+                source=attack,
+                target=getattr(attack, "source", None),
+                action_id=getattr(attack, "action_id", None),
+                skill_id=getattr(attack, "skill_id", None),
+                damage_type=getattr(attack, "damage_type", None),
+                tags=set(getattr(attack, "source_tags", set())) | {"defense"},
+                event=attack,
+                phase=phase,
+                phase_scope=phase_scope,
+            )
+        )
+
+
 class ShieldModifier(Modifier):
     """保存独立护盾池；相同modifier_id默认互相替换。"""
 
@@ -1117,6 +1232,8 @@ MODIFIER_TYPES = {
     "carry_capacity": CarryCapacityModifier,
     "hp_floor": HPFloorModifier,
     "status_immunity": StatusImmunityModifier,
+    "action_restriction": ActionRestrictionModifier,
+    "defense_flow_modifier": DefenseFlowModifier,
 }
 
 

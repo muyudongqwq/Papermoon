@@ -11,6 +11,7 @@ from game.turn.damage_types import VALID_DAMAGE_TYPES
 
 
 EFFECT_NAMES = {
+    "action_restriction": "行动限制",
     "status_immunity": "弱体无效",
     "choices": "可选发动",
     "hp_floor": "设置生命下限", "prevent_death": "死亡免疫", "add_content": "获得已入库技能",
@@ -20,7 +21,8 @@ EFFECT_NAMES = {
     "change_damage_type": "改变伤害类型", "cost_modifier": "消耗增减",
     "create_attack_event": "生成攻击（可防御）", "create_field": "创建阵地", "damage": "直接伤害",
     "delay_attack": "延迟既有攻击", "delay_effect": "延迟执行效果",
-    "damage_modifier": "伤害增减", "deploy_reality_marble": "展开固有结界",
+    "damage_modifier": "伤害增减", "defense_flow_modifier": "改变防御流程",
+    "deploy_reality_marble": "展开固有结界",
     "dice_bonus": "判定骰值增减", "gain_resource": "增加自定义资源", "grant_temporary_mp": "获得临时MP",
     "growing": "成长型效果", "hidden": "隐蔽", "magic_resistance": "对魔力",
     "modify_event_value": "修改事件数值", "modify_resource": "修改自定义资源",
@@ -44,6 +46,7 @@ def editor_effect_schema(effect_type):
     return CHOICES_SCHEMA if effect_type == "choices" else EFFECT_SCHEMAS.get(effect_type)
 
 BOOLEAN_FIELDS = {
+    "all_actions",
     "permanent", "remove_with_source", "consume_attack_phase", "enter_battle", "is_ambush",
     "ignore_shield", "ignore_block", "target_lock", "is_hidden", "include_area_levels",
     "remove_on_source_death", "exclusive_center", "apply_once", "battle_bound",
@@ -60,6 +63,7 @@ NUMBER_FIELDS = {
     "delay_turns",
 }
 STRING_FIELDS = {
+    "match_mode",
     "name", "resource", "subject", "anchor", "attacker_rule", "defender_rule", "trigger_target",
     "trigger_phase", "attack_mode", "attack_stat", "damage_type", "resolution_channel",
     "field_type", "center_rule", "duration_timing", "direction", "calculation", "value_source",
@@ -69,6 +73,11 @@ STRING_FIELDS = {
     "redirect_type", "new_target",
 }
 FIELD_NAMES = {
+    "all_actions": "限制全部行动", "action_ids": "行动ID列表",
+    "action_types": "行动类别列表", "skill_ids": "技能ID列表",
+    "component_ids": "技能单元ID列表", "phases": "生效阶段列表",
+    "phase_scopes": "阶段范围列表", "match_mode": "匹配方式",
+    "exclude_action_ids": "排除的行动ID", "exclude_skill_ids": "排除的技能ID",
     "tags": "匹配状态标签",
     "cost": "维持消耗",
     "maximum_selections": "每次最多选择几项", "allow_duplicate": "允许同一次发动重复选择同一分支",
@@ -81,7 +90,8 @@ FIELD_NAMES = {
     "maximum": "数量上限", "duration": "持续回合", "template_id": "召唤模板",
     "count": "数量", "damage_value": "伤害数值", "attack_stat": "攻击判定属性",
     "rank": "等级", "scope": "范围", "name": "名称",
-    "delay_turns": "延迟回合数", "effects": "到期执行的效果列表",
+    "delay_turns": "延迟同名阶段数", "effects": "到期执行的效果列表",
+    "steps": "有序防御步骤",
 }
 
 
@@ -118,6 +128,7 @@ def parameter_spec(effect_type, field, catalogs=None):
     if field == "damage_type":
         return ParameterSpec("string", tuple(sorted(VALID_DAMAGE_TYPES)))
     choices = {
+        "match_mode": ("any", "all"),
         "content_type": ("personal_skill", "basic_magic", "noble_phantasm"),
         "resolution_channel": ("attack", "release"),
         "direction": ("incoming", "outgoing"),
@@ -147,6 +158,7 @@ def parameter_spec(effect_type, field, catalogs=None):
             "growing": ("add", "subtract", "set"),
             "cost_modifier": ("multiplier", "flat", "override"),
             "damage_modifier": ("percentage", "flat"),
+            "defense_flow_modifier": ("append", "prepend", "replace"),
             "recover_resource": ("flat", "maximum_percentage", "maximum_ratio"),
         }.get(effect_type, ())
     elif field == "duplicate_policy":

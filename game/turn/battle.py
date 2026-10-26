@@ -10,6 +10,8 @@ from game.turn.defense import (
     resolve_offset_attack_option,
 )
 from game.action.action import Action
+from game.action.action_data import get_action_definition
+from game.action.action_restriction import restriction_reasons
 from game.action.action_resolver import ActionResolver
 from game.turn.decision import (
     DecisionOption,
@@ -144,6 +146,7 @@ class BattleManager:
         self.started = False
         self.effects = []
         self.simple_round_history = []
+        self._active_simple_round_token = None
         self.global_turn = 0
         self.round_participants = set()
         self.stayed_this_round = set()
@@ -156,6 +159,50 @@ class BattleManager:
         self.late_participants = []
         # 兼容此前短暂使用过的内部名称。
         self.late_attackers = self.late_participants
+
+    def _enter_simple_round_scope(self, *, reuse=False):
+        previous = self._active_simple_round_token
+        if reuse and previous is not None:
+            return False, previous, previous
+        token = object()
+        self._active_simple_round_token = token
+        return True, previous, token
+
+    def _leave_simple_round_scope(self, scope, decision_provider):
+        owns_scope, previous, token = scope
+        if not owns_scope:
+            return
+        self._active_simple_round_token = previous
+        manager = next((
+            getattr(character, "game_manager", None)
+            for character in self.participants
+            if getattr(character, "game_manager", None) is not None
+        ), None)
+        delay_manager = getattr(manager, "delay_manager", None)
+        if delay_manager is not None:
+            delay_manager.advance_round_fallback(
+                self.global_turn,
+                round_kind="simple_round",
+                round_token=token,
+                decision_provider=decision_provider,
+            )
+
+    def _resolve_simple_delay_checkpoint(
+        self,
+        checkpoint,
+        character,
+        decision_provider,
+    ):
+        manager = getattr(character, "game_manager", None)
+        delay_manager = getattr(manager, "delay_manager", None)
+        if delay_manager is None:
+            return []
+        return delay_manager.resolve_checkpoint(
+            self.global_turn,
+            checkpoint,
+            character=character,
+            decision_provider=decision_provider,
+        )
 
     def add_combat_link(self, actor, target, source=None):
         if actor is target:
@@ -614,25 +661,32 @@ class BattleManager:
         saved_phase = self.current_phase
         actor = effect.actor
 
+        defenders = [
+            defender
+            for defender in effect.targets
+            if defender in self.participants and defender.is_alive()
+        ]
+        if actor not in self.participants or not actor.is_alive() or not defenders:
+            return None
+
+        if effect.consume_attack_phase:
+            if actor.attack_phase_count <= 0:
+                return {
+                    "skipped": True,
+                    "reason": "no_attack_phase",
+                }
+            actor.attack_phase_count -= 1
+
+        simple_round_scope = self._enter_simple_round_scope()
+
         try:
-            defenders = [
-                defender
-                for defender in effect.targets
-                if defender in self.participants and defender.is_alive()
-            ]
-            if actor not in self.participants or not actor.is_alive() or not defenders:
-                return None
-
-            if effect.consume_attack_phase:
-                if actor.attack_phase_count <= 0:
-                    return {
-                        "skipped": True,
-                        "reason": "no_attack_phase",
-                    }
-                actor.attack_phase_count -= 1
-
             self.current_character = actor
             self.current_phase = "simple_round_attack"
+            self._resolve_simple_delay_checkpoint(
+                "simple_round_attack",
+                actor,
+                decision_provider,
+            )
             print(f"{actor.name}进行额外攻击阶段")
             if effect.attack_mode == "select":
                 return self.run_virtual_attack_phase(
@@ -642,6 +696,7 @@ class BattleManager:
                     preferred_target=defenders[0],
                     preserve_attack_phase_count=True,
                     simple_round_effect=effect,
+                    _reuse_simple_round=True,
                 )
 
             attacks = self.create_fixed_simple_round_attacks(
@@ -655,6 +710,7 @@ class BattleManager:
                 attacks,
                 decision_provider,
                 effect=effect,
+                _reuse_simple_round=True,
             )
         finally:
             effect.resolved = True
@@ -664,6 +720,10 @@ class BattleManager:
                     self.clear_resolved_ambush_status(defender, effect)
             self.current_character = saved_character
             self.current_phase = saved_phase
+            self._leave_simple_round_scope(
+                simple_round_scope,
+                decision_provider,
+            )
 
     def create_fixed_simple_round_attacks(
         self,
@@ -759,6 +819,26 @@ class BattleManager:
         )
 
     def resolve_simple_round_attack_events(
+        self,
+        attacks,
+        decision_provider,
+        *,
+        effect=None,
+        _reuse_simple_round=False,
+    ):
+        scope = self._enter_simple_round_scope(
+            reuse=_reuse_simple_round,
+        )
+        try:
+            return self._resolve_simple_round_attack_events_impl(
+                attacks,
+                decision_provider,
+                effect=effect,
+            )
+        finally:
+            self._leave_simple_round_scope(scope, decision_provider)
+
+    def _resolve_simple_round_attack_events_impl(
         self,
         attacks,
         decision_provider,
@@ -866,6 +946,11 @@ class BattleManager:
             else:
                 self.current_character = defender
                 self.current_phase = "simple_round_defense"
+                self._resolve_simple_delay_checkpoint(
+                    "simple_round_defense",
+                    defender,
+                    decision_provider,
+                )
                 print(f"{defender.name}的额外防御阶段")
                 self.request_battle_plus_actions(
                     defender,
@@ -956,6 +1041,11 @@ class BattleManager:
             not guarder.is_alive()
             or guarder.has_status("brink_of_death")
             or not guarder.guard_opportunity_available
+            or self.action_is_restricted(
+                guarder,
+                "guard",
+                "guard_phase",
+            )
         ):
             return []
         return [
@@ -1061,7 +1151,25 @@ class BattleManager:
                 self,
                 getattr(target, "current_battle", None),
             }
+            and not self.action_is_restricted(
+                character,
+                "guard",
+                "simple_round_guard",
+            )
         ]
+
+    def action_is_restricted(self, character, action_id, phase):
+        class BattleActionContext:
+            pass
+
+        context = BattleActionContext()
+        context.phase = phase
+        context.battle = self
+        return bool(restriction_reasons(
+            character,
+            get_action_definition(action_id),
+            context,
+        ))
 
     def get_global_action_order(self, characters):
         """Order characters by this turn's map order, with a safe fallback."""
@@ -1140,6 +1248,16 @@ class BattleManager:
         """Collect and lock every ally's answer before resolving any guard."""
         selected = []
         for character in self.get_simple_round_guard_candidates(state, target):
+            self._resolve_simple_delay_checkpoint(
+                "simple_round_guard",
+                character,
+                decision_provider,
+            )
+            if (
+                not character.is_alive()
+                or character.has_status("brink_of_death")
+            ):
+                continue
             choice = decision_provider.choose(DecisionRequest(
                 character=character,
                 phase="简易战斗轮—援护",
@@ -1516,12 +1634,16 @@ class BattleManager:
             reason=f"{guard_kind}_guard",
             decision_provider=decision_provider,
         )
-        result = DefenseResolver().resolve_phase(
-            guarder,
-            defense_type,
-            attacks=[attack],
-            decision_provider=decision_provider,
-        )
+        attack.forced_guard_defense = True
+        try:
+            result = DefenseResolver().resolve_phase(
+                guarder,
+                defense_type,
+                attacks=[attack],
+                decision_provider=decision_provider,
+            )
+        finally:
+            attack.forced_guard_defense = False
         entered_brink = (
             not was_in_brink
             and guarder.has_status("brink_of_death")
@@ -1628,6 +1750,16 @@ class BattleManager:
             phase,
             decision_provider,
         )
+        if (
+            incoming
+            and DefenseResolver().replaces_default_defense(
+                character,
+                incoming[0],
+            )
+        ):
+            # The replacement flow owns every prompt; do not ask for a
+            # defense which will immediately be discarded.
+            return "unopposed"
         context = ActionContext(
             actor=character,
             phase=phase,
@@ -1650,6 +1782,14 @@ class BattleManager:
             entries = [
                 entry for entry in entries if entry.action_id != "offset"
             ]
+        if not entries:
+            print(f"{character.name}没有可用的防御行动，直接进行伤害判定。")
+            return "unopposed"
+        legal_random_defenses = tuple(
+            action_id
+            for action_id in ("dodge", "block")
+            if any(entry.action_id == action_id for entry in entries)
+        )
         request = DecisionRequest(
             character=character,
             phase="防御",
@@ -1689,10 +1829,12 @@ class BattleManager:
                 decision_provider,
                 phase=phase,
             )
-        if character.has_status("random_defense") and selected in {
-            "dodge", "block"
-        }:
-            actual = random.choice(("dodge", "block"))
+        if (
+            character.has_status("random_defense")
+            and selected in {"dodge", "block"}
+            and legal_random_defenses
+        ):
+            actual = random.choice(legal_random_defenses)
             label = "闪避" if actual == "dodge" else "格挡"
             print(f"{character.name}的实际防御方式随机为{label}。")
             return actual
@@ -1771,6 +1913,64 @@ class BattleManager:
                 success=success,
                 reduction=int(reduction),
             )
+
+    def request_defense_step(
+        self,
+        character,
+        incoming_attack,
+        decision_provider,
+        *,
+        allowed_types,
+    ):
+        """Choose one additional defense step without reopening instant actions."""
+        allowed = [
+            defense_type
+            for defense_type in allowed_types
+            if not DefenseResolver.defense_is_restricted(
+                character,
+                defense_type,
+            )
+        ]
+        offset_options = (
+            get_offset_attack_options(character, incoming_attack)
+            if "offset" in allowed
+            else []
+        )
+        if "offset" in allowed and not offset_options:
+            allowed.remove("offset")
+        if not allowed:
+            return None
+        labels = {"dodge": "闪避", "block": "格挡", "offset": "抵消"}
+        selected = decision_provider.choose(DecisionRequest(
+            character=character,
+            phase="追加防御",
+            prompt="请选择追加的防御方式。",
+            options=tuple(
+                DecisionOption(labels[item], item, (item,))
+                for item in allowed
+            ),
+        ))
+        if (
+            character.has_status("random_defense")
+            and selected in {"dodge", "block"}
+        ):
+            candidates = [
+                item for item in allowed if item in {"dodge", "block"}
+            ]
+            if candidates:
+                selected = random.choice(candidates)
+                print(
+                    f"{character.name}的实际防御方式随机为"
+                    f"{labels[selected]}。"
+                )
+        if selected == "offset":
+            return self.request_offset_attempt(
+                character,
+                incoming_attack,
+                decision_provider,
+                options=offset_options,
+            )
+        return selected
 
     def request_attack_action(
         self,
@@ -1875,8 +2075,12 @@ class BattleManager:
         simple_round_effect=None,
         remote_only=False,
         reveal_direct_attack_source=False,
+        _reuse_simple_round=False,
     ):
         """Run one attack phase without placing the actor into battle."""
+        simple_round_scope = self._enter_simple_round_scope(
+            reuse=_reuse_simple_round,
+        )
         saved_character = self.current_character
         saved_phase = self.current_phase
         self.current_character = actor
@@ -1888,6 +2092,12 @@ class BattleManager:
         defense_results = []
 
         try:
+            if not _reuse_simple_round:
+                self._resolve_simple_delay_checkpoint(
+                    "simple_round_attack",
+                    actor,
+                    decision_provider,
+                )
             while actor.is_alive() and actor.attack_phase_count > 0:
                 targets = [
                     target
@@ -2025,6 +2235,7 @@ class BattleManager:
                             new_attacks,
                             decision_provider,
                             effect=simple_round_effect,
+                            _reuse_simple_round=True,
                         )
                     )
                     self.current_character = actor
@@ -2040,6 +2251,10 @@ class BattleManager:
                 actor.attack_phase_count = saved_attack_phase_count
             self.current_character = saved_character
             self.current_phase = saved_phase
+            self._leave_simple_round_scope(
+                simple_round_scope,
+                decision_provider,
+            )
 
     @staticmethod
     def has_usable_battle_plus(character):

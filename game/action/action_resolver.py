@@ -1,6 +1,13 @@
 class ActionResolver:
     def resolve(self, action, decision_provider=None):
         from game.skill.skill_action import SkillAction
+        from game.action.action_restriction import action_restriction_reasons
+
+        restriction_reasons = action_restriction_reasons(action)
+        if restriction_reasons:
+            action.ignored = True
+            action.ignored_reason = f"action_restricted:{restriction_reasons[0]}"
+            return False
 
         game_manager = getattr(action.actor, "game_manager", None)
         event_manager = getattr(game_manager, "event_manager", None)

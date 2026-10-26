@@ -1,0 +1,14 @@
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "test_examples"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "ruff.path": [
+        "${workspaceFolder}\\.venv\\Scripts\\ruff.exe"
+    ]
+}

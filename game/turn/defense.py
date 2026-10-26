@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from itertools import chain
 
 from game.action.action import Action
+from game.action.action_data import get_action_definition
+from game.action.action_restriction import restriction_reasons
 from game.resource.costs import component_activation_costs
 from game.skill.casting import (
     component_casting_requirement,
@@ -25,6 +27,7 @@ from game.skill.skill_runtime import (
 )
 from game.turn.damage import DamageEvent, DamageResolver, report_discarded_attacks
 from game.turn.roll import RollResolver
+from game.turn.decision import DecisionOption, DecisionRequest
 from game.action.action_rules import condition_matches
 from game.skill.component_runtime import component_runtime_reasons, record_component_use
 
@@ -375,7 +378,7 @@ def resolve_offset_attack_option(
 
 
 class DefenseResolver:
-    VALID_DEFENSE_TYPES = {"dodge", "block", "offset"}
+    VALID_DEFENSE_TYPES = {"dodge", "block", "offset", "unopposed"}
 
     def resolve_phase(
         self,
@@ -394,6 +397,12 @@ class DefenseResolver:
             and defense_type not in self.VALID_DEFENSE_TYPES
         ):
             raise ValueError(f"未知的防御指令：{defense_type}")
+        if (
+            isinstance(defense_type, str)
+            and defense_type != "unopposed"
+            and self.defense_is_restricted(defender, defense_type)
+        ):
+            defense_type = "unopposed"
 
         attack_count = len(attacks)
         hit_count = 0
@@ -423,29 +432,57 @@ class DefenseResolver:
             if isinstance(defense_type, OffsetAttempt)
             else defense_type
         )
-        defense_contexts = [
-            {
-                "actor": defender,
-                "source": attack,
-                "target": attack.source,
-                "action_id": defense_name,
-                "skill_id": attack.skill_id,
-                "damage_type": attack.damage_type,
-                "tags": set(attack.source_tags)
-                | {"defense", defense_name},
-                "event": attack,
-            }
-            for attack in attacks
-        ]
-        defender.modifier_manager.consume_event(
-            "defense_committed",
-            defense_contexts,
-        )
+        defense_contexts = []
+        for attack in attacks:
+            flow = getattr(attack, "defense_flow", None)
+            names = (
+                [step["defense_type"] for step in flow]
+                if flow
+                else [defense_name]
+            )
+            for name in names:
+                defense_contexts.append({
+                    "actor": defender,
+                    "source": attack,
+                    "target": attack.source,
+                    "action_id": name,
+                    "skill_id": attack.skill_id,
+                    "damage_type": attack.damage_type,
+                    "tags": set(attack.source_tags) | {"defense", name},
+                    "event": attack,
+                })
+        if any(
+            context["action_id"] != "unopposed"
+            for context in defense_contexts
+        ):
+            defender.modifier_manager.consume_event(
+                "defense_committed",
+                defense_contexts,
+            )
         return {
             "attack_count": attack_count,
             "hit_count": hit_count,
             "total_damage": total_damage,
         }
+
+    @staticmethod
+    def defense_is_restricted(defender, defense_type):
+        battle = getattr(defender, "current_battle", None)
+        phase = getattr(battle, "current_phase", "defense_phase")
+        if phase == "defense":
+            phase = "defense_phase"
+
+        class DefenseContext:
+            pass
+
+        context = DefenseContext()
+        context.phase = phase
+        context.battle = battle
+        return bool(restriction_reasons(
+            defender,
+            get_action_definition(defense_type),
+            context,
+        ))
 
     def resolve_attack(
         self,
@@ -454,6 +491,30 @@ class DefenseResolver:
         defense_type=None,
         decision_provider=None,
     ):
+        flow = self.build_defense_flow(defender, attack, defense_type)
+        if flow is not None:
+            return self.resolve_attack_flow(
+                defender,
+                attack,
+                flow,
+                decision_provider=decision_provider,
+            )
+        cancelled = self.emit_before_attack_defense(
+            defender,
+            attack,
+            decision_provider=decision_provider,
+        )
+        if cancelled is not None:
+            return cancelled
+        return self._resolve_attack_legacy(
+            defender,
+            attack,
+            defense_type,
+            decision_provider=decision_provider,
+        )
+
+    @staticmethod
+    def emit_before_attack_defense(defender, attack, decision_provider=None):
         game_manager = getattr(defender, "game_manager", None)
         event_manager = getattr(game_manager, "event_manager", None)
         if event_manager is not None:
@@ -485,6 +546,15 @@ class DefenseResolver:
                         == "attack_redirected"
                     ),
                 }
+        return None
+
+    def _resolve_attack_legacy(
+        self,
+        defender,
+        attack,
+        defense_type=None,
+        decision_provider=None,
+    ):
         attack.defense_roll_started = True
         attack.defense_type = "offset" if isinstance(defense_type, OffsetAttempt) else defense_type
         previous_roll = getattr(defender, "last_defense_roll_result", None)
@@ -505,6 +575,14 @@ class DefenseResolver:
                 attack,
                 decision_provider,
             )
+        elif defense_type == "unopposed":
+            result = self.finish_attack(
+                defender,
+                attack,
+                hit=True,
+                damage=attack.value,
+                decision_provider=decision_provider,
+            )
         else:
             raise ValueError(f"未知的防御指令：{defense_type}")
         self._emit_defense_resolved(
@@ -516,6 +594,388 @@ class DefenseResolver:
             decision_provider=decision_provider,
         )
         return result
+
+    @staticmethod
+    def _phase_scope(defender):
+        battle = getattr(defender, "current_battle", None)
+        phase = getattr(battle, "current_phase", "defense_phase")
+        if str(phase).startswith("simple_round"):
+            return phase, "simple_round"
+        return phase, "formal_battle" if battle is not None else "non_battle"
+
+    def build_defense_flow(self, defender, attack, defense_type):
+        """Return a modified ordered defense plan, or ``None`` for legacy."""
+        if getattr(attack, "forced_guard_defense", False):
+            return None
+        phase, phase_scope = self._phase_scope(defender)
+        modifiers = sorted(
+            (
+                modifier
+                for modifier in getattr(defender, "modifiers", ())
+                if (
+                    getattr(modifier, "effect_type", None)
+                    == "defense_flow_modifier"
+                    and modifier.matches_attack(
+                        attack,
+                        phase=phase,
+                        phase_scope=phase_scope,
+                    )
+                )
+            ),
+            key=lambda modifier: (
+                modifier.application_order
+                if modifier.application_order is not None
+                else float("inf")
+            ),
+        )
+        if not modifiers:
+            return None
+        flow = [{
+            "selection_mode": "preselected",
+            "selected": defense_type,
+            "defense_types": ["dodge", "block", "offset"],
+            "continue_on": "always",
+            "on_unavailable": "end",
+        }]
+        for modifier in modifiers:
+            steps = [dict(step) for step in modifier.steps]
+            for step in steps:
+                step.setdefault("continue_on", "always")
+                step.setdefault("on_unavailable", "skip")
+                step["modifier"] = modifier
+            if modifier.operation == "append":
+                flow.extend(steps)
+            elif modifier.operation == "prepend":
+                flow[0:0] = steps
+            else:
+                flow = steps
+        return flow
+
+    def replaces_default_defense(self, defender, attack):
+        """Whether the effective flow removes the ordinary defense choice."""
+        if getattr(attack, "forced_guard_defense", False):
+            return False
+        phase, phase_scope = self._phase_scope(defender)
+        return any(
+            getattr(modifier, "effect_type", None) == "defense_flow_modifier"
+            and modifier.operation == "replace"
+            and modifier.matches_attack(
+                attack,
+                phase=phase,
+                phase_scope=phase_scope,
+            )
+            for modifier in getattr(defender, "modifiers", ())
+        )
+
+    def resolve_attack_flow(
+        self,
+        defender,
+        attack,
+        flow,
+        *,
+        decision_provider=None,
+    ):
+        cancelled = self.emit_before_attack_defense(
+            defender,
+            attack,
+            decision_provider=decision_provider,
+        )
+        if cancelled is not None:
+            return cancelled
+        attack.defense_roll_started = True
+        percentages = []
+        flats = []
+        step_results = []
+        hit = True
+        offset_used = False
+
+        for index, step in enumerate(flow):
+            selected = self.select_flow_step(
+                defender,
+                attack,
+                step,
+                decision_provider=decision_provider,
+            )
+            if selected is None:
+                if step.get("on_unavailable", "skip") == "end":
+                    break
+                continue
+            result = self.resolve_flow_step(
+                defender,
+                attack,
+                selected,
+                percentages=percentages,
+                flats=flats,
+                decision_provider=decision_provider,
+            )
+            result["index"] = index
+            result["continue_on"] = step.get("continue_on", "always")
+            step_results.append(result)
+            percentages.extend(result.get("percentage_modifiers", ()))
+            flats.extend(result.get("flat_modifiers", ()))
+            offset_used = offset_used or isinstance(selected, OffsetAttempt)
+            self.emit_defense_step_resolved(
+                defender,
+                attack,
+                result,
+                decision_provider=decision_provider,
+            )
+            if result.get("ends_attack"):
+                hit = False
+                break
+            remaining = self.preview_damage(
+                defender,
+                attack,
+                percentage_modifiers=percentages,
+                flat_modifiers=flats,
+            )
+            if remaining <= 0:
+                break
+            if not self.should_continue_flow(
+                step.get("continue_on", "always"),
+                result,
+                remaining,
+            ):
+                break
+
+        attack.defense_flow = step_results
+        attack.defense_type = "+".join(
+            item["defense_type"] for item in step_results
+        ) or "unopposed"
+        if offset_used:
+            remaining_damage = self.preview_damage(
+                defender,
+                attack,
+                percentage_modifiers=percentages,
+                flat_modifiers=flats,
+            )
+            base_damage = self.preview_damage(
+                defender,
+                attack,
+                percentage_modifiers=percentages,
+            )
+            if remaining_damage <= 0 or base_damage <= 0:
+                attack.final_hit_segments = 0
+            else:
+                per_segment = base_damage / max(1, attack.original_hit_segments)
+                attack.final_hit_segments = min(
+                    attack.original_hit_segments,
+                    math.ceil(remaining_damage / per_segment),
+                )
+        result = self.finish_attack(
+            defender,
+            attack,
+            hit=hit,
+            percentage_modifiers=percentages,
+            flat_modifiers=flats,
+            decision_provider=decision_provider,
+        )
+        self.emit_flow_defense_resolved(
+            defender,
+            attack,
+            result,
+            step_results,
+            decision_provider=decision_provider,
+        )
+        return result
+
+    def select_flow_step(
+        self,
+        defender,
+        attack,
+        step,
+        *,
+        decision_provider=None,
+    ):
+        mode = step["selection_mode"]
+        allowed = [
+            defense_type
+            for defense_type in step.get("defense_types", ())
+            if not self.defense_is_restricted(defender, defense_type)
+        ]
+        battle = getattr(defender, "current_battle", None)
+        if mode == "preselected":
+            selected = step.get("selected")
+            if isinstance(selected, OffsetAttempt):
+                return selected
+            return selected if selected in allowed or selected == "unopposed" else None
+        if not allowed:
+            return None
+        if mode == "fixed":
+            selected = allowed[0]
+        elif mode == "random":
+            selected = random.choice(allowed)
+        else:
+            if battle is not None and hasattr(battle, "request_defense_step"):
+                return battle.request_defense_step(
+                    defender,
+                    attack,
+                    decision_provider,
+                    allowed_types=allowed,
+                )
+            if decision_provider is None:
+                return None
+            selected = decision_provider.choose(DecisionRequest(
+                character=defender,
+                phase="追加防御",
+                prompt="请选择追加的防御方式。",
+                options=tuple(
+                    DecisionOption(
+                        {"dodge": "闪避", "block": "格挡", "offset": "抵消"}[item],
+                        item,
+                        (item,),
+                    )
+                    for item in allowed
+                ),
+            ))
+        if selected == "offset":
+            if battle is None or not hasattr(battle, "request_offset_attempt"):
+                return None
+            return battle.request_offset_attempt(
+                defender,
+                attack,
+                decision_provider,
+            )
+        return selected
+
+    def resolve_flow_step(
+        self,
+        defender,
+        attack,
+        defense,
+        *,
+        percentages,
+        flats,
+        decision_provider=None,
+    ):
+        if isinstance(defense, OffsetAttempt):
+            if defense.defender is not defender or defense.incoming_attack is not attack:
+                raise ValueError("抵消记录与当前攻击不匹配")
+            attack.offset_attempt = defense
+            attempts = getattr(attack, "offset_attempts", None)
+            if attempts is None:
+                attempts = attack.offset_attempts = []
+            attempts.append(defense)
+            return {
+                "defense_type": "offset",
+                "success": bool(defense.success),
+                "defense_roll": getattr(defense.roll_result, "total", None),
+                "percentage_modifiers": [],
+                "flat_modifiers": [-defense.reduction],
+                "ends_attack": False,
+            }
+        if defense == "unopposed":
+            return {
+                "defense_type": "unopposed",
+                "success": False,
+                "defense_roll": None,
+                "percentage_modifiers": [],
+                "flat_modifiers": [],
+                "ends_attack": False,
+            }
+        dice, defense_roll = self.roll_defense(
+            defender,
+            defense,
+            decision_provider,
+        )
+        success = defense_roll >= attack.attack_roll
+        label = "闪避" if defense == "dodge" else "格挡"
+        print(f"{label}骰 1d10 = {dice}")
+        percentage_modifiers = []
+        if defense == "block":
+            if not success and not defender.has_status(
+                "retain_attack_phase_on_failed_defense"
+            ):
+                defender.attack_phase_count = 0
+            if not getattr(attack, "ignore_block", False):
+                percentage_modifiers.append(-defender.block_resistance)
+        return {
+            "defense_type": defense,
+            "success": success,
+            "defense_roll": defense_roll,
+            "percentage_modifiers": percentage_modifiers,
+            "flat_modifiers": [],
+            "ends_attack": defense == "dodge" and success,
+        }
+
+    @staticmethod
+    def should_continue_flow(rule, result, remaining_damage):
+        if rule == "always":
+            return True
+        if rule == "success":
+            return bool(result["success"])
+        if rule == "failure":
+            return not result["success"]
+        if rule in {"damage_remaining", "attack_remaining"}:
+            return remaining_damage > 0 and not result.get("ends_attack", False)
+        return False
+
+    @staticmethod
+    def emit_defense_step_resolved(
+        defender,
+        attack,
+        result,
+        *,
+        decision_provider=None,
+    ):
+        manager = getattr(getattr(defender, "game_manager", None), "event_manager", None)
+        if manager is None:
+            return None
+        battle = getattr(defender, "current_battle", None)
+        return manager.emit(
+            "defense_step_resolved",
+            actor=defender,
+            source=attack,
+            target=defender,
+            phase=getattr(battle, "current_phase", "defense"),
+            battle=battle,
+            position=getattr(defender, "position", None),
+            payload={
+                "attack_id": attack.attack_id,
+                "step_index": result["index"],
+                "defense_type": result["defense_type"],
+                "success": result["success"],
+                "attack_roll": attack.attack_roll,
+                "defense_roll": result["defense_roll"],
+            },
+            decision_provider=decision_provider,
+        )
+
+    @staticmethod
+    def emit_flow_defense_resolved(
+        defender,
+        attack,
+        result,
+        steps,
+        *,
+        decision_provider=None,
+    ):
+        manager = getattr(getattr(defender, "game_manager", None), "event_manager", None)
+        if manager is None:
+            return None
+        battle = getattr(defender, "current_battle", None)
+        return manager.emit(
+            "defense_resolved",
+            actor=defender,
+            source=attack,
+            target=defender,
+            value=result["damage"],
+            phase=getattr(battle, "current_phase", "defense"),
+            battle=battle,
+            position=getattr(defender, "position", None),
+            payload={
+                "attack_id": attack.attack_id,
+                "defense_type": attack.defense_type,
+                "defense_flow": [dict(item) for item in steps],
+                "success": not result["hit"],
+                "hit": result["hit"],
+                "damage": result["damage"],
+                "attack_roll": attack.attack_roll,
+                "attacker_id": getattr(attack.source, "character_id", None),
+                "attacker_name": getattr(attack.source, "name", None),
+            },
+            decision_provider=decision_provider,
+        )
 
     @staticmethod
     def _emit_defense_resolved(

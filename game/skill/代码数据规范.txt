@@ -449,7 +449,7 @@ delay_attack推迟一个已经进入pending_attacks、尚未开始防御且尚�
 delay_attack参数：
 
 effect_data.delay_turns
-    必填，必须是大于1的整数。
+    必填，必须是正整数。实际表示需要经过的同名判定阶段数量。
 
 delay_effect保存发动时的actor与目标快照，在到期时按书写顺序执行effects。目标之后
 移动不会改变这份角色目标快照。某条效果到期时不再可用，只跳过该条并继续后续效果；
@@ -458,16 +458,18 @@ delay_effect保存发动时的actor与目标快照，在到期时按书写顺序
 delay_effect参数：
 
 effect_data.delay_turns
-    必填，必须是大于1的整数。
+    必填，必须是正整数。实际表示需要经过的同名判定阶段数量。
 effect_data.effects
     必填，非空效果列表。嵌套效果继承外层目标，不能填写effect_target，也不能直接
     再嵌套delay_attack或delay_effect。
 
-二者记录被延迟内容原本即将进入的判定时间点，并在到期回合中该角色的下一个同名
-判定时间点结算。若该角色在到期回合不存在该阶段（例如未进入战斗而没有防御阶段），
-则在该全局回合结束时补结算。它们不再固定于global_turn_start结算。
-简易战斗轮阶段不形成独立的延迟目标：simple_round_attack、simple_round_guard、
-simple_round_defense分别映射到下一回合的一般attack、guard、defense阶段。
+二者记录被延迟内容原本即将进入的判定时间点。之后每次抵达同名阶段便减少一次
+delay_turns计数，归零时立即结算；正式战斗轮与简易战斗轮中的attack、guard、defense
+分别视为同名阶段，因此可以在同一全局回合内到期。
+另有数值相同、彼此独立的兜底回合计数：每个全局回合或简易战斗轮完成时减少一次，
+归零仍未遇到足够同名阶段，则在该回合末补结算。产生延迟的当前简易轮不计入自身
+兜底计数，但产生延迟的当前全局回合结束会正常计数。因此延迟1若始终没有遇到新的
+同名阶段，会在当前全局回合结束时补结算。它们不固定于global_turn_start结算。
 第一版不提供驱散、提前引爆或改变已保存目标的字段。
 
 
@@ -1392,6 +1394,27 @@ cost_modifier
     effect_data.value：修正值
     运算顺序：multiplier -> flat -> override。
 
+action_restriction
+    用于在持续时间内禁止特定主动行动。effect_data参数：
+    all_actions=false：限制全部主动行动；必须为true才作为匹配条件。
+    action_ids=[]：精确匹配行动ID。
+    action_types=[]：匹配行动类别；支持movement、investigation、perception、
+    stealth、attack、defense、recovery、escape、special、skill。
+    skill_ids=[]、component_ids=[]：匹配技能或技能单元。
+    phases=[]：限定生效阶段。
+    phase_scopes=[]：限定non_battle、formal_battle或simple_round。
+    match_mode="any"：多个行动身份条件按any或all匹配。phases与phase_scopes
+    始终作为额外生效范围，不参与any计算。
+    exclude_action_ids=[]、exclude_skill_ids=[]：匹配后仍允许的例外。
+    reason="无法执行该行动"：不可用原因。
+    至少需要all_actions=true或一个行动身份条件。多个action_restriction取并集，
+    任意一个匹配即禁止。pass和stay是系统安全出口，始终不受限制。
+    行动列表生成和正式执行前都会检查；已经提交但执行时变为非法的行动会被
+    忽略，不支付费用。全部格挡、闪避、抵消均被禁止时，不询问玩家，直接进行
+    伤害判定。random_defense只会在仍然合法的格挡与闪避中随机。
+
+
+
 shield
     effect_data.value：护盾容量
     effect_data.damage_types=["physical", "magic"]
@@ -1494,6 +1517,7 @@ damage_modifier
 cost_modifier
 magic_resistance
 movement_point_bonus
+action_restriction
 visibility_bonus
 
 
@@ -1686,3 +1710,33 @@ uses省略为1，consumption整体省略则不限次数。duration沿用状态�
             "effects": [{"effect_type": "status_immunity", "effect_data": {"tags": []}}]}]
     }
 状态视图显示tags与remaining_uses；结构化战报status_blocked记录被阻止状态及剩余次数。
+
+46. defense_flow_modifier
+-------------------------
+
+改变一次攻击的有序防御流程。默认防御流程只有玩家原本选择的一步；本效果可在其前方
+插入、后方追加，或完全替换该流程。所有步骤完成后才统一结算一次命中和伤害。
+
+effect_data：
+    calculation: append | prepend | replace，省略时为append。
+    steps: 非空步骤列表。每一步包含：
+        selection_mode: defender_choice | fixed | random
+        defense_types: dodge、block、offset的非空无重复列表；fixed必须只有一项
+        continue_on: always | success | failure | damage_remaining |
+                     attack_remaining，省略时为always
+        on_unavailable: skip | end，省略时为skip
+
+示例：先格挡，再闪避：
+    {"effect_type": "defense_flow_modifier", "effect_data": {
+        "calculation": "replace", "steps": [
+            {"selection_mode": "fixed", "defense_types": ["block"]},
+            {"selection_mode": "fixed", "defense_types": ["dodge"]}
+        ]}}
+
+每一步独立掷骰，并分别进入幸运加符和重骰窗口。格挡减伤先累计，最后统一参与伤害
+计算；格挡失败仍会失去攻击阶段，但不会阻止后续合法步骤。抵消可重复选择，每次均
+重新选择抵消攻击、支付资源并掷抵消骰。闪避成功或累计减伤使伤害归零时提前结束流程。
+action_restriction会逐步过滤防御方式；无合法选项时按on_unavailable处理。
+多份defense_flow_modifier按施加顺序依次修改流程。每一步发送
+defense_step_resolved；整个攻击只发送一次最终defense_resolved并只结算一次伤害。
+援护的“只能格挡”属于更高优先级规则，不会进入此多步骤流程。

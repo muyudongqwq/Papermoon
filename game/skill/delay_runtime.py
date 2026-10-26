@@ -18,6 +18,8 @@ class DelayedResolution:
     delay_turns: int
     checkpoint: str
     checkpoint_owner: object
+    remaining_checkpoints: int
+    fallback_rounds_remaining: int
     effects: tuple = ()
     attack: object = None
     context: dict = field(default_factory=dict)
@@ -27,6 +29,8 @@ class DelayedResolution:
     result: object = None
     resolved_checkpoint: str = None
     used_turn_end_fallback: bool = False
+    origin_simple_round_token: object = None
+    last_fallback_global_turn: int = None
 
 
 class DelayManager:
@@ -42,9 +46,9 @@ class DelayManager:
         if (
             not isinstance(delay_turns, int)
             or isinstance(delay_turns, bool)
-            or delay_turns <= 1
+            or delay_turns < 1
         ):
-            raise ValueError("delay_turns必须是大于1的整数")
+            raise ValueError("delay_turns必须是正整数")
         return delay_turns
 
     @property
@@ -68,24 +72,45 @@ class DelayManager:
             "guard_phase": "guard",
             "battle_turn_start": "turn_start",
             "battle_turn_end": "turn_end",
+            "simple_round_attack": "attack",
+            "simple_round_guard": "guard",
+            "simple_round_defense": "defense",
         }
         return aliases.get(lowered, lowered)
 
     def _checkpoint_from_context(self, actor, target, context):
         context = context or {}
         battle = context.get("battle")
-        explicit = self.normalize_checkpoint(context.get("phase"))
-        battle_phase = self.normalize_checkpoint(
-            getattr(battle, "current_phase", None)
+        explicit_raw = context.get("phase")
+        explicit_raw = (
+            str(explicit_raw).strip().lower()
+            if explicit_raw is not None
+            else None
         )
-        if battle_phase in {
+        battle_phase_raw = getattr(battle, "current_phase", None)
+        battle_phase_raw = (
+            str(battle_phase_raw).strip().lower()
+            if battle_phase_raw is not None
+            else None
+        )
+        explicit = self.normalize_checkpoint(explicit_raw)
+        battle_phase = self.normalize_checkpoint(battle_phase_raw)
+        if battle_phase_raw in {
             "turn_start", "guard", "defense", "attack", "turn_end",
             "simple_round_attack", "simple_round_guard",
             "simple_round_defense",
         }:
-            original_checkpoint = battle_phase
+            original_checkpoint = battle_phase_raw
         else:
-            original_checkpoint = explicit
+            original_checkpoint = (
+                explicit_raw
+                if explicit_raw in {
+                    "simple_round_attack",
+                    "simple_round_guard",
+                    "simple_round_defense",
+                }
+                else explicit
+            )
         if original_checkpoint is None:
             # Direct/runtime calls without a phase still receive deterministic
             # semantics.  Their corresponding checkpoint is global turn end.
@@ -105,6 +130,11 @@ class DelayManager:
         elif original_checkpoint == "simple_round_defense":
             owner = target
         return checkpoint, owner
+
+    @staticmethod
+    def _simple_round_token(context):
+        battle = (context or {}).get("battle")
+        return getattr(battle, "_active_simple_round_token", None)
 
     def _emit(
         self,
@@ -135,6 +165,8 @@ class DelayManager:
                     "name",
                     None,
                 ),
+                "remaining_checkpoints": entry.remaining_checkpoints,
+                "fallback_rounds_remaining": entry.fallback_rounds_remaining,
                 "used_turn_end_fallback": entry.used_turn_end_fallback,
                 "result": result,
             },
@@ -171,8 +203,11 @@ class DelayManager:
             delay_turns=delay_turns,
             checkpoint=checkpoint,
             checkpoint_owner=checkpoint_owner,
+            remaining_checkpoints=delay_turns,
+            fallback_rounds_remaining=delay_turns,
             effects=effects,
             context=dict(context or {}),
+            origin_simple_round_token=self._simple_round_token(context),
         )
         self.entries.append(entry)
         self._emit(
@@ -211,6 +246,8 @@ class DelayManager:
         if existing is not None:
             existing.due_turn += delay_turns
             existing.delay_turns += delay_turns
+            existing.remaining_checkpoints += delay_turns
+            existing.fallback_rounds_remaining += delay_turns
             self._emit(
                 "delayed_attack_scheduled",
                 existing,
@@ -228,8 +265,8 @@ class DelayManager:
             target,
             context,
         )
-        # Every delayed attack is judged in the target's next formal defense
-        # phase, including attacks delayed from a simple-round defense.
+        # An attack always waits for the target's next defense checkpoint.
+        # Formal and simple-round defense phases use the same normalized name.
         checkpoint = "defense"
         checkpoint_owner = target
         entry = DelayedResolution(
@@ -242,8 +279,11 @@ class DelayManager:
             delay_turns=delay_turns,
             checkpoint=checkpoint,
             checkpoint_owner=checkpoint_owner,
+            remaining_checkpoints=delay_turns,
+            fallback_rounds_remaining=delay_turns,
             attack=attack,
             context=dict(context or {}),
+            origin_simple_round_token=self._simple_round_token(context),
         )
         self.entries.append(entry)
         self._emit(
@@ -423,19 +463,24 @@ class DelayManager:
         character=None,
         decision_provider=None,
     ):
-        """Resolve due entries at the same checkpoint and for the same owner."""
+        """Advance one matching-stage count and resolve entries reaching zero."""
         checkpoint = self.normalize_checkpoint(checkpoint)
-        due = [
+        matching = [
             entry
             for entry in self.entries
             if not entry.resolved
             and not entry.cancelled
-            and entry.due_turn <= turn_number
             and entry.checkpoint == checkpoint
             and (
                 entry.checkpoint_owner is None
                 or entry.checkpoint_owner is character
             )
+        ]
+        for entry in matching:
+            entry.remaining_checkpoints -= 1
+        due = [
+            entry for entry in matching
+            if entry.remaining_checkpoints <= 0
         ]
         return self._resolve_entries(
             due,
@@ -444,35 +489,58 @@ class DelayManager:
             resolved_checkpoint=checkpoint,
         )
 
-    def resolve_turn_end_fallback(self, turn_number, decision_provider=None):
-        """Resolve due entries whose owner never reached its saved checkpoint."""
-        normal_turn_end = [
-            entry
-            for entry in self.entries
-            if not entry.resolved
-            and not entry.cancelled
-            and entry.due_turn <= turn_number
-            and entry.checkpoint == "global_turn_end"
-        ]
-        results = self._resolve_entries(
-            normal_turn_end,
-            turn_number,
-            decision_provider,
-            resolved_checkpoint="global_turn_end",
+    def advance_round_fallback(
+        self,
+        turn_number,
+        *,
+        round_kind,
+        round_token=None,
+        decision_provider=None,
+    ):
+        """Advance the independent safety clock by one completed round."""
+        due = []
+        for entry in list(self.entries):
+            if entry.resolved or entry.cancelled:
+                continue
+            if (
+                round_kind == "simple_round"
+                and round_token is not None
+                and entry.origin_simple_round_token is round_token
+            ):
+                # The simple round that created the delay is not a later round.
+                continue
+            if round_kind == "global_turn":
+                if entry.last_fallback_global_turn == turn_number:
+                    continue
+                entry.last_fallback_global_turn = turn_number
+            entry.fallback_rounds_remaining -= 1
+            if entry.fallback_rounds_remaining <= 0:
+                due.append(entry)
+        checkpoint = (
+            "simple_round_end"
+            if round_kind == "simple_round"
+            else "global_turn_end"
         )
-        due = [
-            entry
-            for entry in self.entries
-            if not entry.resolved
-            and not entry.cancelled
-            and entry.due_turn <= turn_number
-        ]
-        results.extend(self._resolve_entries(
+        return self._resolve_entries(
             due,
             turn_number,
             decision_provider,
-            resolved_checkpoint="global_turn_end",
+            resolved_checkpoint=checkpoint,
             fallback=True,
+        )
+
+    def resolve_turn_end_fallback(self, turn_number, decision_provider=None):
+        """Count a global round end, using it only as the safety fallback."""
+        # global_turn_end can itself be the saved matching checkpoint.
+        results = self.resolve_checkpoint(
+            turn_number,
+            "global_turn_end",
+            decision_provider=decision_provider,
+        )
+        results.extend(self.advance_round_fallback(
+            turn_number,
+            round_kind="global_turn",
+            decision_provider=decision_provider,
         ))
         return results
 

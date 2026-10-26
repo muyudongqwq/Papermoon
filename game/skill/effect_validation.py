@@ -63,6 +63,14 @@ _DAMAGE_EVENT_FIELDS = {
 
 
 EFFECT_SCHEMAS = {
+    "action_restriction": _schema(
+        optional={
+            "all_actions", "action_ids", "action_types", "skill_ids",
+            "component_ids", "phases", "phase_scopes", "match_mode",
+            "exclude_action_ids", "exclude_skill_ids", "reason",
+        },
+        modifier=True,
+    ),
     "hp_floor": _schema(required={"value"}, modifier=True),
     "prevent_death": _schema(optional={"hp", "hp_floor_duration", "remove_skill_when_exhausted"}),
     "add_content": _schema(
@@ -142,6 +150,9 @@ EFFECT_SCHEMAS = {
         required={"direction", "calculation", "value"},
         optional={"damage_types", "action_ids", "skill_ids", "source_tags"},
         modifier=True,
+    ),
+    "defense_flow_modifier": _schema(
+        required={"steps"}, optional={"calculation"}, modifier=True,
     ),
     "status_immunity": _schema(optional={"tags"}, modifier=True),
     "deploy_reality_marble": _schema(
@@ -794,7 +805,7 @@ def _validate_dynamic_action_definition(definition, path):
 
 def _validate_effect_data(effect_type, data, path, component_type=None):
     if effect_type in {"delay_attack", "delay_effect"}:
-        _integer(data["delay_turns"], f"{path}.delay_turns", minimum=2)
+        _integer(data["delay_turns"], f"{path}.delay_turns", minimum=1)
         if effect_type == "delay_effect":
             effects = _list(data["effects"], f"{path}.effects", nonempty=True)
             for index, nested in enumerate(effects):
@@ -1193,6 +1204,108 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
     elif effect_type == "status_immunity":
         if "tags" in data:
             _string_list(data["tags"], f"{path}.tags")
+    elif effect_type == "action_restriction":
+        if "all_actions" in data:
+            _boolean(data["all_actions"], f"{path}.all_actions")
+        for field in (
+            "action_ids", "skill_ids", "component_ids",
+            "exclude_action_ids", "exclude_skill_ids",
+        ):
+            if field in data:
+                _string_list(data[field], f"{path}.{field}")
+        if "action_types" in data:
+            _string_list(data["action_types"], f"{path}.action_types")
+            allowed_types = ACTION_TYPE_CATEGORIES | {"skill"}
+            for index, action_type in enumerate(data["action_types"]):
+                _enum(
+                    action_type,
+                    f"{path}.action_types[{index}]",
+                    allowed_types,
+                )
+        if "phases" in data:
+            _string_list(data["phases"], f"{path}.phases")
+            for index, phase in enumerate(data["phases"]):
+                _enum(phase, f"{path}.phases[{index}]", ACTION_PHASES)
+        if "phase_scopes" in data:
+            _string_list(data["phase_scopes"], f"{path}.phase_scopes")
+            for index, scope in enumerate(data["phase_scopes"]):
+                _enum(
+                    scope,
+                    f"{path}.phase_scopes[{index}]",
+                    {"non_battle", "formal_battle", "simple_round"},
+                )
+        if "match_mode" in data:
+            _enum(data["match_mode"], f"{path}.match_mode", {"any", "all"})
+        if "reason" in data:
+            _string(data["reason"], f"{path}.reason")
+        selectors = (
+            bool(data.get("all_actions", False)),
+            bool(data.get("action_ids")),
+            bool(data.get("action_types")),
+            bool(data.get("skill_ids")),
+            bool(data.get("component_ids")),
+        )
+        if not any(selectors):
+            _error(path, "至少需要all_actions=true或一个行动匹配条件")
+    elif effect_type == "defense_flow_modifier":
+        if "calculation" in data:
+            _enum(
+                data["calculation"],
+                f"{path}.calculation",
+                {"append", "prepend", "replace"},
+            )
+        steps = _list(data["steps"], f"{path}.steps", nonempty=True)
+        for index, step in enumerate(steps):
+            step_path = f"{path}.steps[{index}]"
+            _mapping(step, step_path)
+            _keys(
+                step,
+                step_path,
+                allowed={
+                    "selection_mode", "defense_types", "continue_on",
+                    "on_unavailable",
+                },
+                required={"selection_mode", "defense_types"},
+            )
+            selection_mode = step["selection_mode"]
+            _enum(
+                selection_mode,
+                f"{step_path}.selection_mode",
+                {"defender_choice", "fixed", "random"},
+            )
+            defense_types = _list(
+                step["defense_types"],
+                f"{step_path}.defense_types",
+                nonempty=True,
+            )
+            for defense_index, defense_type in enumerate(defense_types):
+                _enum(
+                    defense_type,
+                    f"{step_path}.defense_types[{defense_index}]",
+                    {"dodge", "block", "offset"},
+                )
+            if len(set(defense_types)) != len(defense_types):
+                _error(f"{step_path}.defense_types", "不能包含重复防御方式")
+            if selection_mode == "fixed" and len(defense_types) != 1:
+                _error(
+                    f"{step_path}.defense_types",
+                    "fixed步骤必须且只能指定一种防御方式",
+                )
+            if "continue_on" in step:
+                _enum(
+                    step["continue_on"],
+                    f"{step_path}.continue_on",
+                    {
+                        "always", "success", "failure",
+                        "damage_remaining", "attack_remaining",
+                    },
+                )
+            if "on_unavailable" in step:
+                _enum(
+                    step["on_unavailable"],
+                    f"{step_path}.on_unavailable",
+                    {"skip", "end"},
+                )
     elif effect_type == "damage":
         _validate_damage_type(data["damage_type"], f"{path}.damage_type")
         _validate_value_source(data, path, required=True)

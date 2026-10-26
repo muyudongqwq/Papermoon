@@ -1402,6 +1402,7 @@ def resolve_remove_content_effect(effect, target, skill, **context):
 
 
 EFFECT_HANDLERS = {
+    "action_restriction": apply_modifier_effect,
     "hp_floor": apply_modifier_effect,
     "prevent_death": resolve_prevent_death_effect,
     "add_action": resolve_add_action_effect,
@@ -1423,6 +1424,7 @@ EFFECT_HANDLERS = {
     "delay_effect": resolve_delay_effect,
     "damage": resolve_damage_effect,
     "damage_modifier": apply_modifier_effect,
+    "defense_flow_modifier": apply_modifier_effect,
     "dice_bonus": apply_modifier_effect,
     "hidden": apply_modifier_effect,
     "magic_resistance": apply_modifier_effect,

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from game.action.action_data import ACTION_DATA, get_action_definition
 from game.action.action_rules import get_condition_reasons, target_matches_rules
+from game.action.action_restriction import restriction_reasons
 from game.skill.input_runtime import is_input_expression
 
 
@@ -173,6 +174,11 @@ class ActionListBuilder:
                 }:
                     definition["name"] = "解放魔术/宝具"
             reasons = self.get_unavailable_reasons(definition, context)
+            reasons.extend(restriction_reasons(
+                context.actor,
+                definition,
+                context,
+            ))
             valid_targets = self.get_valid_targets(definition, context)
             if self.requires_selectable_target(definition) and not valid_targets:
                 reasons.append("no_valid_targets")
@@ -269,6 +275,13 @@ class ActionListBuilder:
                         True,
                     )
                 reasons = self.get_unavailable_reasons(definition, context)
+                reasons.extend(restriction_reasons(
+                    context.actor,
+                    definition,
+                    context,
+                    skill=skill,
+                    component=component,
+                ))
                 reasons.extend(component_runtime_reasons(
                     context.actor,
                     skill,

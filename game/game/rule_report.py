@@ -93,10 +93,10 @@ class RuleReportManager:
             "defense_resolved": ("attack_id", "defense_type", "success", "hit", "damage", "attack_roll", "defense_roll", "attacker_id", "attacker_name"),
             "attack_target_changed": ("attack_id", "reason", "old_target_id", "new_target_id", "old_target_name", "new_target_name"),
             "attack_group_redirected": ("attack_group_id", "reason", "old_source", "new_source", "old_targets", "new_targets"),
-            "delayed_attack_scheduled": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner"),
-            "delayed_attack_resolved": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "used_turn_end_fallback"),
-            "delayed_effect_scheduled": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner"),
-            "delayed_effect_resolved": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "used_turn_end_fallback"),
+            "delayed_attack_scheduled": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "remaining_checkpoints", "fallback_rounds_remaining"),
+            "delayed_attack_resolved": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "remaining_checkpoints", "fallback_rounds_remaining", "used_turn_end_fallback"),
+            "delayed_effect_scheduled": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "remaining_checkpoints", "fallback_rounds_remaining"),
+            "delayed_effect_resolved": ("delay_id", "delay_kind", "created_turn", "due_turn", "delay_turns", "checkpoint", "checkpoint_owner", "remaining_checkpoints", "fallback_rounds_remaining", "used_turn_end_fallback"),
         }
         public_fields = {
             "global_turn_start": ("turn_number",),
