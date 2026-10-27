@@ -7,8 +7,7 @@ SkillEditorClient beta 0.1.exe自带Python/Tkinter，可独立复制和运行。
 ## SkillEditorClient 表单试验版
 
 双击根目录 **SkillEditorClient beta 0.1.exe**，无需安装Python，不会保留后台CMD。
-此版.pyw/.vbs入口已移除；旧版Start_Skill_Editor.cmd仍可照常使用。
-两个版本默认共用同一个内容项目，修改条目仍需手动保存。
+源码可通过`Start_SkillEditorClient.vbs`启动，修改条目仍需手动保存。
 exe以自身所在文件夹为基准读取userdata/catalog.json；独立复制exe时，如需已有自定义
 技能请同时复制此内容文件。exe内的Core测试也可独立运行，点击测试时才会打开交互终端。
 修改Python源码后需重新打包exe，修改内容项目不需要。
@@ -62,7 +61,7 @@ effect_data固定必填/可选参数、候选值和效果字典说明，持续�
 
 源码版的参考窗口和完整字典页签读取`SkillEditorClient/effect_dictionary.txt`。
 可修改这份展示文本，保存后重新启动源码版查看；保留效果标题便于按类型定位说明。
-开发规范另存于`game/skill/代码数据规范.txt`，旧版skilleditor读取这份文件；两份内容不自动同步。
+开发规范另存于`game/skill/代码数据规范.txt`；两份内容不自动同步。
 beta 0.1 exe内置打包时的客户端展示字典；之后修改外部文本不会自动更新exe内部资源。
 
 ## 启动Core
@@ -102,9 +101,9 @@ beta 0.1 exe内置打包时的客户端展示字典；之后修改外部文本�
 GM指令格式见`help`。角色名较长时可复制名称，包含空格的名称要使用双引号；
 不要将A/B标记省略，以免指定到错误角色。
 
-## Skill Editor
+## SkillEditorClient高级JSON设置
 
-双击根目录的 **Start_Skill_Editor.cmd**，打开窗口式JSON编辑器。
+双击根目录的 **Start_SkillEditorClient.vbs**，打开当前技能编辑器；复杂结构可在“条目高级设置”中编辑JSON。
 
 1. 左侧按类别浏览或搜索已有技能、魔术、宝具及角色卡；右侧编辑完整定义。
 2. **复制为新条目**可以基于现有定义创建变体；**新建**提供六种可校验模板，包含职介技能。
@@ -112,7 +111,7 @@ GM指令格式见`help`。角色名较长时可复制名称，包含空格的名
 4. **效果字典与格式参考**页提供现有规范。
 5. **导入条目 / 导出条目**交换单个JSON条目；**打开项目**切换整份内容项目。
 6. **恢复内置 / 删除自定义条目**撤销对应覆盖。仍被角色卡引用的自定义技能不能删除。
-7. **启动Core测试**用当前已保存项目打开独立终端，再选择测试场景。
+7. **技能测试**用当前已保存项目打开独立的技能测试终端。
 
 这一版是完整定义的JSON编辑器，尚未把44个效果的每个字段制作成表单。
 编辑器负责数据编辑和调用校验器，全部结算由Core复用原规则。
@@ -168,12 +167,12 @@ python -m core --menu
 python -m core --scenario battle --seed 20261021
 python -m core --scenario map
 python -m core --check
-python -m skilleditor
+python -m SkillEditorClient
 python -m core --menu --catalog userdata/catalog.json
 ```
 
-`game`集中保存规则实现，`core`提供终端界面与测试入口，`skilleditor`提供本地编辑
-窗口，`test_examples`保留测试和样本。`python main.py`和两个双击启动器继续可用；
+`game`集中保存规则实现，`core`提供终端界面与测试入口，`SkillEditorClient`提供本地编辑
+窗口，`test_examples`保留测试和样本。`python main.py`和当前双击启动器继续可用；
 规则模块导入现统一为`game.*`。目录整理后请重新打开正在运行的Core或编辑器，
 需要保留的编辑草稿先保存。userdata项目及测试记录位置不变。
 

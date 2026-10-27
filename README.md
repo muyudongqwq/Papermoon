@@ -10,7 +10,7 @@ Papermoon 是节点地图、全局回合与战斗回合共同驱动的文字规�
 | [core/](core/) | 终端运行与内容项目接入层。提供测试菜单、人工决策提示、实战场景和运行记录；`catalog.py`负责加载自定义内容、全项目校验、备份及跨进程保存保护，包入口同时导出常用内核接口。 |
 | [SkillEditorClient/](SkillEditorClient/) | 当前使用的技能与状态编辑器。提供技能单元、可选分支、触发事件、条件、消耗和效果参数表单，以及只读效果参考；职介技能以JSON编辑为主，“测试程序”单独使用表单。还包含源码启动和exe构建入口。 |
 | [CharacterEditorClient/](CharacterEditorClient/) | 独立角色卡编辑器。编辑御主、从者的名称、属性与等级，自动分配ID；选择固有技能，以及御主的基础魔术或从者的职介技能。与技能编辑器共享内容项目，礼装和宝具选择入口预留。 |
-| [skilleditor/](skilleditor/) | 保留的原版JSON编辑器，支持技能、状态及角色卡等目录条目的编辑、校验、导入导出和恢复。其JSON文档工具与DPI显示设置也被两个新编辑器复用。 |
+| [MapEditorClient/](MapEditorClient/) | PySide6可视化地图编辑器。编辑地点、建筑、高层与可连接多个地点的道路，保存画布坐标，并可转换为规则内核使用的`Map`。 |
 | [test_examples/](test_examples/) | 自动回归、真实Tk控件检查、exe分发检查、完整审计脚本及人工演示入口。实卡对战脚本用于复现决策过程、验证结算与战报。 |
 | [reference/](reference/) | 项目文档与工作记录：角色卡格式、人工测试说明、Session接口、交接进度、测试基线和代码审计报告。 |
 | [.vscode/](.vscode/) | VS Code调试配置；当前提供从`main.py`启动Papermoon的调试入口。 |
@@ -33,7 +33,7 @@ Papermoon 是节点地图、全局回合与战斗回合共同驱动的文字规�
 [test_examples/samples/](test_examples/samples/)保存测试卡和历史角色卡原文，用作录卡、裁定与回归时的对照资料；
 这些文本不会自动变成可运行角色，实际装载使用内置数据或内容项目中的定义。
 
-[skilleditor/assets/](skilleditor/assets/)保存技能编辑器共用的Papermoon图标：透明PNG用于窗口，
+[SkillEditorClient/assets/](SkillEditorClient/assets/)保存编辑器共用的Papermoon图标：透明PNG用于窗口，
 多尺寸ICO用于Windows标题栏、任务栏与exe图标，含20px、40px等九种尺寸，各尺寸均直接从原图生成。
 窗口按自身DPI分别加载大小图标，子窗口与跨屏DPI变化沿用同一处理；SkillEditorClient打包脚本会收录运行时资源。
 
@@ -48,13 +48,13 @@ Papermoon 是节点地图、全局回合与战斗回合共同驱动的文字规�
 
 ## 运行
 
-单人人工测试可直接双击 `Start_Core.cmd`，编辑内容可双击 `Start_Skill_Editor.cmd`。
-前者提供实卡直接对战、地图流程及双方选卡；后者是使用同一校验器的窗口式JSON编辑器。
+单人人工测试可直接双击 `Start_Core.cmd`，编辑内容可双击 `Start_SkillEditorClient.vbs`。
+前者提供实卡直接对战、地图流程及双方选卡；后者是当前的技能与状态表单编辑器，并保留高级JSON设置。
 详细步骤和记录位置见[操作说明](reference/MANUAL_TESTING.md)。
 
 ```powershell
 python -m core --menu
-python -m skilleditor
+python -m SkillEditorClient
 ```
 
 启动基础终端场景：
@@ -79,7 +79,7 @@ python test_examples/audit_test_suite.py
 ```
 
 汇总保存到 `test_examples/results/regression_audit.json`。当前已建立`core`与
-`skilleditor`两个入口：规则复用原实现，编辑改动通过独立JSON项目在启动时加载。
+`SkillEditorClient`两个入口：规则复用原实现，编辑改动通过独立JSON项目在启动时加载。
 
 ## 通用角色卡
 
@@ -202,7 +202,7 @@ SkillEditorClient的“状态”分类提供表单：名称、说明保持显示
 
 回退方式：取消工具栏“状态表单”勾选，当前完整草稿转回原JSON编辑，再勾选可返回表单。
 切换不自动保存，不完整草稿会阻止切换并原样保留；结构不支持的导入内容仍可直接用JSON修复。
-状态数据格式和规则引擎没有修改，原skilleditor仍可读写同一内容项目；保存沿用catalog.json.bak备份。
+状态数据格式和规则引擎没有修改；保存沿用catalog.json.bak备份。
 若要默认关闭实验入口，可将SkillEditorClient/status_form.py的ENABLE_STATUS_FORM设为False。
 实验表单保留独立接入和回退开关，未迁移或批量改写userdata，当前内置13项状态可无损往返。
 
@@ -232,8 +232,7 @@ SkillEditorClient的“状态”分类提供表单：名称、说明保持显示
 ## SkillEditorClient 表单试验版
 
 双击根目录 [SkillEditorClient beta 0.1.exe](<SkillEditorClient beta 0.1.exe>) 打开新客户端，不附带CMD窗口。
-exe自带Python及Tkinter，可独立运行，无需另外安装Python；原版的`skilleditor`与
-`Start_Skill_Editor.cmd`照常使用。
+exe自带Python及Tkinter，可独立运行，无需另外安装Python。
 双击根目录的`Start_SkillEditorClient.vbs`直接运行当前源码，使用电脑现有Python，不显示CMD窗口。
 修改源码后关闭编辑器、再双击该脚本即可看到更新；无需在终端输入命令。
 
@@ -320,7 +319,7 @@ trigger和react在目标上方显示“触发事件”灰底表单，提供现�
 
 源码版的独立参考窗口和完整字典页签统一读取`SkillEditorClient/effect_dictionary.txt`。
 修改这份文本后，重新启动源码版即可看到更新；`game/skill/代码数据规范.txt`单独保留开发规范，
-旧版skilleditor读取该规范文件。两份文件不会自动同步，修改展示文字不会改变引擎规则。
+两份文件不会自动同步，修改展示文字不会改变引擎规则。
 
 效果的处理方式统一使用`calculation`，由effect_type限定候选值；原`operation`参数不再接受。
 `add_resource`中gain_rules同样使用`calculation`。例如资源设定使用
@@ -331,7 +330,7 @@ trigger和react在目标上方显示“触发事件”灰底表单，提供现�
 状态使用可视化表单，并保留JSON编辑切换；职介技能中仅“测试程序”启用按等级分组的技能单元/效果表单，
 保存仍使用原name/ranks结构，其他职介技能继续使用JSON编辑区。角色卡使用独立编辑器；
 宝具的通用字段可用表单，专用字段保留在技能高级设置中。
-点击“启动Core测试”时仍打开游戏交互终端，编辑器本身不需要后台终端。
+点击“技能测试”会打开专用的技能测试终端，编辑器本身不需要后台终端。
 exe中的Core同样使用自带运行环境；关闭编辑器不会关闭已启动的Core。
 
 exe默认读写自身所在目录的`userdata/catalog.json`，不受启动时工作目录影响。
@@ -389,6 +388,27 @@ exe打包检查：`python -m test_examples.smoke_skill_editor_exe`。
 双编辑器发布包检查：先设置环境变量`PAPERMOON_EDITOR_DIST`为发布目录绝对路径，运行
 `python -m unittest test_examples.smoke_skill_editor_exe test_examples.smoke_editor_pair_exe`。
 
+### 可视化地图编辑器
+
+双击`Start_MapEditorClient.vbs`，或在项目根目录运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m MapEditorClient
+```
+
+工具栏可新建、打开和保存地图，也可新建地点、连接道路和删除选中对象。地点节点可在画布中拖动；
+按住Ctrl可在左侧列表或画布中选择两个以上地点，再创建普通道路或三岔路。右侧编辑地点名称、建筑与高层属性，
+道路属性列出全部连接地点。地图默认保存到`userdata/maps/*.json`，包含稳定对象ID、节点位置及规则属性；
+`MapEditorClient.model.load_map_document(path).to_game_map()`可转换为游戏内核的`Map`。
+
+Designer源文件是`ui/mapeditor.ui`，生成文件是`MapEditorClient/ui_mapeditor.py`。修改`.ui`后重新生成：
+
+```powershell
+.\.venv\Scripts\pyside6-uic.exe ui\mapeditor.ui -o MapEditorClient\ui_mapeditor.py
+```
+
+不要直接修改生成的`ui_mapeditor.py`。
+
 ## 独立角色卡编辑器 beta 0.1
 
 SkillEditorClient已去掉窗口及页签中的试验版字样，左侧不再列出角色卡，新建列表也不再提供御主卡/从者卡。
@@ -411,4 +431,4 @@ C+/B+/A+，天赋不接受加符。属性、天赋及宝具等级使用短输入
 两张内置卡可无损往返，并可保存给Core直接使用。
 技能库修改后先在技能编辑器保存，再点击角色编辑器“刷新技能库”，保留当前属性与技能草稿。
 两个窗口共享catalog.json，保存检查外部修改，避免互相覆盖；当前卡被其他窗口改动时保留草稿并报错，
-新卡ID被另一个窗口占用时，刷新后自动重新编号。保存仍保留.bak；原skilleditor入口保持独立。
+新卡ID被另一个窗口占用时，刷新后自动重新编号。保存仍保留.bak。

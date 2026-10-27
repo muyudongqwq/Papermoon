@@ -7,7 +7,7 @@ from core.catalog import parse_json
 from game.action.action_data import ACTION_PHASES, TARGET_TYPES
 from game.rank.rank import SkillRank
 from game.skill.input_runtime import validate_input_expression
-from skilleditor.documents import new_definition
+from SkillEditorClient.editor_documents import new_definition
 
 
 PHASES = tuple(p for p in (
@@ -47,6 +47,7 @@ TARGET_DESCRIPTIONS = {
     "selectable_enemy": "选择可攻击的角色，实际候选受关系、距离和目标规则限制。",
     "selectable_ally": "从自身或盟友中选择符合条件的目标。",
     "selectable_map_node": "选择符合规则的地图节点。",
+    "selectable_port": "选择除当前位置以外的码头。",
     "selectable_path": "选择符合规则的移动路径。",
     "selectable_battle_participant": "从当前战斗的正式参战角色中选择目标。",
     "guardable_battle_participant": "选择当前可以被援护的战斗参与者。",

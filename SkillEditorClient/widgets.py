@@ -5,7 +5,7 @@ from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 
 from SkillEditorClient.model import PHASES, PHASE_LABELS
-from skilleditor.documents import format_json
+from SkillEditorClient.editor_documents import format_json
 
 
 def request_layout(widget):

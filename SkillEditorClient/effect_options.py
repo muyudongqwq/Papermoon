@@ -32,6 +32,7 @@ EFFECT_NAMES = {
     "plus_bonus": "属性加符增减", "purify": "净化", "recover_resource": "资源回复",
     "remove_content": "移除已入库技能", "remove_skill": "移除技能",
     "redirect_event": "重定向攻击或伤害",
+    "relocate": "瞬间转移",
     "restore_component": "恢复技能单元次数或冷却", "shield": "护盾", "summon": "召唤",
     "switch_skill_set": "切换技能组", "trap": "设置陷阱", "visibility_bonus": "视野调整",
     "presence_concealment": "气息遮断",
@@ -60,7 +61,7 @@ NUMBER_FIELDS = {
     "minimum", "maximum", "multiplier", "flat", "attack_stat_multiplier", "attack_stat_flat",
     "attack_roll_bonus", "damage_value", "damage_multiplier", "damage_flat", "initial_die",
     "attempts", "count", "maximum_active", "base_damage", "usage_amount", "cooldown_turns",
-    "delay_turns",
+    "delay_turns", "distance",
 }
 STRING_FIELDS = {
     "match_mode",
@@ -92,6 +93,7 @@ FIELD_NAMES = {
     "rank": "等级", "scope": "范围", "name": "名称",
     "delay_turns": "延迟同名阶段数", "effects": "到期执行的效果列表",
     "steps": "有序防御步骤",
+    "distance": "最大转移距离（格）",
 }
 
 

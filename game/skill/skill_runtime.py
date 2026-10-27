@@ -31,6 +31,7 @@ from game.turn.decision import (
     TerminalDecisionProvider,
 )
 from game.skill.survival_runtime import resolve_prevent_death_effect
+from game.skill.relocation_runtime import relocation_destinations, resolve_relocate_effect
 from game.resource.costs import (
     SkillUnavailableError, PaidCosts, available_resource as _available_resource,
     costs_at, pay_costs, resolved_cost, validate_costs, component_activation_costs, default_noble_costs,
@@ -1443,6 +1444,7 @@ EFFECT_HANDLERS = {
     "purify": resolve_purify_effect,
     "recover_resource": resolve_recover_resource_effect,
     "redirect_event": resolve_redirect_event_effect,
+    "relocate": resolve_relocate_effect,
     "remove_content": resolve_remove_content_effect,
     "remove_skill": resolve_skill_mutation_effect,
     "restore_component": resolve_restore_component_effect,
@@ -2074,6 +2076,8 @@ def load_basic_magic(character, magic_id):
 
 
 def _effect_is_usable(effect, target, actor=None, source_skill=None):
+    if effect.get("effect_type") == "relocate":
+        return bool(relocation_destinations(target, effect.get("effect_data", {})))
     if effect.get("effect_type") == "restore_component":
         data = effect.get("effect_data", {})
         if target is not actor and not data.get("allow_other", False):
@@ -2604,6 +2608,7 @@ def resolve_skill_component(
             results.append({"effect": effect, "skipped": True})
             continue
         effect_context = dict(context)
+        effect_context["releasing_casting_state"] = state if casting_prepaid else None
         effect_context.setdefault("paid_costs", paid)
         effect_context.setdefault("actual_mp_cost", paid.get("mp", 0))
         effect_context.setdefault(

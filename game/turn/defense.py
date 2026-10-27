@@ -360,6 +360,7 @@ def resolve_offset_attack_option(
             actual_mp_cost=paid.get("mp", 0),
             skill_application_id=application_id,
             skill_component_id=component.get("component_id"),
+            releasing_casting_state=state if casting_prepaid else None,
         ))
 
     record_component_use(character, skill, component, turn_number=turn_number,

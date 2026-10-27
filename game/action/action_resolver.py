@@ -69,6 +69,8 @@ class ActionResolver:
 
         elif action.action_id == "move":result = action.move()
 
+        elif action.action_id == "board_boat":result = action.board_boat()
+
         elif action.action_id == "pass":result = action.pass_action()
 
         elif action.action_id == "investigate":result = action.investigate(decision_provider)

@@ -26,8 +26,8 @@ from SkillEditorClient.trigger_editor import EVENT_OPTIONS
 from SkillEditorClient.widgets import Collapsible
 from SkillEditorClient.effect_options import EFFECT_TYPES, FORM_EFFECT_TYPES, parameter_options
 from game.status.data import STATUS_DATA
-from skilleditor.display import enable_high_dpi
-from skilleditor.documents import format_json, new_definition
+from SkillEditorClient.display import enable_high_dpi
+from SkillEditorClient.editor_documents import format_json, new_definition
 
 
 class SkillEditorClientSmokeTests(unittest.TestCase):
@@ -574,6 +574,22 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
         effect.data.rows["ignore_shield"].value.set("")
         self.assertTrue(self.app.save())
         self.assertNotIn("ignore_shield", json.loads(self.app.form.components[0].effects[0].data.get()))
+
+    def test_relocate_distance_is_editable_and_survives_save_reload(self):
+        component = self.new().components[0]
+        component.remove_effect(component.effects[0])
+        effect = component.add_effect({"effect_type": "relocate", "effect_data": {}})
+        self.assertIsInstance(effect.data.rows["distance"].input, ttk.Entry)
+        self.assertIn("最大转移距离", effect.data.rows["distance"].label.cget("text"))
+        effect.data.rows["distance"].value.set("5")
+        self.assertTrue(self.app.save())
+        loaded = self.app.form.components[0].effects[0]
+        self.assertEqual(json.loads(loaded.data.get()), {"distance": 5})
+        loaded.data.rows["distance"].value.set("0")
+        self.assertFalse(self.app.save())
+        loaded.data.rows["distance"].value.set("")
+        self.assertTrue(self.app.save())
+        self.assertEqual(json.loads(self.app.form.components[0].effects[0].data.get()), {})
 
     def test_new_resource_uses_one_chinese_name_and_plain_numeric_inputs(self):
         component = self.new().components[0]

@@ -1,4 +1,4 @@
-"""Experimental forms layered on the unchanged original editor's catalog UI."""
+"""Form-based skill and status editor."""
 
 from copy import copy
 from pathlib import Path
@@ -9,9 +9,9 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 import traceback
 
 from core.catalog import CatalogProject, DEFAULT_CATALOG, DATA_ROOT, parse_json
-from skilleditor.app import SkillEditor
-from skilleditor.display import enable_high_dpi
-from skilleditor.documents import KINDS, format_json, parse_entry
+from SkillEditorClient.base_editor import SkillEditor
+from SkillEditorClient.display import enable_high_dpi
+from SkillEditorClient.editor_documents import KINDS, format_json, parse_entry
 from SkillEditorClient import VERSION
 from SkillEditorClient.dialogs import ask_new_skill
 from SkillEditorClient.forms import SkillForm
@@ -289,7 +289,7 @@ class SkillEditorClient(SkillEditor):
             # Core keeps working even when the editor is closed first.
             subprocess.Popen(core_command(self.project.path), cwd=DATA_ROOT, creationflags=flags,
                              env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"})
-            self.status.set("Core已在独立终端启动；已运行的游戏不受后续编辑影响。")
+            self.status.set("技能测试已在独立终端启动；已运行的测试不受后续编辑影响。")
         except Exception as error:
             self.error(error)
 

@@ -14,6 +14,7 @@ from game.character import list_character_cards
 from game.character.card_factory import get_character_card_definition
 from core.catalog import CatalogProject, DEFAULT_CATALOG, DATA_ROOT
 from core.scenarios import create_manual_scenario, start_manual_scenario
+from core.skill_test import create_skill_test_scenario
 from game.game.rule_report import identity
 from game.game.session_view import character_view
 from core.terminal_game_runner import GameTerminalDecisionProvider, TerminalGameRunner
@@ -64,6 +65,34 @@ def choose_cards():
     return teams
 
 
+def choose_skill_test_players():
+    ids = list_character_cards()
+    if not ids:
+        raise ValueError("目录中没有可导入的角色卡")
+    print("\n技能测试 · 组建玩家方")
+    print("玩家方最多两名角色；输入fixed可加入一名固定数据友军NPC。")
+    print("输入done结束选择。")
+    for index, key in enumerate(ids, 1):
+        data = get_character_card_definition(key)
+        kind = "御主" if data["character_type"] == "master" else "从者"
+        print(f"  {index}. {data['name']} [{kind} / {key}]")
+    chosen = []
+    while len(chosen) < 2:
+        answer = input(f"玩家角色{len(chosen) + 1}（编号、卡ID或fixed）：").strip()
+        if answer.casefold() in {"done", "finish", "完成"}:
+            if chosen:
+                break
+            print("至少加入一名玩家方角色。")
+            continue
+        if answer.isdigit() and 1 <= int(answer) <= len(ids):
+            answer = ids[int(answer) - 1]
+        if answer == "fixed" or answer in ids:
+            chosen.append(answer)
+            continue
+        print("请选择列表中的角色卡、fixed或done。")
+    return chosen
+
+
 def menu(teams):
     while True:
         print("\nPapermoon core · 单人人工测试")
@@ -86,7 +115,8 @@ def menu(teams):
 
 
 def run_manual(project, *, scenario="battle", teams=None, seed=None, maximum_turns=120,
-               log_root=DATA_ROOT / "userdata" / "runs", input_func=input, output_func=print):
+               log_root=DATA_ROOT / "userdata" / "runs", input_func=input, output_func=print,
+               test_master_card="master_test_0", test_servant_card="servant_test_0"):
     if seed is None:
         seed = random.SystemRandom().randrange(2**32)
     random_state = random.getstate()
@@ -100,7 +130,14 @@ def run_manual(project, *, scenario="battle", teams=None, seed=None, maximum_tur
                 redirect_stdout(Transcript(sys.stdout, transcript)), project.activate():
             snapshot = {"format_version": 2, **project.effective()}
             (folder / "catalog.json").write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
-            game = create_manual_scenario(scenario, teams=teams, maximum_turns=maximum_turns)
+            if scenario == "skill_test":
+                game = create_skill_test_scenario(
+                    teams,
+                    test_master_card=test_master_card,
+                    test_servant_card=test_servant_card,
+                )
+            else:
+                game = create_manual_scenario(scenario, teams=teams, maximum_turns=maximum_turns)
 
             def write_report(record, _context):
                 journal.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n")
@@ -122,6 +159,9 @@ def run_manual(project, *, scenario="battle", teams=None, seed=None, maximum_tur
             print(f"\n场景：{scenario} | 随机种子：{seed}")
             print("辅助指令：help、status、status all、map、position、grail、commandspell、quit")
             print("这是单人兼任双方与GM的测试入口，status all可以查看所有存活角色。")
+            if scenario == "skill_test":
+                print("固定测试NPC会在战斗外自动往返A与C，遇到合法目标时自动宣战；战斗内由你操作。")
+                print("输入help可查看技能测试专用指令。")
             print(f"本次测试记录：{folder}\n")
             try:
                 start_manual_scenario(game)
@@ -157,10 +197,13 @@ def run_manual(project, *, scenario="battle", teams=None, seed=None, maximum_tur
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Papermoon core：本地单人人工测试")
     parser.add_argument("--menu", action="store_true", help="显示场景及角色卡选择菜单")
-    parser.add_argument("--scenario", choices=["battle", "map", "basic"], default="battle")
+    parser.add_argument("--scenario", choices=["battle", "map", "basic", "skill_test"], default="battle")
+    parser.add_argument("--skill-test", action="store_true", help="直接进入技能测试终端")
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument("--master-card", default="master_test_0")
     parser.add_argument("--servant-card", default="servant_test_0")
+    parser.add_argument("--test-master-card", default="master_test_0")
+    parser.add_argument("--test-servant-card", default="servant_test_0")
     parser.add_argument("--seed", type=int)
     parser.add_argument("--maximum-turns", type=int, default=120)
     parser.add_argument("--check", action="store_true", help="只校验内容项目，不开始游戏")
@@ -175,10 +218,17 @@ def main(argv=None):
             return 0
         teams = [(args.master_card, args.servant_card)] * 2
         with project.activate():
-            scenario, teams = menu(teams) if args.menu else (args.scenario, teams)
+            if args.skill_test:
+                scenario, teams = "skill_test", choose_skill_test_players()
+            else:
+                scenario, teams = menu(teams) if args.menu else (args.scenario, teams)
+                if scenario == "skill_test":
+                    teams = choose_skill_test_players()
         if scenario is not None:
             run_manual(project, scenario=scenario, teams=teams, seed=args.seed,
-                       maximum_turns=args.maximum_turns)
+                       maximum_turns=args.maximum_turns,
+                       test_master_card=args.test_master_card,
+                       test_servant_card=args.test_servant_card)
         return 0
     except (EOFError, KeyboardInterrupt):
         print("\n已退出启动菜单。")

@@ -17,7 +17,7 @@ from CharacterEditorClient.dialogs import NewCardDialog
 from CharacterEditorClient.model import new_card, display_attribute
 from SkillEditorClient.app import SkillEditorClient
 from SkillEditorClient.launcher import character_editor_command
-from skilleditor.display import enable_high_dpi
+from SkillEditorClient.display import enable_high_dpi
 
 
 class CharacterEditorSmokeTests(unittest.TestCase):

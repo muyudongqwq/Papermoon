@@ -6,6 +6,10 @@ class DecisionRefreshRequested(Exception):
     """An immediate effect invalidated the options of an open decision."""
 
 
+class BattleFlowCleared(Exception):
+    """A GM command ended active battles while a decision was open."""
+
+
 @dataclass(frozen=True)
 class DecisionOption:
     """A value that can be selected by number, label, or an alias."""

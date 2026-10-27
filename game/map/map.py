@@ -95,11 +95,16 @@ class Location:
         name,
         high_level=False,
         is_building=False,
+        is_port=False,
         _area_root=None,
     ):
+        if is_port and (is_building or high_level or _area_root is not None):
+            raise ValueError("码头不能是建筑、拥有高层或作为高层地点")
         self.name = name
         self.high_level = bool(high_level)
         self.is_building = is_building
+        self.is_port = bool(is_port)
+        self.is_boat = False
 #保存了地点的名称和是否是建筑，是否拥有高层
         self.connected_locations = []
         self.status = set()
@@ -114,6 +119,7 @@ class Location:
                 f"{name}{HIGH_LEVEL_NAME_SUFFIX}",
                 high_level=False,
                 is_building=is_building,
+                is_port=False,
                 _area_root=self,
             )
             self.high_level_location = upper_level

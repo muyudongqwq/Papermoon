@@ -58,7 +58,7 @@ class SkillEditorClientModelTests(unittest.TestCase):
         self.assertEqual(new_personal_skill_key({"10": {}, "12": {}}), "13")
 
     def test_class_template_is_unchanged(self):
-        from skilleditor.documents import new_definition
+        from SkillEditorClient.editor_documents import new_definition
         self.assertEqual(new_client_definition("职介技能", "测试"), new_definition("职介技能", "测试"))
 
     def test_ap_resource_requires_either_map_phase(self):

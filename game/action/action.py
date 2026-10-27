@@ -113,6 +113,18 @@ class Action:
 
         return True
 
+    def board_boat(self):
+        actor = self.actor
+        manager = self.game_manager or getattr(actor, "game_manager", None)
+        if manager is None:
+            return False
+        return manager.boat_manager.board(
+            actor,
+            self.target,
+            turn=self.game_turn,
+            ap_layer=self.ap_layer,
+        )
+
     def investigate(self, decision_provider=None):
         actor = self.actor
         if (

@@ -433,7 +433,7 @@ class GameLoop:
                 ap_layer=ap_layer,
             )
 
-        if action_id in {"attack", "direct_attack", "join_battle"}:
+        if action_id in {"attack", "direct_attack", "join_battle", "board_boat"}:
             target = self.choose_target(character, entry.valid_targets, ap_layer, allow_refresh=True)
             if target is None:
                 return None

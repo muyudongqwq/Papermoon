@@ -1,4 +1,4 @@
-"""Tk desktop JSON editor using the core's own validators and catalogs."""
+"""Shared catalog window foundation used by SkillEditorClient."""
 
 from copy import copy
 import os
@@ -10,8 +10,8 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from core.catalog import BUILTINS, CATEGORIES, CatalogProject, DEFAULT_CATALOG, ROOT, parse_json
-from skilleditor.documents import KINDS, LABELS, copy_definition, format_json, new_definition, parse_entry
-from skilleditor.display import configure_display, enable_high_dpi, configure_skill_editor_icon
+from SkillEditorClient.editor_documents import KINDS, LABELS, copy_definition, format_json, new_definition, parse_entry
+from SkillEditorClient.display import configure_display, enable_high_dpi, configure_skill_editor_icon
 
 
 class SkillEditor:
@@ -35,7 +35,7 @@ class SkillEditor:
         for label, command in (("打开项目", self.open_project), ("保存条目", self.save),
                                ("校验", self.validate), ("整理JSON", self.format),
                                ("导入条目", self.import_entry), ("导出条目", self.export_entry),
-                               ("启动Core测试", self.launch_core)):
+                               ("技能测试", self.launch_core)):
             ttk.Button(toolbar, text=label, command=command).pack(side="left", padx=3)
         self.path_label = ttk.Label(self.root, padding=(12, 0, 12, 6))
         self.path_label.pack(fill="x")
@@ -314,9 +314,9 @@ class SkillEditor:
             if python.name.casefold() == "pythonw.exe":
                 python = python.with_name("python.exe")
             flags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
-            subprocess.Popen([str(python), "-m", "core", "--menu", "--pause-on-exit", "--catalog", str(self.project.path)],
+            subprocess.Popen([str(python), "-m", "core", "--skill-test", "--pause-on-exit", "--catalog", str(self.project.path)],
                              cwd=ROOT, creationflags=flags)
-            self.status.set("Core已在独立终端启动；已运行的游戏不受后续编辑影响。")
+            self.status.set("技能测试已在独立终端启动；已运行的测试不受后续编辑影响。")
         except Exception as error:
             self.error(error)
 

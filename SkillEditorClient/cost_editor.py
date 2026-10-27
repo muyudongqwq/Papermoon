@@ -5,7 +5,7 @@ from tkinter import ttk
 from game.resource.costs import validate_costs
 from SkillEditorClient.model import cost_value, merge_extras, optional_field, resource_options
 from SkillEditorClient.widgets import Collapsible, JsonBox, entry_row
-from skilleditor.documents import format_json
+from SkillEditorClient.editor_documents import format_json
 
 COST_TIMING_NAMES = {"activation": "技能发动时", "casting_start": "开始咏唱时预付（无需咏唱则发动时支付）", "maintenance": "回合末维持时"}
 

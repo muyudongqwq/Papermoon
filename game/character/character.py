@@ -138,6 +138,10 @@ class Character:
         self.forced_move_turn = None
         self.ap1_forfeited_turn = None
         self.is_npc = False
+        # Test harnesses may install an out-of-band death guard.  This is not
+        # a Modifier: it cannot be purified, consumed, or mistaken for a card
+        # effect under test.
+        self.test_prevent_death = False
         #是否战斗中？处于哪一场战斗中？
         self.last_defense_attack_count = 0
         self.last_defense_hit_count = 0
@@ -1127,7 +1131,8 @@ class Character:
         if new_position is not None and hasattr(new_position, "occupants"):
             if self not in new_position.occupants:
                 new_position.occupants.append(self)
-            self.seen_locations.add(new_position)
+            if not getattr(new_position, "is_boat", False):
+                self.seen_locations.add(new_position)
 
         game_manager = getattr(self, "game_manager", None)
         if game_manager is not None and hasattr(
@@ -1174,10 +1179,17 @@ class Character:
         game_manager = getattr(self, "game_manager", None)
         own_visible = []
         shareable = []
+        from game.map.boat import positions_share_visibility_space
+
         for character in characters:
             if character is self or character.position not in visible_nodes:
                 continue
-            normally_visible = not character.is_concealed_from(self)
+            if not positions_share_visibility_space(self.position, character.position):
+                continue
+            normally_visible = (
+                self.position is character.position
+                and getattr(self.position, "is_boat", False)
+            ) or not character.is_concealed_from(self)
             workshop_visible = bool(
                 game_manager is not None
                 and game_manager.field_manager.ignores_concealment(
@@ -1192,12 +1204,26 @@ class Character:
 
         if game_manager is not None:
             for character in game_manager.get_special_visible_characters(self):
-                if character is not self and character not in own_visible:
+                if (
+                    character is not self
+                    and positions_share_visibility_space(
+                        self.position,
+                        character.position,
+                    )
+                    and character not in own_visible
+                ):
                     own_visible.append(character)
             for character in game_manager.get_shareable_special_visible_characters(
                 self
             ):
-                if character is not self and character not in shareable:
+                if (
+                    character is not self
+                    and positions_share_visibility_space(
+                        self.position,
+                        character.position,
+                    )
+                    and character not in shareable
+                ):
                     shareable.append(character)
 
         return own_visible, shareable
@@ -1208,12 +1234,14 @@ class Character:
 
     def calculate_own_perception(self):
         from game.map.map import get_distance
+        from game.map.boat import positions_share_visibility_space
 
         return [
             character
             for character in self.own_perceived
             if character is not self
             and character.is_alive()
+            and positions_share_visibility_space(self.position, character.position)
             and get_distance(self.position, character.position, 5) is not None
         ]
 
@@ -1264,30 +1292,39 @@ class Character:
 
     def update_visibility(self, characters):
         from game.map.map import get_nodes_within_distance
+        from game.map.boat import positions_share_visibility_space
 
         vision_group = self.get_shared_vision_group()
         shared_visible_nodes = set()
         for character in vision_group:
             character.update_own_perception()
             character.update_own_visibility(characters)
-            shared_visible_nodes.update(get_nodes_within_distance(
-                character.position,
-                max(0, character.get_effective_visibility()),
-            ))
+            if positions_share_visibility_space(self.position, character.position):
+                shared_visible_nodes.update(get_nodes_within_distance(
+                    character.position,
+                    max(0, character.get_effective_visibility()),
+                ))
             game_manager = getattr(character, "game_manager", None)
             if game_manager is not None:
                 shared_visible_nodes.update(
                     game_manager.get_special_visible_nodes(character)
                 )
 
-        self.seen_locations.update(shared_visible_nodes)
+        self.seen_locations.update(
+            node
+            for node in shared_visible_nodes
+            if not getattr(node, "is_boat", False)
+        )
 
         shared_targets = []
         for character in vision_group:
             if character is self:
                 continue
             for target in character.shareable_own_visible:
-                if target not in shared_targets:
+                if (
+                    positions_share_visibility_space(self.position, target.position)
+                    and target not in shared_targets
+                ):
                     shared_targets.append(target)
 
         self.shared_visible = [
@@ -1301,7 +1338,10 @@ class Character:
             if character is self:
                 continue
             for target in character.own_perceived:
-                if target not in shared_perception_targets:
+                if (
+                    positions_share_visibility_space(self.position, target.position)
+                    and target not in shared_perception_targets
+                ):
                     shared_perception_targets.append(target)
 
         self.shared_perceived = [
@@ -1331,6 +1371,9 @@ class Character:
 
     def die(self):
         if self.has_status("dead"):
+            return False
+        if getattr(self, "test_prevent_death", False):
+            self.hp = max(1, self.hp)
             return False
         self.interrupt_casting(reason="death")
         self.detach_ride_group()
@@ -1485,7 +1528,7 @@ class Character:
             if self.brink_of_death_counter > 0:
                 self.brink_of_death_counter -= 1
                 self.hp = 1
-                self.enter_brink()
+                self.enter_brink(decision_provider=decision_provider)
             else:
                 self.die()
         self._emit_builtin_resource_change(
@@ -1515,7 +1558,7 @@ class Character:
         return False
 
 
-    def enter_brink(self):
+    def enter_brink(self, *, decision_provider=None):
         brink_effect = {
             "duration": 1,
             "modifier_id": "brink_of_death",
@@ -1580,6 +1623,7 @@ class Character:
                 phase="damage_resolution",
                 battle=self.current_battle,
                 position=self.position,
+                decision_provider=decision_provider,
             )
 
 

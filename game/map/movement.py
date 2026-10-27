@@ -83,6 +83,10 @@ class MovementResolver:
         # A contact record is created only after a real Encounter.  Each side's
         # next traversed directed edge is then compared at their next contact.
         self.contact_records = {}
+        # ``clear`` in the skill-test harness ends the current contact.  The
+        # same characters must separate before that exact contact can fire
+        # another Encounter, while contacts with everyone else remain live.
+        self.suppressed_until_separated = set()
 
     @staticmethod
     def _contact_key(first, second):
@@ -119,6 +123,21 @@ class MovementResolver:
             self._contact_key(first, second),
             {},
         ).clear()
+
+    def suppress_contact_until_separated(self, first, second):
+        if first is second or first.position is None or first.position is not second.position:
+            return False
+        self.suppressed_until_separated.add(self._contact_key(first, second))
+        return True
+
+    def _refresh_separation_suppressions(self):
+        self.suppressed_until_separated = {
+            pair
+            for pair in self.suppressed_until_separated
+            if len(pair) == 2
+            and next(iter(pair)).position is not None
+            and len({character.position for character in pair}) == 1
+        }
 
     def get_movement_order(self, movement_states, initiative_order):
         active_states = [c for c in movement_states
@@ -320,6 +339,7 @@ class MovementResolver:
         return True
 
     def check_encounter(self, characters, movement_states):
+        self._refresh_separation_suppressions()
         locations = {}
         for character in characters:
             pos = character.position
@@ -355,6 +375,10 @@ class MovementResolver:
 
         ]
         for pos, group in encounter_groups:
+            # 船舱内的遭遇由BoatManager在AP1 checkpoint前统一建立；
+            # 船不会和外部地图上的角色产生普通遭遇。
+            if getattr(pos, "is_boat", False):
+                continue
             encounter_group, awareness = self.get_encounter_data(group)
             if len(encounter_group) <= 1:
                 continue
@@ -407,6 +431,8 @@ class MovementResolver:
                 ):
                     continue
                 contact_key = self._contact_key(character1, character2)
+                if contact_key in self.suppressed_until_separated:
+                    continue
                 if contact_key not in contact_results:
                     contact_results[contact_key] = (
                         self.should_suppress_repeated_contact(

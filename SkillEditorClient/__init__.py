@@ -1,4 +1,4 @@
-"""Experimental form-based client; the original skilleditor stays independent."""
+"""Papermoon's form-based skill and status editor client."""
 
 VERSION = "beta 0.2"
 APPLICATION_NAME = f"SkillEditorClient {VERSION}"

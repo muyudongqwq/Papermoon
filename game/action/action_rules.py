@@ -47,6 +47,7 @@ CONDITION_FIELDS = frozenset({
     "player_character",
     "phase",
     "position_is_building",
+    "position_is_port",
     "position_required",
     "release_available",
     "required_casting",
@@ -94,6 +95,7 @@ _BOOLEAN_CONDITIONS = frozenset({
     "leader_transfer_available", "movement_locked",
     "no_command_spell_transfer", "no_pending_travel_join",
     "not_in_travel_group", "player_character", "position_is_building",
+    "position_is_port",
     "position_required", "release_available", "required_casting",
     "travel_group_leader", "event_actor_is_self", "event_source_is_self",
     "event_target_is_self",
@@ -246,6 +248,10 @@ def get_condition_reasons(condition, actor, context=None):
         actor.position is None or not actor.position.is_building
     ):
         reasons.append("position_is_not_building")
+    if condition.get("position_is_port") and (
+        actor.position is None or not getattr(actor.position, "is_port", False)
+    ):
+        reasons.append("position_is_not_port")
     servant_count = condition.get("servant_count")
     if servant_count is not None and len(getattr(actor, "servants", [])) != servant_count:
         reasons.append("servant_count_mismatch")

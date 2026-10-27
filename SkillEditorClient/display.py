@@ -18,7 +18,7 @@ def configure_skill_editor_icon(root):
     if sys.platform == "win32":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ctypes.c_wchar_p("Papermoon.SkillEditor"))
         root.iconbitmap(default=str(ICON_DIRECTORY / "papermoon.ico"))
-        from skilleditor.window_icon import WindowsWindowIcons
+        from SkillEditorClient.window_icon import WindowsWindowIcons
         root._papermoon_native_icons = WindowsWindowIcons(root, ICON_DIRECTORY / "papermoon.ico")
 
 

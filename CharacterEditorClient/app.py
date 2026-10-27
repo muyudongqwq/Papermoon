@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 from core.catalog import CatalogProject, DEFAULT_CATALOG, BUILTINS
-from skilleditor.documents import format_json
+from SkillEditorClient.editor_documents import format_json
 from SkillEditorClient.widgets import ScrollForm
 from CharacterEditorClient import APPLICATION_NAME
 from CharacterEditorClient.dialogs import ask_new_card
@@ -15,7 +15,7 @@ from CharacterEditorClient.model import new_card, next_card_id
 
 class CharacterEditorClient:
     def __init__(self, root, project=None):
-        from skilleditor.display import configure_display
+        from SkillEditorClient.display import configure_display
         self.root, self.project = root, project or CatalogProject()
         self.current, self.form, self.baseline, self.is_new = None, None, None, False
         self.items, self.loading = {}, False

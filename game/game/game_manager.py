@@ -12,6 +12,7 @@ from game.skill.summon_runtime import SummonManager
 from game.skill.delay_runtime import DelayManager
 from game.game.relationship import InformationManager, RelationshipManager
 from game.game.rule_report import RuleReportManager
+from game.map.boat import BoatManager
 
 
 class GameManager:
@@ -78,6 +79,7 @@ class GameManager:
         self.trap_manager = TrapManager(self)
         self.summon_manager = SummonManager(self)
         self.delay_manager = DelayManager(self)
+        self.boat_manager = BoatManager(self)
 
     @property
     def field_effects(self):
@@ -114,6 +116,8 @@ class GameManager:
                 pending.extend(getattr(node, "connected_locations", []))
         result = []
         for node in nodes:
+            if getattr(node, "is_boat", False):
+                continue
             candidate = get_area_root(node) if merge_area_levels else node
             if candidate not in result:
                 result.append(candidate)
@@ -168,6 +172,7 @@ class GameManager:
         return self.reality_marble_manager.collapse(reason=reason)
 
     def on_character_position_changed(self, character, old_position, new_position):
+        self.boat_manager.on_position_changed(character, old_position, new_position)
         self.command_spell_transfer_manager.on_position_changed(
             character,
             old_position,
@@ -636,13 +641,34 @@ class GameManager:
         emergency_guard_target=None,
         decision_provider=None,
     ):
-        """Move one Servant and reconcile combat/AP state without rerolls."""
+        """Apply command-spell transfer using the shared spatial-transfer rules."""
+        return self.resolve_relocation(
+            character,
+            destination,
+            emergency_guard_target=emergency_guard_target,
+            decision_provider=decision_provider,
+            reason="command_spell_teleport",
+        )
+
+    def resolve_relocation(
+        self,
+        character,
+        destination,
+        *,
+        emergency_guard_target=None,
+        decision_provider=None,
+        reason="relocate",
+    ):
+        """Move one character and reconcile combat/AP state without rerolls.
+
+        Callers own destination eligibility and costs. This common resolution
+        keeps skill transfers, command spells and GM transfers consistent.
+        """
         if not character.is_alive() or destination is character.position:
             return False
 
-        # Command-spell spatial transfer always breaks an active chant.  The
-        # casting runtime owns the corresponding MP refund.
-        character.interrupt_casting(reason="command_spell_teleport")
+        # The casting runtime owns the corresponding MP refund.
+        character.interrupt_casting(reason=reason)
         character.detach_ride_group()
 
         origin_battle = character.current_battle

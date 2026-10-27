@@ -25,6 +25,15 @@ class TerminalCommandHandler:
         "teleport": 2,
         "kill": 1,
     }
+    TEST_COMMANDS = {
+        "respawn": (1, 1),
+        "prevent_death": (2, 2),
+        "clear": (0, 0),
+        "show": (1, 2),
+        "building": (1, 1),
+        "high_building": (0, 0),
+        "reset": (1, 1),
+    }
 
     def __init__(
         self,
@@ -36,6 +45,7 @@ class TerminalCommandHandler:
         self.output = output_func
         self.decision_provider = decision_provider
         self.gm_commands = GMCommandService(game_manager)
+        self.test_service = getattr(game_manager, "skill_test_service", None)
         self.last_result = None
 
     @staticmethod
@@ -70,10 +80,8 @@ class TerminalCommandHandler:
                 f"{result['final_damage']}点{result['damage_type']}伤害。"
             )
         elif command_name == "teleport":
-            result = self.gm_commands.teleport(
-                *parameters,
-                decision_provider=self.decision_provider,
-            )
+            service = self.test_service or self.gm_commands
+            result = service.teleport(*parameters, decision_provider=self.decision_provider)
             self.output(
                 f"GM：{result['target'].name}被转移至"
                 f"{result['destination'].name}。"
@@ -84,9 +92,83 @@ class TerminalCommandHandler:
         self.last_result = result
         return True
 
+    def _format_test_show(self, result):
+        if "current" in result:
+            current = result["current"]
+            delayed = result["delayed"]
+            self.output("当前事件：" + (", ".join(
+                f"#{event.event_id}:{event.event_type}" for event in current
+            ) or "无"))
+            self.output("延迟事件：" + (", ".join(
+                f"#{entry.delay_id}:{entry.kind}@{entry.checkpoint}"
+                for entry in delayed
+            ) or "无"))
+            return
+        for actor, values in result.items():
+            if not values:
+                self.output(f"{actor.name}：无")
+                continue
+            labels = []
+            for value in values:
+                if isinstance(value, dict):
+                    labels.append(
+                        f"{value.get('name', value.get('status_id', 'status'))}"
+                        f"(duration={value.get('duration')}, stacks={value.get('stack_count')})"
+                    )
+                elif hasattr(value, "attack_id"):
+                    labels.append(
+                        f"#{value.attack_id}:{getattr(value.source, 'name', '无来源')}"
+                        f"→{getattr(value.target, 'name', '无目标')}"
+                    )
+                else:
+                    labels.append(
+                        f"{getattr(value, 'name', getattr(value, 'modifier_id', type(value).__name__))}"
+                        f"(duration={getattr(value, 'duration', None)}, stacks={getattr(value, 'stack_count', 1)})"
+                    )
+            self.output(f"{actor.name}：" + "；".join(labels))
+
+    def _handle_test_command(self, parts):
+        if self.test_service is None:
+            return False
+        name = parts[0].casefold()
+        minimum, maximum = self.TEST_COMMANDS[name]
+        parameters = parts[1:]
+        if not minimum <= len(parameters) <= maximum:
+            raise ValueError(f"{name}需要{minimum}" + (f"至{maximum}" if maximum != minimum else "") + f"个参数，实际收到{len(parameters)}个")
+        if name == "respawn":
+            actor = self.test_service.respawn(*parameters)
+            self.output(f"GM：{actor.name}已在C重新生成。")
+            result = {"target": actor}
+        elif name == "prevent_death":
+            result = self.test_service.prevent_death(*parameters)
+            names = "、".join(actor.name for actor in result["targets"])
+            self.output(f"GM：{names}的不死保护已设为{str(result['enabled']).lower()}。")
+        elif name == "clear":
+            result = self.test_service.clear()
+            self.output("GM：当前战斗已清除，测试NPC恢复巡逻。")
+        elif name == "show":
+            result = self.test_service.show(*parameters)
+            self._format_test_show(result)
+        elif name == "building":
+            node = self.test_service.building(*parameters)
+            result = {"position": node}
+            self.output(f"GM：{node.name}已设为建筑。")
+        elif name == "high_building":
+            nodes = self.test_service.high_building()
+            result = {"positions": nodes}
+            self.output("GM：所有建筑均已设为高层建筑。")
+        else:
+            matched = self.test_service.reset_skill(*parameters)
+            result = {"skills": matched}
+            self.output(f"GM：已重置{len(matched)}个角色持有的技能次数。")
+        self.last_result = result
+        return True
+
     def handle(self, command, character=None):
         normalized = str(command).strip().casefold()
         parts = self._split(command)
+        if parts and parts[0].casefold() in self.TEST_COMMANDS:
+            return self._handle_test_command(parts)
         if parts and parts[0].casefold() in self.GM_COMMANDS:
             return self._handle_gm_command(parts)
         if normalized not in self.COMMANDS:
@@ -209,3 +291,10 @@ class TerminalCommandHandler:
             "damage [target] [damage_type] [amount], "
             "teleport [target] [target_position], kill [target]"
         )
+        if self.test_service is not None:
+            self.output(
+                "技能测试：respawn [master|servant], "
+                "prevent_death [master|servant|all] [true|false], clear, "
+                "show [event|modifier|status|pending_attacks] [target?], "
+                "building [A|B|C], high_building, reset [skill_id]"
+            )

@@ -13,7 +13,7 @@ from SkillEditorClient.condition_model import (
     linear_conditions, parse_value, value_labels,
 )
 from SkillEditorClient.widgets import JsonBox, configure_gray_area, request_layout
-from skilleditor.documents import format_json
+from SkillEditorClient.editor_documents import format_json
 
 
 class ConditionRow(ttk.Frame):

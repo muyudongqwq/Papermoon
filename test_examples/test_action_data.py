@@ -31,6 +31,7 @@ class ActionDataTests(unittest.TestCase):
             set(ACTION_DATA),
             {
                 "move",
+                "board_boat",
                 "join_travel_group",
                 "invite_carry",
                 "leave_carry",

@@ -23,6 +23,7 @@ CONDITION_NAMES = {
     "no_pending_travel_join": "未提交本阶段的同行申请", "not_in_travel_group": "不在同行队伍中",
     "pending_attacks_at_least": "待防御攻击数量至少为", "player_character": "是玩家控制的角色",
     "phase": "事件发生阶段", "position_is_building": "当前地点为建筑",
+    "position_is_port": "当前地点为码头",
     "position_required": "角色有地图位置", "release_available": "存在可解放的效果",
     "required_casting": "正在咏唱", "required_status": "具有指定状态",
     "servant_count": "拥有的从者数量等于", "travel_group_leader": "是同行队伍的队长",

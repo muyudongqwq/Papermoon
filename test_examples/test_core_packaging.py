@@ -22,7 +22,7 @@ from core.catalog import (
 )
 from core.__main__ import run_manual
 from core.scenarios import create_manual_scenario
-from skilleditor.documents import KINDS, copy_definition, format_json, new_definition, parse_entry
+from SkillEditorClient.editor_documents import KINDS, copy_definition, format_json, new_definition, parse_entry
 
 
 def _save_loaded_catalog(path, ready, start, result):

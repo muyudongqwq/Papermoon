@@ -14,7 +14,7 @@ def core_command(catalog):
         if python.name.casefold() == "pythonw.exe":
             python = python.with_name("python.exe")
         command = [str(python), "-m", "core"]
-    return [*command, "--menu", "--pause-on-exit", "--catalog", str(catalog)]
+    return [*command, "--skill-test", "--pause-on-exit", "--catalog", str(catalog)]
 
 
 def character_editor_command(catalog):
@@ -82,10 +82,10 @@ def check_installation(output):
     from core.catalog import CatalogProject, DATA_ROOT, DEFAULT_CATALOG
     from SkillEditorClient.app import SkillEditorClient
     from SkillEditorClient.model import new_client_definition
-    from skilleditor.documents import new_definition
+    from SkillEditorClient.editor_documents import new_definition
     from SkillEditorClient import VERSION
     from SkillEditorClient.effect_reference import DICTIONARY_PATH
-    from skilleditor.display import enable_high_dpi
+    from SkillEditorClient.display import enable_high_dpi
 
     enable_high_dpi()
     root = tk.Tk()

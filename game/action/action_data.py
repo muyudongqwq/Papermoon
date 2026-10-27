@@ -65,10 +65,36 @@ TARGET_TYPES = {
     "selectable_character",
     "selectable_ally",
     "selectable_attribute",
+    "selectable_port",
 }
 
 
 ACTION_DATA = {
+    "board_boat": {
+        "action_id": "board_boat",
+        "name": "搭船",
+        "description": "在码头搭船前往另一座码头；只能在AP1使用并占用全部AP。",
+        "type": "active",
+        "action_type": "movement",
+        "available_phases": ["AP1"],
+        "resolution_timing": "immediate",
+        "target": "selectable_port",
+        "target_rules": {"exclude_same_position": True},
+        "condition": {
+            "actor_alive": True,
+            "battle_state": False,
+            "movement_locked": False,
+            "position_is_port": True,
+        },
+        "cost": [{"resource": "action_point", "value": 2}],
+        "effects": [{
+            "effect_type": "board_boat",
+            "effect_data": {
+                "arrival_timing": "after_all_map_movement",
+                "check_internal_encounter": True,
+            },
+        }],
+    },
     "move": {
         "action_id": "move",
         "name": "移动",
@@ -973,6 +999,7 @@ for _definition in ACTION_DATA.values():
 
 _DISPLAY_ORDER = {
     "move": 10,
+    "board_boat": 11,
     "join_travel_group": 12,
     "invite_carry": 13,
     "leave_carry": 13,

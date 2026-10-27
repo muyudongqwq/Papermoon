@@ -22,7 +22,7 @@ from SkillEditorClient.widgets import (
     UNIT_FONT, configure_gray_area,
     configure_unit_style, entry_row, request_layout, combobox_placeholder,
 )
-from skilleditor.documents import format_json
+from SkillEditorClient.editor_documents import format_json
 
 
 # Edit this text to change the note directly below the cost heading.

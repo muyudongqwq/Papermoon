@@ -10,7 +10,7 @@ from game.skill.effect_validation import EFFECT_SCHEMAS
 from SkillEditorClient.effect_options import FIELD_NAMES, parameter_options, parameter_spec, parse_parameter
 from SkillEditorClient.widgets import JsonBox, configure_gray_area, request_layout
 from SkillEditorClient.cost_editor import CostRow
-from skilleditor.documents import format_json
+from SkillEditorClient.editor_documents import format_json
 
 
 class ParameterRow(ttk.Frame):

@@ -2,6 +2,7 @@ from game.game.game_loop import GameLoop
 from core.terminal_commands import GameExitRequested, TerminalCommandHandler
 from game.game.command_spell import CommandSpellService
 from game.turn.decision import (
+    BattleFlowCleared,
     DecisionRefreshRequested,
     DecisionOption,
     DecisionRequest,
@@ -26,6 +27,11 @@ class GameTerminalDecisionProvider:
             output_func=output_func,
             decision_provider=self,
         )
+        self.skill_test_automation = None
+        if getattr(game_manager, "skill_test_service", None) is not None:
+            from core.skill_test import SkillTestAutomation
+
+            self.skill_test_automation = SkillTestAutomation(game_manager)
         self.command_spell_service = CommandSpellService(game_manager)
         self._in_command_spell_menu = False
 
@@ -162,6 +168,16 @@ class GameTerminalDecisionProvider:
                 self.output(f"{index}.{option.label}")
 
     def choose(self, request):
+        if (
+            self.skill_test_automation is not None
+            and self.skill_test_automation.handles(request)
+        ):
+            choice = self.skill_test_automation.choose(request)
+            self.output(
+                f"{request.character.name}（自动巡逻）："
+                f"{next((option.label for option in getattr(request, 'options', ()) if option.value == choice), choice)}"
+            )
+            return choice
         while True:
             self.display_request(request)
             try:
@@ -181,6 +197,11 @@ class GameTerminalDecisionProvider:
                     raise DecisionRefreshRequested()
                 continue
             if self.command_handler.handle(command, request.character):
+                if (
+                    isinstance(self.command_handler.last_result, dict)
+                    and self.command_handler.last_result.get("refresh_decision")
+                ):
+                    raise BattleFlowCleared()
                 continue
             try:
                 return request.resolve(command)

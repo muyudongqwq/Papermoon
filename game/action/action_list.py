@@ -408,7 +408,7 @@ class ActionListBuilder:
         if (
             context.phase == "AP1"
             and actor.forced_move_turn == context.turn_number
-            and definition["action_id"] != "move"
+            and definition["action_id"] not in {"move", "board_boat"}
         ):
             reasons.append("escape_requires_ap1_move")
         if (
@@ -506,6 +506,20 @@ class ActionListBuilder:
 
                 nodes = [node for node in nodes if not isinstance(node, Road)]
             return nodes
+        if target_type == "selectable_port":
+            game_manager = context.game_manager or getattr(
+                actor,
+                "game_manager",
+                None,
+            )
+            if game_manager is None:
+                return []
+            return [
+                node
+                for node in game_manager.get_map_nodes(merge_area_levels=False)
+                if getattr(node, "is_port", False)
+                and node is not actor.position
+            ]
         if target_type == "selectable_character":
             return [
                 character
@@ -718,6 +732,7 @@ class ActionListBuilder:
             "carry_candidate",
             "selectable_map_node",
             "selectable_attribute",
+            "selectable_port",
         }
 
     @staticmethod

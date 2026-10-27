@@ -12,7 +12,7 @@ from game.map.ride_group import (
 from game.turn.damage import report_discarded_attacks
 class TurnManager:
     ACTION_LAYERS = (1, 2)
-    MOVEMENT_ACTION_IDS = {"move"}
+    MOVEMENT_ACTION_IDS = {"move", "board_boat"}
     TWO_AP_ACTION_IDS = {
         "direct_attack",
         "mend",
@@ -20,6 +20,7 @@ class TurnManager:
         "chant",
         "release",
         "command_spell_transfer",
+        "board_boat",
     }
 
     @classmethod
@@ -443,20 +444,26 @@ class TurnManager:
         if controller is character:
             return None
         action = self._get_submitted_action(controller, ap_layer)
-        if action is not None and action.action_id == "move":
+        if action is not None and action.action_id in self.MOVEMENT_ACTION_IDS:
             return action
         return None
 
     def _detach_independent_movers(self, ap_layer):
         for group in self.travel_groups[:]:
             leader_action = self._get_submitted_action(group.leader, ap_layer)
-            if leader_action is not None and leader_action.action_id == "move":
+            if (
+                leader_action is not None
+                and leader_action.action_id in self.MOVEMENT_ACTION_IDS
+            ):
                 continue
             for member in group.members[:]:
                 if member is group.leader:
                     continue
                 action = self._get_submitted_action(member, ap_layer)
-                if action is not None and action.action_id == "move":
+                if (
+                    action is not None
+                    and action.action_id in self.MOVEMENT_ACTION_IDS
+                ):
                     group.remove_member(member, self.non_battle_order)
         self.refresh_travel_groups()
 
@@ -505,9 +512,9 @@ class TurnManager:
         if (
             ap_layer == 1
             and action.actor.forced_move_turn == self.turn
-            and action.action_id != "move"
+            and action.action_id not in self.MOVEMENT_ACTION_IDS
         ):
-            raise ValueError(f"{action.actor.name}的AP1必须选择移动")
+            raise ValueError(f"{action.actor.name}的AP1必须选择移动或搭船")
         if self.uses_two_ap(action):
             if ap_layer != 1:
                 raise ValueError(f"{action.action_id}只能在AP1行动层使用")
@@ -605,6 +612,8 @@ class TurnManager:
         if add_to_dead and character not in self.dead_characters:
             self.dead_characters.append(character)
         self.leave_travel_group(character)
+        if self.game_manager is not None:
+            self.game_manager.boat_manager.remove_character(character)
 
         self.current_order = [
             actor for actor in self.current_order if actor is not character
@@ -1036,6 +1045,11 @@ class TurnManager:
             return "actor_not_alive"
         if action.actor.in_battle:
             return "actor_entered_battle"
+        if (
+            self.current_ap_layer == 2
+            and getattr(action.actor, "boat_boarded_turn", None) == self.turn
+        ):
+            return "boarded_boat_ap2_locked"
         leader_movement = self.get_group_leader_movement_action(
             action.actor,
             self.current_ap_layer,
@@ -1135,6 +1149,7 @@ class TurnManager:
                 "index": 0,
                 "results": [],
                 "decision_provider": decision_provider,
+                "post_actions_processed": False,
             }
         elif self.layer_execution["ap_layer"] != ap_layer:
             raise RuntimeError("另一个AP行动层尚未执行完毕")
@@ -1196,6 +1211,26 @@ class TurnManager:
                 )
                 if encounters:
                     return self.pause_for_encounters(encounters, None)
+
+        if not execution.get("post_actions_processed", False):
+            execution["post_actions_processed"] = True
+            if self.game_manager is not None and ap_layer == 1:
+                self.update_visibility()
+                encounters = self.game_manager.boat_manager.create_internal_encounters()
+                if encounters:
+                    return self.pause_for_encounters(encounters, None)
+            elif self.game_manager is not None and ap_layer == 2:
+                arrivals = self.game_manager.boat_manager.arrive_all(self.turn)
+                if arrivals:
+                    self.refresh_travel_groups()
+                    self.refresh_ride_groups()
+                    self.update_visibility()
+                    encounters = self.movement_resolver.check_encounter(
+                        self.characters,
+                        [],
+                    )
+                    if encounters:
+                        return self.pause_for_encounters(encounters, None)
 
         results = execution["results"]
         self.layer_execution = None
@@ -1417,9 +1452,14 @@ class TurnManager:
             from game.turn.decision import TerminalDecisionProvider
             decision_provider = TerminalDecisionProvider()
 
+        from game.turn.decision import BattleFlowCleared
+
         for battle in self.battles:
             if not battle.ended:
-                battle.run_battle_turn(decision_provider)
+                try:
+                    battle.run_battle_turn(decision_provider)
+                except BattleFlowCleared:
+                    break
         # A command-spell teleport can append a participant to a battle whose
         # ordinary slot was already processed earlier in this loop.
         for battle in self.battles:
@@ -1428,7 +1468,10 @@ class TurnManager:
                 and battle.current_character is not None
                 and battle.current_phase != "round_ended"
             ):
-                battle.run_battle_turn(decision_provider)
+                try:
+                    battle.run_battle_turn(decision_provider)
+                except BattleFlowCleared:
+                    break
         self.battle_phase_pending = False
         if self.game_manager is not None:
             self.game_manager.refresh_grail_state()

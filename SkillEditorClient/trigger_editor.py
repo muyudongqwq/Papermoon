@@ -6,7 +6,7 @@ from tkinter import ttk
 
 from SkillEditorClient.model import merge_extras, optional_field
 from SkillEditorClient.widgets import Collapsible, JsonBox, configure_gray_area, request_layout
-from skilleditor.documents import format_json
+from SkillEditorClient.editor_documents import format_json
 
 
 # Only events emitted by the current engine are offered here. Keep IDs stable;

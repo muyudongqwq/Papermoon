@@ -24,8 +24,8 @@ from SkillEditorClient.status_form import (
 )
 from SkillEditorClient.trigger_editor import EVENT_OPTIONS
 from SkillEditorClient.widgets import Collapsible
-from skilleditor.display import enable_high_dpi
-from skilleditor.documents import format_json
+from SkillEditorClient.display import enable_high_dpi
+from SkillEditorClient.editor_documents import format_json
 
 
 class StatusEditorSmokeTests(unittest.TestCase):
@@ -283,7 +283,7 @@ class StatusEditorSmokeTests(unittest.TestCase):
     def test_status_export_import_remains_plain_catalog_json(self):
         self.app.load("status", "burning")
         export = Path(self.folder.name) / "status.json"
-        with patch("skilleditor.app.filedialog.asksaveasfilename", return_value=str(export)):
+        with patch("SkillEditorClient.base_editor.filedialog.asksaveasfilename", return_value=str(export)):
             self.app.export_entry()
         exported = json.loads(export.read_text(encoding="utf-8"))
         self.assertEqual(exported["definition"], STATUS_DATA["burning"])

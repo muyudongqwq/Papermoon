@@ -9,7 +9,7 @@ import tkinter as tk
 import traceback
 
 from core.catalog import CatalogProject, DEFAULT_CATALOG, DATA_ROOT
-from skilleditor.display import enable_high_dpi
+from SkillEditorClient.display import enable_high_dpi
 from CharacterEditorClient import VERSION
 from CharacterEditorClient.app import CharacterEditorClient
 

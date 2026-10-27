@@ -8,7 +8,7 @@ import unittest
 from game.character import create_character_from_card
 from core.catalog import BUILTINS, CatalogProject, empty_project
 from game.skill.class_skill_data import CLASS_SKILL_DATA
-from skilleditor.documents import copy_definition, format_json, new_definition, parse_entry
+from SkillEditorClient.editor_documents import copy_definition, format_json, new_definition, parse_entry
 
 
 class ClassSkillEditorTests(unittest.TestCase):

@@ -215,6 +215,7 @@ EFFECT_SCHEMAS = {
         required={"redirect_type", "new_target"},
         optional={"reason"},
     ),
+    "relocate": _schema(optional={"distance"}),
     "remove_content": _schema(
         required={"content_type", "content_id"},
         optional={"permanent"},
@@ -1429,6 +1430,9 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
     elif effect_type == "cancel_event":
         if "reason" in data and data["reason"] is not None:
             _string(data["reason"], f"{path}.reason")
+    elif effect_type == "relocate":
+        if "distance" in data:
+            _integer(data["distance"], f"{path}.distance", minimum=1)
     elif effect_type == "redirect_event":
         _enum(
             data["redirect_type"],

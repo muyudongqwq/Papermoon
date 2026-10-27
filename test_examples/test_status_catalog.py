@@ -26,7 +26,7 @@ from game.status.data import STATUS_DATA, marker
 from game.status.registry import validate_status_catalog, validate_status_definition
 from game.turn.damage import DamageEvent, DamageResolver
 from game.turn.decision import ScriptedDecisionProvider
-from skilleditor.documents import copy_definition, new_definition, parse_entry
+from SkillEditorClient.editor_documents import copy_definition, new_definition, parse_entry
 
 
 def damage(value=1):
