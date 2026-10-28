@@ -6,6 +6,7 @@ Run from the repository root: python test_examples/audit_test_suite.py
 import argparse
 import ast
 import contextlib
+import faulthandler
 import io
 import json
 import os
@@ -49,6 +50,9 @@ def combat_check(result):
 
 
 def main():
+    # Include native-fault stacks in the redirected audit log as well as
+    # ordinary unittest failures, without requiring a special Python flag.
+    faulthandler.enable(all_threads=True)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--combat-seeds", type=int, default=32)
     args = parser.parse_args()

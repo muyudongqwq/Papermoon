@@ -3,11 +3,16 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import tempfile
+import gc
+import threading
 import unittest
+import weakref
+from unittest.mock import patch
 from pathlib import Path
 
-from PySide6.QtCore import QPointF
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QCoreApplication, QEvent, QPointF
+from PySide6.QtWidgets import QApplication, QMessageBox
+from shiboken6 import isValid
 
 from MapEditorClient.model import load_map_document, save_map_document
 from MapEditorClient.window import MapEditorWindow
@@ -22,9 +27,63 @@ class MapEditorClientTests(unittest.TestCase):
         self.window = MapEditorWindow()
 
     def tearDown(self):
-        self.window.dirty = False
-        self.window.close()
+        self.dispose_window(self.window)
+
+    def dispose_window(self, window):
+        if isValid(window):
+            window.dirty = False
+            window.close()
+            if isValid(window):
+                window.deleteLater()
+        # processEvents() alone does not guarantee delivery of DeferredDelete
+        # when tests do not run QApplication.exec(). Keep cleanup on this thread.
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.application.processEvents()
+
+    def test_close_destroys_native_window_and_children_on_gui_thread(self):
+        window = MapEditorWindow()
+        self.addCleanup(self.dispose_window, window)
+        window.add_location("A", QPointF(0, 0))
+        scene, item = window.scene, next(iter(window.location_items.values()))
+        destroyed_threads = []
+        window.destroyed.connect(lambda: destroyed_threads.append(threading.get_ident()))
+        window.dirty = False
+        self.assertTrue(window.close())
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.application.processEvents()
+        self.assertFalse(isValid(window))
+        self.assertFalse(isValid(scene))
+        self.assertFalse(isValid(item))
+        self.assertEqual(destroyed_threads, [threading.get_ident()])
+
+    def test_cancel_close_preserves_dirty_window_and_document(self):
+        record = self.window.add_location("未保存地点", QPointF(0, 0))
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+            self.assertFalse(self.window.close())
+        self.assertTrue(isValid(self.window))
+        self.assertTrue(self.window.dirty)
+        self.assertIn(record.location_id, self.window.document.locations)
+
+    def test_closed_window_waits_for_gui_deletion_during_worker_collection(self):
+        window = MapEditorWindow()
+        window.add_location("A", QPointF(0, 0))
+        reference = weakref.ref(window)
+        destroyed_threads = []
+        window.destroyed.connect(lambda: destroyed_threads.append(threading.get_ident()))
+        window.dirty = False
+        window.close()
+        del window
+        worker = threading.Thread(target=gc.collect)
+        worker.start()
+        worker.join(timeout=5)
+        self.assertFalse(worker.is_alive())
+        self.assertIsNotNone(reference())
+        self.assertTrue(isValid(reference()))
+        self.assertEqual(destroyed_threads, [])
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.application.processEvents()
+        self.assertEqual(destroyed_threads, [threading.get_ident()])
+        self.assertTrue(reference() is None or not isValid(reference()))
 
     def test_add_connect_select_and_delete(self):
         a = self.window.add_location("A", QPointF(0, 0), is_building=True)
@@ -64,7 +123,7 @@ class MapEditorClientTests(unittest.TestCase):
                 self.assertEqual(load_map_document(path).to_dict(), other.document.to_dict())
                 self.assertFalse(other.dirty)
             finally:
-                other.close()
+                self.dispose_window(other)
 
 
 if __name__ == "__main__":

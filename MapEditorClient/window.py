@@ -21,10 +21,18 @@ from MapEditorClient.ui_mapeditor import Ui_MainWindow
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
+# Keep Python-owned top-level windows alive until Qt has delivered their
+# deferred deletion on the GUI thread. A Python cycle collector can otherwise
+# finalize a closed window from an unrelated worker while Qt dispatches events.
+_LIVE_WINDOWS = {}
+
 
 class MapEditorWindow(QMainWindow):
     def __init__(self, path=None):
         super().__init__()
+        # close() otherwise only hides this window. Let Qt destroy its native
+        # children on the GUI thread rather than a later Python GC thread.
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.document = MapDocument()
@@ -52,6 +60,9 @@ class MapEditorWindow(QMainWindow):
         self.statusBar().showMessage("新建地点后可拖动节点；按Ctrl选择两个以上地点以连接道路。")
         if path is not None:
             self.open_path(path)
+        key = id(self)
+        _LIVE_WINDOWS[key] = self
+        self.destroyed.connect(lambda _object=None, key=key: _LIVE_WINDOWS.pop(key, None))
 
     def _configure_actions(self):
         self.ui.actionNewMap.setShortcut(QKeySequence.StandardKey.New)
