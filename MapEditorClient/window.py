@@ -35,7 +35,7 @@ class MapEditorWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
-        self.document = MapDocument()
+        self.document: MapDocument | None = None
         self.current_path: Path | None = None
         self.dirty = False
         self._syncing_selection = False
@@ -56,8 +56,9 @@ class MapEditorWindow(QMainWindow):
         self._configure_actions()
         self._connect_signals()
         self._show_selection([])
+        self._update_map_action_state()
         self._update_title()
-        self.statusBar().showMessage("新建地点后可拖动节点；按Ctrl选择两个以上地点以连接道路。")
+        self.statusBar().showMessage("请先新建或打开一张地图。")
         if path is not None:
             self.open_path(path)
         key = id(self)
@@ -91,11 +92,26 @@ class MapEditorWindow(QMainWindow):
         self._update_title()
 
     def _update_title(self):
-        filename = self.current_path.name if self.current_path else "未命名地图"
+        if self.document is None:
+            filename = "未打开地图"
+        else:
+            filename = self.current_path.name if self.current_path else "未命名地图"
         marker = " *" if self.dirty else ""
         self.setWindowTitle(f"{filename}{marker} — {APPLICATION_NAME}")
 
+    def _update_map_action_state(self):
+        has_map = self.document is not None
+        for action in (
+            self.ui.actionAddLocation,
+            self.ui.actionConnectRoad,
+            self.ui.actionDeleteSelected,
+        ):
+            action.setVisible(has_map)
+        self.ui.actionSaveMap.setEnabled(has_map)
+
     def _next_location_name(self):
+        if self.document is None:
+            return "地点1"
         index = 1
         names = {record.name for record in self.document.locations.values()}
         while f"地点{index}" in names:
@@ -119,6 +135,10 @@ class MapEditorWindow(QMainWindow):
         high_level=False,
         is_port=False,
     ):
+        if self.document is None:
+            # Public/API callers may construct a map directly; the toolbar
+            # itself stays hidden until new_map/open_path establishes one.
+            self.set_document(MapDocument())
         if position is None:
             center = self.ui.mapView.viewport().rect().center()
             position = self.ui.mapView.mapToScene(center)
@@ -177,6 +197,8 @@ class MapEditorWindow(QMainWindow):
             return None
 
     def connect_location_ids(self, location_ids):
+        if self.document is None:
+            raise ValueError("请先新建或打开地图")
         road = self.document.add_road(location_ids)
         self._add_road_item(road)
         key = f"road:{road.road_id}"
@@ -235,6 +257,9 @@ class MapEditorWindow(QMainWindow):
     def _show_selection(self, keys):
         self.ui.locationPropertiesGroup.hide()
         self.ui.roadPropertiesGroup.hide()
+        if self.document is None:
+            self.ui.selectionLabel.setText("无地图")
+            return
         if len(keys) != 1:
             self.ui.selectionLabel.setText("未选择地图对象" if not keys else f"已选择 {len(keys)} 个地图对象")
             return
@@ -268,6 +293,8 @@ class MapEditorWindow(QMainWindow):
             widget.blockSignals(previous)
 
     def _selected_location(self):
+        if self.document is None:
+            return None
         keys = self.selected_keys()
         if len(keys) != 1 or not keys[0].startswith("location:"):
             return None
@@ -341,6 +368,8 @@ class MapEditorWindow(QMainWindow):
         return True
 
     def delete_keys(self, keys):
+        if self.document is None:
+            return False
         road_ids = {key.split(":", 1)[1] for key in keys if key.startswith("road:")}
         location_ids = {key.split(":", 1)[1] for key in keys if key.startswith("location:")}
         for road_id, road in list(self.document.roads.items()):
@@ -365,6 +394,8 @@ class MapEditorWindow(QMainWindow):
         self._syncing_selection = True
         try:
             self.ui.objectList.clear()
+            if self.document is None:
+                return
             for record in self.document.locations.values():
                 item = QListWidgetItem(f"地点｜{record.name}")
                 item.setData(USER_ROLE, f"location:{record.location_id}")
@@ -394,6 +425,7 @@ class MapEditorWindow(QMainWindow):
             self._add_road_item(road)
         self._rebuild_object_list()
         self._set_dirty(False)
+        self._update_map_action_state()
         self._update_title()
         if self.location_items:
             self.ui.mapView.fitInView(self.scene.itemsBoundingRect().adjusted(-80, -80, 80, 80), Qt.AspectRatioMode.KeepAspectRatio)
@@ -426,7 +458,12 @@ class MapEditorWindow(QMainWindow):
     def open_map(self):
         if not self._maybe_discard_changes():
             return False
-        path, _ = QFileDialog.getOpenFileName(self, "打开地图", str(self.maps_directory()), "Papermoon地图 (*.json)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "打开地图",
+            str(self.maps_directory()),
+            "Papermoon地图 (*.pmap)",
+        )
         return self.open_path(path) if path else False
 
     def open_path(self, path):
@@ -440,16 +477,21 @@ class MapEditorWindow(QMainWindow):
         return True
 
     def save_map(self):
+        if self.document is None:
+            return False
         path = self.current_path
         if path is None:
             filename, _ = QFileDialog.getSaveFileName(
-                self, "保存地图", str(self.maps_directory() / "新地图.json"), "Papermoon地图 (*.json)"
+                self,
+                "保存地图",
+                str(self.maps_directory() / "新地图.pmap"),
+                "Papermoon地图 (*.pmap)",
             )
             if not filename:
                 return False
             path = Path(filename)
-            if path.suffix.lower() != ".json":
-                path = path.with_suffix(".json")
+            if path.suffix.lower() != ".pmap":
+                path = path.with_suffix(".pmap")
         try:
             save_map_document(self.document, path)
         except OSError as error:

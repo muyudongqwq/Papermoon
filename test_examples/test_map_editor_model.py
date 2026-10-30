@@ -48,7 +48,7 @@ class MapEditorModelTests(unittest.TestCase):
         document = MapDocument()
         document.add_location("教会", 1.5, -2, is_building=True)
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "地图.json"
+            path = Path(folder) / "地图.pmap"
             save_map_document(document, path)
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["format"], "papermoon_map")
             self.assertEqual(load_map_document(path).to_dict(), document.to_dict())

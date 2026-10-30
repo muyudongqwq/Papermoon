@@ -398,7 +398,7 @@ exe打包检查：`python -m test_examples.smoke_skill_editor_exe`。
 
 工具栏可新建、打开和保存地图，也可新建地点、连接道路和删除选中对象。地点节点可在画布中拖动；
 按住Ctrl可在左侧列表或画布中选择两个以上地点，再创建普通道路或三岔路。右侧编辑地点名称、建筑与高层属性，
-道路属性列出全部连接地点。地图默认保存到`userdata/maps/*.json`，包含稳定对象ID、节点位置及规则属性；
+道路属性列出全部连接地点。地图默认保存到`userdata/maps/*.pmap`，包含稳定对象ID、节点位置及规则属性；
 `MapEditorClient.model.load_map_document(path).to_game_map()`可转换为游戏内核的`Map`。
 
 Designer源文件是`ui/mapeditor.ui`，生成文件是`MapEditorClient/ui_mapeditor.py`。修改`.ui`后重新生成：

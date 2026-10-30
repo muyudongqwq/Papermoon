@@ -115,7 +115,7 @@ class MapEditorClientTests(unittest.TestCase):
     def test_saved_document_can_be_opened_in_new_window(self):
         self.window.add_location("A", QPointF(0, 0))
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "map.json"
+            path = Path(folder) / "map.pmap"
             save_map_document(self.window.document, path)
             other = MapEditorWindow()
             try:
@@ -124,6 +124,22 @@ class MapEditorClientTests(unittest.TestCase):
                 self.assertFalse(other.dirty)
             finally:
                 self.dispose_window(other)
+
+    def test_map_only_actions_follow_document_state(self):
+        window = MapEditorWindow()
+        self.addCleanup(self.dispose_window, window)
+        self.assertFalse(window.ui.actionAddLocation.isVisible())
+        self.assertFalse(window.ui.actionConnectRoad.isVisible())
+        self.assertFalse(window.ui.actionDeleteSelected.isVisible())
+        self.assertFalse(window.ui.actionSaveMap.isEnabled())
+        self.assertEqual(window.ui.selectionLabel.text(), "无地图")
+        self.assertEqual(window.ui.actionNewMap.text(), "新建")
+
+        window.new_map()
+        self.assertTrue(window.ui.actionAddLocation.isVisible())
+        self.assertTrue(window.ui.actionConnectRoad.isVisible())
+        self.assertTrue(window.ui.actionDeleteSelected.isVisible())
+        self.assertTrue(window.ui.actionSaveMap.isEnabled())
 
 
 if __name__ == "__main__":

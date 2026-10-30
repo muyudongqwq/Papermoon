@@ -173,7 +173,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
-        self.actionNewMap.setText(QCoreApplication.translate("MainWindow", u"\u65b0\u5730\u56fe", None))
+        self.actionNewMap.setText(QCoreApplication.translate("MainWindow", u"\u65b0\u5efa", None))
         self.actionOpenMap.setText(QCoreApplication.translate("MainWindow", u"\u6253\u5f00", None))
         self.actionSaveMap.setText(QCoreApplication.translate("MainWindow", u"\u4fdd\u5b58", None))
         self.actionAddLocation.setText(QCoreApplication.translate("MainWindow", u"\u65b0\u5efa\u5730\u70b9", None))

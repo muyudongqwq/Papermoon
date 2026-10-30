@@ -194,7 +194,7 @@
   </widget>
   <action name="actionNewMap">
    <property name="text">
-    <string>新地图</string>
+    <string>新建</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

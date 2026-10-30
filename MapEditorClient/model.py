@@ -219,7 +219,7 @@ def load_map_document(path):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
-        raise ValueError(f"地图JSON格式错误：第{error.lineno}行第{error.colno}列") from error
+        raise ValueError(f"地图文件格式错误：第{error.lineno}行第{error.colno}列") from error
     return MapDocument.from_dict(data)
 
 
