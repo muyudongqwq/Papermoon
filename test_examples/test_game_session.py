@@ -134,6 +134,55 @@ class GameSessionTests(unittest.TestCase):
         result = GameLoop(replay, ScriptedDecisionProvider(replay_commands)).run()
         self.assertEqual(result, snapshot["result"])
 
+    def test_manual_session_waits_at_each_safe_checkpoint(self):
+        location = Location("A")
+        actor = master("Actor")
+        actor.position = location
+        game = GameManager([actor], location, maximum_turns=2)
+        session = self.attach_session(GameSession(
+            game, {actor.character_id: "p1"}, manual_turns=True,
+        ))
+        session.start()
+        first = self.wait_event(session, "safe_checkpoint")
+        self.assertEqual(session.state, "ready")
+        self.assertEqual(game.turn_manager.turn, 0)
+        with self.assertRaises(PermissionError):
+            session.request_next_turn("p1")
+        session.request_next_turn("gm")
+        request = self.wait_event(session, "decision_requested", after=first["sequence"])
+        self.answer(session, request["payload"], "空过")
+        request = self.wait_event(session, "decision_requested", after=request["sequence"])
+        self.answer(session, request["payload"], "空过")
+        completed = self.wait_event(session, "global_turn_completed", after=request["sequence"])
+        second = self.wait_event(session, "safe_checkpoint", after=completed["sequence"])
+        self.assertEqual(session.state, "ready")
+        self.assertEqual(game.turn_manager.turn, 1)
+        session.request_next_turn("gm")
+        self.finish_with_pass(session, after=second["sequence"])
+
+    def test_manual_session_accepts_gm_operation_at_safe_checkpoint(self):
+        location = Location("A")
+        actor = master("Actor")
+        actor.position = location
+        actor.hp -= 10
+        game = GameManager([actor], location, maximum_turns=1)
+        session = self.attach_session(GameSession(
+            game, {actor.character_id: "gm"}, manual_turns=True,
+        ))
+        session.start()
+        checkpoint = self.wait_event(session, "safe_checkpoint")
+        operation = session.gm_command(
+            "gm", "add_resource", target_id=actor.character_id,
+            resource="hp", amount=5,
+        )
+        completed = self.wait_event(session, "operation_completed", after=checkpoint["sequence"])
+        self.assertEqual(completed["payload"]["operation_id"], operation)
+        self.assertEqual(actor.hp, actor.hpmax - 5)
+        deadline = time.monotonic() + 2
+        while session.state != "ready" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(session.state, "ready")
+
     def test_wrong_owner_stale_version_and_raw_strings_are_rejected(self):
         session, _ = self.make_session(two=True)
         session.start()

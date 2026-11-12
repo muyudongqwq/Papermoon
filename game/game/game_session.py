@@ -1,5 +1,6 @@
 """Local threaded sessions with structured decisions; no HTTP or sockets."""
 
+from collections import deque
 from copy import deepcopy
 from threading import Lock, Thread
 from uuid import uuid4
@@ -12,6 +13,25 @@ from game.game.session_view import build_snapshot, current_known_characters, red
 
 
 class _SessionGameLoop(GameLoop):
+    def __init__(self, game_manager, decision_provider, turn_gate=None, turn_completed=None):
+        super().__init__(game_manager, decision_provider)
+        self._turn_gate = turn_gate
+        self._turn_completed = turn_completed
+
+    def run(self):
+        if self._turn_gate is None:
+            return super().run()
+        if not self.game_manager.started:
+            self.game_manager.start_game()
+        while not self.game_manager.check_game_end():
+            self._turn_gate()
+            if self.game_manager.check_game_end():
+                break
+            self.run_global_turn()
+            if self._turn_completed is not None:
+                self._turn_completed()
+        return self.get_result()
+
     def run_global_turn(self):
         self.decision_provider.checkpoint()
         return super().run_global_turn()
@@ -28,7 +48,8 @@ class GameSession:
     TERMINAL_STATES = {"completed", "stopped", "failed"}
     _ownership_lock = Lock()
 
-    def __init__(self, game_manager, controllers, *, session_id=None, gm_id="gm"):
+    def __init__(self, game_manager, controllers, *, session_id=None, gm_id="gm",
+                 manual_turns=False):
         if getattr(game_manager, "_active_session", None) is not None:
             raise ValueError("GameManager已经由另一会话运行")
         if not isinstance(gm_id, str) or not gm_id:
@@ -38,6 +59,11 @@ class GameSession:
         if not isinstance(self.session_id, str) or not self.session_id:
             raise ValueError("session_id必须是非空字符串")
         self.gm_id = gm_id
+        if not isinstance(manual_turns, bool):
+            raise ValueError("manual_turns必须是布尔值")
+        self.manual_turns = manual_turns
+        self._turn_requests = 0
+        self._safe_operations = deque()
         self._controllers = dict(controllers)
         known = {actor.character_id for actor in self._characters()}
         if len(known) != len(self._characters()):
@@ -191,7 +217,12 @@ class GameSession:
                 if getattr(self.game_manager, "_active_session", None) is not None:
                     raise ValueError("同一GameManager不能由两个会话同时运行")
                 self.game_manager._active_session = self
-                self.game_loop = _SessionGameLoop(self.game_manager, self.decision_provider)
+                self.game_loop = _SessionGameLoop(
+                    self.game_manager,
+                    self.decision_provider,
+                    self._wait_for_turn if self.manual_turns else None,
+                    self._on_turn_completed if self.manual_turns else None,
+                )
                 self.game_manager.rule_reports.subscribe(self._on_rule_report)
             self._state = "running"
             self._thread = Thread(target=self._run, name=f"Papermoon-{self.session_id}", daemon=True)
@@ -208,6 +239,77 @@ class GameSession:
                 self._state = "created"
                 raise
         return self.session_id
+
+    def _wait_for_turn(self):
+        announced = False
+        while True:
+            with self._condition:
+                self._state = "ready"
+                self._capture_views()
+                if not announced:
+                    self._events.append({
+                        "sequence": len(self._events) + 1,
+                        "session_id": self.session_id,
+                        "type": "safe_checkpoint",
+                        "payload": {"turn": self.game_manager.turn_manager.turn},
+                        "_recipient": None,
+                    })
+                    announced = True
+                self._condition.notify_all()
+                self._condition.wait_for(
+                    lambda: self._turn_requests > 0
+                    or self._safe_operations
+                    or self.decision_provider.stopping
+                )
+                self.decision_provider.checkpoint()
+                if self._turn_requests:
+                    self._turn_requests -= 1
+                    self._state = "running"
+                    self._capture_views()
+                    self._condition.notify_all()
+                    return
+                operation_id, controller_id, operation = self._safe_operations.popleft()
+                self._state = "running"
+                self._condition.notify_all()
+            try:
+                result = operation()
+            except SessionStopped:
+                raise
+            except (ValueError, PermissionError) as error:
+                self._publish("operation_failed", {
+                    "operation_id": operation_id, "error": str(error),
+                }, controller_id)
+            else:
+                self._publish("operation_completed", {
+                    "operation_id": operation_id, "result": result,
+                }, controller_id)
+
+    def _on_turn_completed(self):
+        self._publish("global_turn_completed", {
+            "turn": self.game_manager.turn_manager.turn,
+        })
+
+    def request_next_turn(self, controller_id):
+        """Allow the GM to release exactly one global turn in manual mode."""
+        self._authorize(controller_id)
+        if controller_id != self.gm_id:
+            raise PermissionError("只有GM可以推进全局回合")
+        with self._condition:
+            if not self.manual_turns:
+                raise ValueError("当前会话不是手动推进模式")
+            if self._state != "ready" or self._turn_requests:
+                raise ValueError("当前不在可推进的安全节点")
+            self._turn_requests = 1
+            self._condition.notify_all()
+
+    def _enqueue_operation(self, controller_id, operation):
+        with self._condition:
+            if self.manual_turns and self._state == "ready":
+                operation_id = uuid4().hex
+                self._safe_operations.append((operation_id, controller_id, operation))
+                self._condition.notify_all()
+                return operation_id
+        return self.decision_provider.enqueue_operation(controller_id, operation)
 
     def _run(self):
         final_state = "failed"
@@ -362,7 +464,7 @@ class GameSession:
             return {"kind": "command_spell", "effect": effect,
                     "master_id": master_id, "target_id": target_id}
 
-        return self.decision_provider.enqueue_operation(controller_id, execute)
+        return self._enqueue_operation(controller_id, execute)
 
     def gm_command(self, controller_id, command, *, target_id, **parameters):
         self._authorize(controller_id)
@@ -396,9 +498,11 @@ class GameSession:
                     layer[target] = target.position
             else:
                 result = service.kill(target)
-            return {**{key: value for key, value in result.items()
+            return {"kind": "gm_command", "command": command,
+                    **{key: value for key, value in result.items()
                        if key not in {"target", "destination", "event", "result"}},
                     "target_id": target_id,
+                    "parameters": deepcopy(parameters),
                     **({"destination_id": parameters["destination_id"]} if command == "teleport" else {})}
 
-        return self.decision_provider.enqueue_operation(controller_id, execute)
+        return self._enqueue_operation(controller_id, execute)

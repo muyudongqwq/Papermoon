@@ -118,6 +118,28 @@ def _installed(catalogs):
             CLASS_SKILL_DATA.update(previous_classes)
 
 
+def validate_catalog_bundle(catalogs):
+    """Validate one detached effective catalog, such as a save-file snapshot."""
+    if not isinstance(catalogs, dict) or set(catalogs) != set(CATEGORIES):
+        raise ValueError("内容库快照必须包含全部六类目录")
+    if any(not isinstance(catalogs[key], dict) for key in CATEGORIES):
+        raise ValueError("内容库快照中的每类目录都必须是对象")
+    detached = deepcopy(catalogs)
+    json.dumps(detached, ensure_ascii=False, allow_nan=False)
+    with _installed(detached):
+        validate_content_catalogs()
+        validate_character_card_catalog()
+    return detached
+
+
+@contextmanager
+def activate_catalog_bundle(catalogs):
+    """Install a validated effective catalog for a complete local game scope."""
+    detached = validate_catalog_bundle(catalogs)
+    with _installed(detached):
+        yield detached
+
+
 class CatalogProject:
     def __init__(self, path=DEFAULT_CATALOG):
         self.path = Path(path).resolve()

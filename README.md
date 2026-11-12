@@ -11,6 +11,7 @@ Papermoon 是节点地图、全局回合与战斗回合共同驱动的文字规�
 | [SkillEditorClient/](SkillEditorClient/) | 当前使用的技能与状态编辑器。提供技能单元、可选分支、触发事件、条件、消耗和效果参数表单，以及只读效果参考；职介技能以JSON编辑为主，“测试程序”单独使用表单。还包含源码启动和exe构建入口。 |
 | [CharacterEditorClient/](CharacterEditorClient/) | 独立角色卡编辑器。编辑御主、从者的名称、属性与等级，自动分配ID；选择固有技能，以及御主的基础魔术或从者的职介技能。与技能编辑器共享内容项目，礼装和宝具选择入口预留。 |
 | [MapEditorClient/](MapEditorClient/) | PySide6可视化地图编辑器。编辑地点、建筑、高层与可连接多个地点的道路，保存画布坐标，并可转换为规则内核使用的`Map`。 |
+| [GameMasterClient/](GameMasterClient/) | PySide6正式GM终端。负责新游戏配置、地图与角色导入、主从及初始位置设置、结构化决策、角色状态、逐回合推进和安全节点存档。 |
 | [test_examples/](test_examples/) | 自动回归、真实Tk控件检查、exe分发检查、完整审计脚本及人工演示入口。实卡对战脚本用于复现决策过程、验证结算与战报。 |
 | [reference/](reference/) | 项目文档与工作记录：角色卡格式、人工测试说明、Session接口、交接进度、测试基线和代码审计报告。 |
 | [.vscode/](.vscode/) | VS Code调试配置；当前提供从`main.py`启动Papermoon的调试入口。 |
@@ -48,13 +49,15 @@ Papermoon 是节点地图、全局回合与战斗回合共同驱动的文字规�
 
 ## 运行
 
-单人人工测试可直接双击 `Start_Core.cmd`，编辑内容可双击 `Start_SkillEditorClient.vbs`。
+单人人工测试可直接双击 `Start_Core.cmd`，编辑内容可双击 `Start_SkillEditorClient.vbs`，
+正式GM界面可双击 `Start_GameMasterClient.vbs`。
 前者提供实卡直接对战、地图流程及双方选卡；后者是当前的技能与状态表单编辑器，并保留高级JSON设置。
 详细步骤和记录位置见[操作说明](reference/MANUAL_TESTING.md)。
 
 ```powershell
 python -m core --menu
 python -m SkillEditorClient
+python -m GameMasterClient
 ```
 
 启动基础终端场景：

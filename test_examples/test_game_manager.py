@@ -20,6 +20,20 @@ def create_servant(name="Servant"):
 
 
 class HolyGrailGameTests(unittest.TestCase):
+    def test_optional_runtime_character_id_allocator_is_used_for_new_entities(self):
+        location = Location("Arena")
+        initial = create_master("Initial")
+        initial._character_id = "character10"
+        initial.position = location
+        numbers = iter(("character11", "character12"))
+        game = GameManager(
+            [initial], location,
+            character_id_allocator=lambda: next(numbers),
+        )
+        newcomer = create_master("Newcomer")
+        game.register_character(newcomer, location)
+        self.assertEqual(newcomer.character_id, "character11")
+
     def test_death_moves_character_and_clears_pending_game_state(self):
         location = Location("Arena")
         defeated = create_master("Defeated")

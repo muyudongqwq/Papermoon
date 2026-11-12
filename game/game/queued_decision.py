@@ -48,6 +48,11 @@ class QueuedDecisionProvider:
             if self._stopped or self._closed:
                 raise SessionStopped()
 
+    @property
+    def stopping(self):
+        with self.condition:
+            return self._stopped or self._closed
+
     def stop(self):
         with self.condition:
             self._stopped = True

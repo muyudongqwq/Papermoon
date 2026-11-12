@@ -47,10 +47,16 @@ finally:
 `completed`、`stopped` 或 `failed`。工作线程在任意普通、数值、反应、幸运和
 援护选择处通过同一个决策器等待输入；调用者无需接触规则对象。
 
+正式GM终端使用 `GameSession(..., manual_turns=True)`。该模式在第一回合前及每个
+完整全局回合结束后进入 `ready` 安全节点并发布 `safe_checkpoint`；GM调用
+`request_next_turn("gm")` 后只放行一个全局回合。安全节点仍可排入GM强制操作，
+操作完成后继续停留在同一安全节点。
+
 ## ID、控制权和输入格式
 
-- `character_id` 在角色创建时生成，角色改名、死亡或退场后保持不变，属性只读。
-  这是当前运行对象的身份；存盘恢复及跨进程重建尚未实现。
+- `character_id` 在角色改名、死亡或退场后保持不变。正式GM终端从`character10`
+  顺序分配，动态实体通过本局同一个可选分配器继续编号；其他调用者仍可保留角色
+  创建时生成的ID。
 - `controllers` 使用角色 ID 映射控制者 ID。可以分别分配主从；没有显式分配的
   从者继承御主的控制者，使魔继承召唤者，NPC 默认由 GM 控制。首次分配结果会
   保留，解除主从关系不会丢失玩家控制权。暂不提供运行中重新分配控制权的接口。
@@ -78,14 +84,16 @@ finally:
   `timeout` 等待新事件。序号可能跳跃，因为私人事件已按控制权过滤。
 - 输出均为 JSON 可序列化的数据；修改返回的字典不会修改游戏。
 
-事件包括 `session_started`、`decision_requested`、`decision_answered`、
+事件包括 `session_started`、`safe_checkpoint`、`global_turn_completed`、
+`decision_requested`、`decision_answered`、
 `decision_invalidated`、`operation_completed`、`operation_failed`、
 `notification`、`rule_report` 和 `session_ended`。决策/操作/定向通知仅给对应玩家及 GM；会话
 开始、结束和规则主动发布的公共通知为公共事件。
 
 当前事件保存在进程内存中，可按游标重读。决策日志包含选项编号/数值，可将其
-转换为 `ScriptedDecisionProvider` 指令重放确定流程。骰子随机流、持久化存档、
-完整隐私情报系统仍待实现。核心战报已按下述接口接入；原有 `print()` 保留，
+转换为 `ScriptedDecisionProvider` 指令重放确定流程。正式GM终端的`.psav`在安全
+节点保存初始随机状态、内容库、地图、角色关系和有序输入，通过确定性重放恢复
+复杂运行态；完整隐私情报系统仍待实现。核心战报已按下述接口接入；原有 `print()` 保留，
 战报直接读取结算结果，不截取或解析标准输出。
 
 ## 结构化战报

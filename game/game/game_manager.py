@@ -27,11 +27,15 @@ class GameManager:
         grail_appearance_deaths=4,
         grail_ready_deaths=6,
         turn_manager=None,
+        character_id_allocator=None,
     ):
         self.characters = list(characters)
         self.dead_characters = []
         self.removed_characters = []
         self._next_registration_index = 0
+        if character_id_allocator is not None and not callable(character_id_allocator):
+            raise ValueError("character_id_allocator必须可调用")
+        self.character_id_allocator = character_id_allocator
         for character in self.characters:
             self._assign_registration_metadata(character, registered_turn=0)
         self.player_characters = list(
@@ -261,6 +265,11 @@ class GameManager:
             summoner = character.summoner
             if summoner not in self.characters or not summoner.is_alive():
                 raise ValueError("使魔的召唤者必须是本局存活角色")
+
+        if self.character_id_allocator is not None:
+            character._character_id = self.character_id_allocator()
+            if any(other.character_id == character.character_id for other in known_characters):
+                raise ValueError("自动分配的角色ID已经存在于本局")
 
         turn_number = self.turn_manager.turn
         character.game_manager = self
