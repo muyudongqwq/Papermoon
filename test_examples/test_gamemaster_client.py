@@ -88,6 +88,31 @@ class GameMasterClientTests(unittest.TestCase):
         self.assertTrue(window.ui.nextTurnButton.isEnabled())
         self.assertEqual(window.ui.mainStack.currentWidget(), window.ui.gamePage)
 
+    def test_grail_spinboxes_and_servant_count_are_validated(self):
+        window = self.make_window()
+        window.ui.grailReadyConditionSpinBox.setValue(8)
+        window.ui.grailAppearanceConditionSpinBox.setValue(7)
+        window.ui.grailReadyConditionSpinBox.setValue(6)
+        self.assertEqual(window.ui.grailReadyConditionSpinBox.value(), 7)
+        window.ui.grailAppearanceConditionSpinBox.setValue(0)
+        window.ui.grailReadyConditionSpinBox.setValue(1)
+        with patch.object(QMessageBox, "warning") as warning:
+            window.prepare_placement()
+        self.assertTrue(warning.called)
+        self.assertIn("只有0名从者", warning.call_args.args[2])
+
+    def test_browse_map_button_fills_path_without_importing(self):
+        window = GameMasterWindow()
+        self.addCleanup(self.close_window, window)
+        with patch(
+            "GameMasterClient.window.QFileDialog.getOpenFileName",
+            return_value=(r"C:\maps\example.pmap", "Papermoon地图 (*.pmap)"),
+        ):
+            window.ui.browseMapButton.click()
+        self.assertEqual(window.ui.mapPathEdit.text(), r"C:\maps\example.pmap")
+        self.assertIsNone(window.map_document)
+        self.assertIn("等待导入", window.ui.mapSummaryLabel.text())
+
     def test_safe_checkpoint_payload_replays_to_a_resumable_session(self):
         source = self.make_window()
         self.start_window(source)

@@ -15,13 +15,13 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QFormLayout, QFrame,
-    QGraphicsView, QGridLayout, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMainWindow, QMenuBar, QPushButton,
-    QScrollArea, QSizePolicy, QSpacerItem, QSpinBox,
-    QSplitter, QStackedWidget, QStatusBar, QTableWidget,
-    QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QGraphicsView,
+    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMainWindow, QMenuBar, QPushButton, QScrollArea,
+    QSizePolicy, QSpacerItem, QSpinBox, QSplitter,
+    QStackedWidget, QStatusBar, QTableWidget, QTableWidgetItem,
+    QTextEdit, QVBoxLayout, QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -36,38 +36,37 @@ class Ui_MainWindow(object):
         self.mainStack.setObjectName(u"mainStack")
         self.mainMenuPage = QWidget()
         self.mainMenuPage.setObjectName(u"mainMenuPage")
+        self.mainMenuPageLayout = QVBoxLayout(self.mainMenuPage)
+        self.mainMenuPageLayout.setObjectName(u"mainMenuPageLayout")
         self.label = QLabel(self.mainMenuPage)
         self.label.setObjectName(u"label")
-        self.label.setGeometry(QRect(10, 10, 131, 41))
         font = QFont()
         font.setPointSize(16)
         self.label.setFont(font)
-        self.layoutWidget = QWidget(self.mainMenuPage)
-        self.layoutWidget.setObjectName(u"layoutWidget")
-        self.layoutWidget.setGeometry(QRect(7, 63, 831, 521))
-        self.horizontalLayout_4 = QHBoxLayout(self.layoutWidget)
-        self.horizontalLayout_4.setObjectName(u"horizontalLayout_4")
-        self.horizontalLayout_4.setContentsMargins(0, 0, 0, 0)
-        self.horizontalSpacer_7 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self.horizontalLayout_4.addItem(self.horizontalSpacer_7)
+        self.mainMenuPageLayout.addWidget(self.label)
 
-        self.horizontalLayout_2 = QHBoxLayout()
-        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
-        self.horizontalSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.mainMenuTopSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
-        self.horizontalLayout_2.addItem(self.horizontalSpacer)
+        self.mainMenuPageLayout.addItem(self.mainMenuTopSpacer)
 
-        self.mainMenuPanel = QFrame(self.layoutWidget)
+        self.mainMenuCenterLayout = QHBoxLayout()
+        self.mainMenuCenterLayout.setObjectName(u"mainMenuCenterLayout")
+        self.mainMenuLeftSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.mainMenuCenterLayout.addItem(self.mainMenuLeftSpacer)
+
+        self.mainMenuPanel = QFrame(self.mainMenuPage)
         self.mainMenuPanel.setObjectName(u"mainMenuPanel")
-        self.mainMenuPanel.setMinimumSize(QSize(240, 360))
+        self.mainMenuPanel.setMinimumSize(QSize(280, 250))
+        self.mainMenuPanel.setMaximumSize(QSize(320, 280))
         self.mainMenuPanel.setFrameShape(QFrame.Shape.StyledPanel)
         self.mainMenuPanel.setFrameShadow(QFrame.Shadow.Raised)
         self.verticalLayout_2 = QVBoxLayout(self.mainMenuPanel)
         self.verticalLayout_2.setObjectName(u"verticalLayout_2")
         self.newGameButton = QPushButton(self.mainMenuPanel)
         self.newGameButton.setObjectName(u"newGameButton")
-        self.newGameButton.setMinimumSize(QSize(220, 42))
+        self.newGameButton.setMinimumSize(QSize(240, 44))
         font1 = QFont()
         font1.setPointSize(12)
         font1.setBold(True)
@@ -77,31 +76,31 @@ class Ui_MainWindow(object):
 
         self.loadGameButton = QPushButton(self.mainMenuPanel)
         self.loadGameButton.setObjectName(u"loadGameButton")
-        self.loadGameButton.setMinimumSize(QSize(220, 42))
+        self.loadGameButton.setMinimumSize(QSize(240, 44))
         self.loadGameButton.setFont(font1)
 
         self.verticalLayout_2.addWidget(self.loadGameButton)
 
         self.exitButton = QPushButton(self.mainMenuPanel)
         self.exitButton.setObjectName(u"exitButton")
-        self.exitButton.setMinimumSize(QSize(220, 42))
+        self.exitButton.setMinimumSize(QSize(240, 44))
         self.exitButton.setFont(font1)
 
         self.verticalLayout_2.addWidget(self.exitButton)
 
 
-        self.horizontalLayout_2.addWidget(self.mainMenuPanel)
+        self.mainMenuCenterLayout.addWidget(self.mainMenuPanel)
 
-        self.horizontalSpacer_2 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.mainMenuRightSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self.horizontalLayout_2.addItem(self.horizontalSpacer_2)
+        self.mainMenuCenterLayout.addItem(self.mainMenuRightSpacer)
 
 
-        self.horizontalLayout_4.addLayout(self.horizontalLayout_2)
+        self.mainMenuPageLayout.addLayout(self.mainMenuCenterLayout)
 
-        self.horizontalSpacer_8 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.mainMenuBottomSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
-        self.horizontalLayout_4.addItem(self.horizontalSpacer_8)
+        self.mainMenuPageLayout.addItem(self.mainMenuBottomSpacer)
 
         self.mainStack.addWidget(self.mainMenuPage)
         self.setupPage = QWidget()
@@ -150,47 +149,74 @@ class Ui_MainWindow(object):
         self.mapSetupGroup.setObjectName(u"mapSetupGroup")
         self.gridLayout = QGridLayout(self.mapSetupGroup)
         self.gridLayout.setObjectName(u"gridLayout")
-        self.mapPathEdit = QLineEdit(self.mapSetupGroup)
-        self.mapPathEdit.setObjectName(u"mapPathEdit")
-        self.mapPathEdit.setReadOnly(True)
-
-        self.gridLayout.addWidget(self.mapPathEdit, 0, 1, 1, 2)
-
+        self.gridLayout.setHorizontalSpacing(8)
         self.importMapButton = QPushButton(self.mapSetupGroup)
         self.importMapButton.setObjectName(u"importMapButton")
 
         self.gridLayout.addWidget(self.importMapButton, 1, 0, 1, 2)
 
+        self.mapSummaryLabel = QLabel(self.mapSetupGroup)
+        self.mapSummaryLabel.setObjectName(u"mapSummaryLabel")
+
+        self.gridLayout.addWidget(self.mapSummaryLabel, 1, 3, 1, 1)
+
         self.horizontalSpacer_4 = QSpacerItem(728, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self.gridLayout.addItem(self.horizontalSpacer_4, 1, 3, 2, 1)
+        self.gridLayout.addItem(self.horizontalSpacer_4, 1, 4, 2, 1)
 
         self.clearMapButton = QPushButton(self.mapSetupGroup)
         self.clearMapButton.setObjectName(u"clearMapButton")
 
-        self.gridLayout.addWidget(self.clearMapButton, 2, 0, 1, 2)
+        self.gridLayout.addWidget(self.clearMapButton, 1, 2, 1, 1)
 
-        self.mapSummaryLabel = QLabel(self.mapSetupGroup)
-        self.mapSummaryLabel.setObjectName(u"mapSummaryLabel")
+        self.grailLocationTips = QLabel(self.mapSetupGroup)
+        self.grailLocationTips.setObjectName(u"grailLocationTips")
 
-        self.gridLayout.addWidget(self.mapSummaryLabel, 2, 2, 1, 1)
+        self.gridLayout.addWidget(self.grailLocationTips, 2, 0, 1, 2)
 
         self.grailLocationCombo = QComboBox(self.mapSetupGroup)
         self.grailLocationCombo.setObjectName(u"grailLocationCombo")
+        self.grailLocationCombo.setMinimumSize(QSize(180, 0))
 
-        self.gridLayout.addWidget(self.grailLocationCombo, 3, 0, 1, 1)
+        self.gridLayout.addWidget(self.grailLocationCombo, 2, 2, 1, 2)
+
+        self.mapPathEdit = QLineEdit(self.mapSetupGroup)
+        self.mapPathEdit.setObjectName(u"mapPathEdit")
+        self.mapPathEdit.setReadOnly(True)
+
+        self.gridLayout.addWidget(self.mapPathEdit, 0, 0, 1, 3)
+
+        self.browseMapButton = QPushButton(self.mapSetupGroup)
+        self.browseMapButton.setObjectName(u"browseMapButton")
+        self.browseMapButton.setMinimumSize(QSize(72, 0))
+        self.browseMapButton.setMaximumSize(QSize(72, 16777215))
+
+        self.gridLayout.addWidget(self.browseMapButton, 0, 3, 1, 1)
 
 
         self.verticalLayout_4.addWidget(self.mapSetupGroup)
+
+        self.label_2 = QLabel(self.scrollAreaWidgetContents)
+        self.label_2.setObjectName(u"label_2")
+        font3 = QFont()
+        font3.setPointSize(12)
+        font3.setBold(False)
+        self.label_2.setFont(font3)
+
+        self.verticalLayout_4.addWidget(self.label_2)
 
         self.characterSetupGroup = QGroupBox(self.scrollAreaWidgetContents)
         self.characterSetupGroup.setObjectName(u"characterSetupGroup")
         self.gridLayout_2 = QGridLayout(self.characterSetupGroup)
         self.gridLayout_2.setObjectName(u"gridLayout_2")
-        self.characterTable = QTableWidget(self.characterSetupGroup)
-        self.characterTable.setObjectName(u"characterTable")
+        self.horizontalSpacer_5 = QSpacerItem(678, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self.gridLayout_2.addWidget(self.characterTable, 0, 0, 1, 2)
+        self.gridLayout_2.addItem(self.horizontalSpacer_5, 1, 2, 1, 1)
+
+        self.removeCharacterButton = QPushButton(self.characterSetupGroup)
+        self.removeCharacterButton.setObjectName(u"removeCharacterButton")
+
+        self.gridLayout_2.addWidget(self.removeCharacterButton, 2, 0, 1, 1)
 
         self.importCharacterButton = QPushButton(self.characterSetupGroup)
         self.importCharacterButton.setObjectName(u"importCharacterButton")
@@ -202,14 +228,10 @@ class Ui_MainWindow(object):
 
         self.gridLayout_2.addWidget(self.viewCharacterButton, 1, 1, 1, 1)
 
-        self.horizontalSpacer_5 = QSpacerItem(678, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.characterTable = QTableWidget(self.characterSetupGroup)
+        self.characterTable.setObjectName(u"characterTable")
 
-        self.gridLayout_2.addItem(self.horizontalSpacer_5, 1, 2, 1, 1)
-
-        self.removeCharacterButton = QPushButton(self.characterSetupGroup)
-        self.removeCharacterButton.setObjectName(u"removeCharacterButton")
-
-        self.gridLayout_2.addWidget(self.removeCharacterButton, 2, 0, 1, 1)
+        self.gridLayout_2.addWidget(self.characterTable, 0, 0, 1, 2)
 
         self.setRelationshipButton = QPushButton(self.characterSetupGroup)
         self.setRelationshipButton.setObjectName(u"setRelationshipButton")
@@ -219,42 +241,70 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_4.addWidget(self.characterSetupGroup)
 
-        self.label_2 = QLabel(self.scrollAreaWidgetContents)
-        self.label_2.setObjectName(u"label_2")
-        font3 = QFont()
-        font3.setPointSize(12)
-        font3.setBold(False)
-        self.label_2.setFont(font3)
-
-        self.verticalLayout_4.addWidget(self.label_2)
-
         self.ruleSetupGroup = QGroupBox(self.scrollAreaWidgetContents)
         self.ruleSetupGroup.setObjectName(u"ruleSetupGroup")
-        self.horizontalLayout_3 = QHBoxLayout(self.ruleSetupGroup)
-        self.horizontalLayout_3.setObjectName(u"horizontalLayout_3")
-        self.formLayout = QFormLayout()
-        self.formLayout.setObjectName(u"formLayout")
-        self.grailAppearanceLineEdit = QLineEdit(self.ruleSetupGroup)
-        self.grailAppearanceLineEdit.setObjectName(u"grailAppearanceLineEdit")
+        self.ruleSetupLayout = QGridLayout(self.ruleSetupGroup)
+        self.ruleSetupLayout.setObjectName(u"ruleSetupLayout")
+        self.maximumTurnsLabel = QLabel(self.ruleSetupGroup)
+        self.maximumTurnsLabel.setObjectName(u"maximumTurnsLabel")
 
-        self.formLayout.setWidget(1, QFormLayout.ItemRole.LabelRole, self.grailAppearanceLineEdit)
+        self.ruleSetupLayout.addWidget(self.maximumTurnsLabel, 0, 0, 1, 1)
 
-        self.maximumTurnsLineEdit = QLineEdit(self.ruleSetupGroup)
-        self.maximumTurnsLineEdit.setObjectName(u"maximumTurnsLineEdit")
+        self.MaximumTurnsSpinBox = QSpinBox(self.ruleSetupGroup)
+        self.MaximumTurnsSpinBox.setObjectName(u"MaximumTurnsSpinBox")
+        self.MaximumTurnsSpinBox.setMinimum(60)
+        self.MaximumTurnsSpinBox.setMaximum(9999999)
+        self.MaximumTurnsSpinBox.setValue(120)
 
-        self.formLayout.setWidget(0, QFormLayout.ItemRole.LabelRole, self.maximumTurnsLineEdit)
+        self.ruleSetupLayout.addWidget(self.MaximumTurnsSpinBox, 0, 2, 1, 1)
 
-        self.grailReadyLineEdit = QLineEdit(self.ruleSetupGroup)
-        self.grailReadyLineEdit.setObjectName(u"grailReadyLineEdit")
+        self.grailAppearanceConditionLabel = QLabel(self.ruleSetupGroup)
+        self.grailAppearanceConditionLabel.setObjectName(u"grailAppearanceConditionLabel")
 
-        self.formLayout.setWidget(2, QFormLayout.ItemRole.LabelRole, self.grailReadyLineEdit)
+        self.ruleSetupLayout.addWidget(self.grailAppearanceConditionLabel, 1, 0, 1, 1)
 
+        self.descriptionLabel0 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel0.setObjectName(u"descriptionLabel0")
 
-        self.horizontalLayout_3.addLayout(self.formLayout)
+        self.ruleSetupLayout.addWidget(self.descriptionLabel0, 1, 1, 1, 1)
+
+        self.grailAppearanceConditionSpinBox = QSpinBox(self.ruleSetupGroup)
+        self.grailAppearanceConditionSpinBox.setObjectName(u"grailAppearanceConditionSpinBox")
+        self.grailAppearanceConditionSpinBox.setMaximum(14)
+        self.grailAppearanceConditionSpinBox.setValue(4)
+
+        self.ruleSetupLayout.addWidget(self.grailAppearanceConditionSpinBox, 1, 2, 1, 1)
+
+        self.descriptionLabel1 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel1.setObjectName(u"descriptionLabel1")
+
+        self.ruleSetupLayout.addWidget(self.descriptionLabel1, 1, 3, 1, 1)
+
+        self.grailReadyConditionLabel = QLabel(self.ruleSetupGroup)
+        self.grailReadyConditionLabel.setObjectName(u"grailReadyConditionLabel")
+
+        self.ruleSetupLayout.addWidget(self.grailReadyConditionLabel, 2, 0, 1, 1)
+
+        self.descriptionLabel0_2 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel0_2.setObjectName(u"descriptionLabel0_2")
+
+        self.ruleSetupLayout.addWidget(self.descriptionLabel0_2, 2, 1, 1, 1)
+
+        self.grailReadyConditionSpinBox = QSpinBox(self.ruleSetupGroup)
+        self.grailReadyConditionSpinBox.setObjectName(u"grailReadyConditionSpinBox")
+        self.grailReadyConditionSpinBox.setMaximum(14)
+        self.grailReadyConditionSpinBox.setValue(6)
+
+        self.ruleSetupLayout.addWidget(self.grailReadyConditionSpinBox, 2, 2, 1, 1)
+
+        self.descriptionLabel1_2 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel1_2.setObjectName(u"descriptionLabel1_2")
+
+        self.ruleSetupLayout.addWidget(self.descriptionLabel1_2, 2, 3, 1, 1)
 
         self.horizontalSpacer_6 = QSpacerItem(465, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self.horizontalLayout_3.addItem(self.horizontalSpacer_6)
+        self.ruleSetupLayout.addItem(self.horizontalSpacer_6, 0, 4, 3, 1)
 
 
         self.verticalLayout_4.addWidget(self.ruleSetupGroup)
@@ -378,18 +428,18 @@ class Ui_MainWindow(object):
         self.decisionInputStack.addWidget(self.choiceDecisionPage)
         self.numberDecisionPage = QWidget()
         self.numberDecisionPage.setObjectName(u"numberDecisionPage")
-        self.widget = QWidget(self.numberDecisionPage)
-        self.widget.setObjectName(u"widget")
-        self.widget.setGeometry(QRect(10, 20, 73, 44))
-        self.verticalLayout_10 = QVBoxLayout(self.widget)
+        self.layoutWidget = QWidget(self.numberDecisionPage)
+        self.layoutWidget.setObjectName(u"layoutWidget")
+        self.layoutWidget.setGeometry(QRect(10, 20, 73, 44))
+        self.verticalLayout_10 = QVBoxLayout(self.layoutWidget)
         self.verticalLayout_10.setObjectName(u"verticalLayout_10")
         self.verticalLayout_10.setContentsMargins(0, 0, 0, 0)
-        self.numberDecisionLabel = QLabel(self.widget)
+        self.numberDecisionLabel = QLabel(self.layoutWidget)
         self.numberDecisionLabel.setObjectName(u"numberDecisionLabel")
 
         self.verticalLayout_10.addWidget(self.numberDecisionLabel)
 
-        self.spinBox = QSpinBox(self.widget)
+        self.spinBox = QSpinBox(self.layoutWidget)
         self.spinBox.setObjectName(u"spinBox")
         self.spinBox.setMaximum(9999999)
 
@@ -524,7 +574,7 @@ class Ui_MainWindow(object):
         self.setLocationScrollArea.setWidgetResizable(True)
         self.scrollAreaWidgetContents_2 = QWidget()
         self.scrollAreaWidgetContents_2.setObjectName(u"scrollAreaWidgetContents_2")
-        self.scrollAreaWidgetContents_2.setGeometry(QRect(0, 0, 171, 292))
+        self.scrollAreaWidgetContents_2.setGeometry(QRect(0, 0, 160, 292))
         self.scrollAreaWidgetContents_2.setMinimumSize(QSize(0, 292))
         self.placementRowsLayout = QVBoxLayout(self.scrollAreaWidgetContents_2)
         self.placementRowsLayout.setObjectName(u"placementRowsLayout")
@@ -757,16 +807,24 @@ class Ui_MainWindow(object):
         self.setupTitleLabel.setText(QCoreApplication.translate("MainWindow", u"\u65b0\u6e38\u620f\u914d\u7f6e", None))
         self.mapSetupGroup.setTitle(QCoreApplication.translate("MainWindow", u"\u5730\u56fe", None))
         self.importMapButton.setText(QCoreApplication.translate("MainWindow", u"\u5bfc\u5165\u5730\u56fe", None))
-        self.clearMapButton.setText(QCoreApplication.translate("MainWindow", u"\u6e05\u9664\u5730\u56fe", None))
         self.mapSummaryLabel.setText(QCoreApplication.translate("MainWindow", u"TextLabel", None))
+        self.clearMapButton.setText(QCoreApplication.translate("MainWindow", u"\u6e05\u9664\u5730\u56fe", None))
+        self.grailLocationTips.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u51fa\u73b0\u4f4d\u7f6e", None))
+        self.browseMapButton.setText(QCoreApplication.translate("MainWindow", u"\u6d4f\u89c8\u2026", None))
+        self.label_2.setText(QCoreApplication.translate("MainWindow", u"\u5728\u6b64\u5bfc\u5165\u5730\u56fe\u548c\u53c2\u6218\u89d2\u8272", None))
         self.characterSetupGroup.setTitle(QCoreApplication.translate("MainWindow", u"\u53c2\u6218\u89d2\u8272", None))
+        self.removeCharacterButton.setText(QCoreApplication.translate("MainWindow", u"\u79fb\u9664\u89d2\u8272", None))
         self.importCharacterButton.setText(QCoreApplication.translate("MainWindow", u"\u5bfc\u5165\u89d2\u8272", None))
         self.viewCharacterButton.setText(QCoreApplication.translate("MainWindow", u"\u67e5\u770b\u89d2\u8272", None))
-        self.removeCharacterButton.setText(QCoreApplication.translate("MainWindow", u"\u79fb\u9664\u89d2\u8272", None))
         self.setRelationshipButton.setText(QCoreApplication.translate("MainWindow", u"\u8bbe\u7f6e\u4e3b\u4ece", None))
-        self.label_2.setText(QCoreApplication.translate("MainWindow", u"\u5728\u6b64\u5bfc\u5165\u5730\u56fe\u548c\u53c2\u6218\u89d2\u8272", None))
         self.ruleSetupGroup.setTitle(QCoreApplication.translate("MainWindow", u"\u6e38\u620f\u89c4\u5219", None))
-        self.maximumTurnsLineEdit.setText("")
+        self.maximumTurnsLabel.setText(QCoreApplication.translate("MainWindow", u"\u6700\u5927\u56de\u5408\u6570", None))
+        self.grailAppearanceConditionLabel.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u51fa\u73b0\u6761\u4ef6", None))
+        self.descriptionLabel0.setText(QCoreApplication.translate("MainWindow", u"\u9000\u573a", None))
+        self.descriptionLabel1.setText(QCoreApplication.translate("MainWindow", u"\u540d\u4ece\u8005", None))
+        self.grailReadyConditionLabel.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u5c31\u7eea\u6761\u4ef6", None))
+        self.descriptionLabel0_2.setText(QCoreApplication.translate("MainWindow", u"\u9000\u573a", None))
+        self.descriptionLabel1_2.setText(QCoreApplication.translate("MainWindow", u"\u540d\u4ece\u8005", None))
         self.gameStartButton.setText(QCoreApplication.translate("MainWindow", u"\u521b\u5efa\u6e38\u620f", None))
         self.globalTurnLabel.setText(QCoreApplication.translate("MainWindow", u"\u5f53\u524d\u56de\u5408:", None))
         self.gamePhaseLabel.setText(QCoreApplication.translate("MainWindow", u"\u5f53\u524d\u9636\u6bb5:", None))

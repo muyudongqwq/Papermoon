@@ -21,167 +21,157 @@
        <number>2</number>
       </property>
       <widget class="QWidget" name="mainMenuPage">
-       <widget class="QLabel" name="label">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>10</y>
-          <width>131</width>
-          <height>41</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <pointsize>16</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Papermoon</string>
-        </property>
-       </widget>
-       <widget class="QWidget" name="layoutWidget">
-        <property name="geometry">
-         <rect>
-          <x>7</x>
-          <y>63</y>
-          <width>831</width>
-          <height>521</height>
-         </rect>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_4">
-         <item>
-          <spacer name="horizontalSpacer_7">
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_2">
-           <item>
-            <spacer name="horizontalSpacer">
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item>
-            <widget class="QFrame" name="mainMenuPanel">
-             <property name="minimumSize">
-              <size>
-               <width>240</width>
-               <height>360</height>
-              </size>
-             </property>
-             <property name="frameShape">
-              <enum>QFrame::Shape::StyledPanel</enum>
-             </property>
-             <property name="frameShadow">
-              <enum>QFrame::Shadow::Raised</enum>
-             </property>
-             <layout class="QVBoxLayout" name="verticalLayout_2">
-              <item>
-               <widget class="QPushButton" name="newGameButton">
-                <property name="minimumSize">
-                 <size>
-                  <width>220</width>
-                  <height>42</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <pointsize>12</pointsize>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>新游戏</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="loadGameButton">
-                <property name="minimumSize">
-                 <size>
-                  <width>220</width>
-                  <height>42</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <pointsize>12</pointsize>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>加载游戏</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="exitButton">
-                <property name="minimumSize">
-                 <size>
-                  <width>220</width>
-                  <height>42</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <pointsize>12</pointsize>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>退出</string>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacer_2">
-             <property name="orientation">
-              <enum>Qt::Orientation::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer_8">
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-        </layout>
-       </widget>
+       <layout class="QVBoxLayout" name="mainMenuPageLayout">
+        <item>
+         <widget class="QLabel" name="label">
+          <property name="font">
+           <font>
+            <pointsize>16</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Papermoon</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="mainMenuTopSpacer">
+          <property name="orientation">
+           <enum>Qt::Orientation::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="mainMenuCenterLayout">
+          <item>
+           <spacer name="mainMenuLeftSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QFrame" name="mainMenuPanel">
+            <property name="minimumSize">
+             <size>
+              <width>280</width>
+              <height>250</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>320</width>
+              <height>280</height>
+             </size>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::Shape::StyledPanel</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Shadow::Raised</enum>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_2">
+             <item>
+              <widget class="QPushButton" name="newGameButton">
+               <property name="minimumSize">
+                <size>
+                 <width>240</width>
+                 <height>44</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <pointsize>12</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>新游戏</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="loadGameButton">
+               <property name="minimumSize">
+                <size>
+                 <width>240</width>
+                 <height>44</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <pointsize>12</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>加载游戏</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="exitButton">
+               <property name="minimumSize">
+                <size>
+                 <width>240</width>
+                 <height>44</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <pointsize>12</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>退出</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="mainMenuRightSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <spacer name="mainMenuBottomSpacer">
+          <property name="orientation">
+           <enum>Qt::Orientation::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
       </widget>
       <widget class="QWidget" name="setupPage">
        <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -264,13 +254,9 @@
                <string>地图</string>
               </property>
               <layout class="QGridLayout" name="gridLayout">
-               <item row="0" column="1" colspan="2">
-                <widget class="QLineEdit" name="mapPathEdit">
-                 <property name="readOnly">
-                  <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
+               <property name="horizontalSpacing">
+                <number>8</number>
+               </property>
                <item row="1" column="0" colspan="2">
                 <widget class="QPushButton" name="importMapButton">
                  <property name="text">
@@ -278,7 +264,14 @@
                  </property>
                 </widget>
                </item>
-               <item row="1" column="3" rowspan="2">
+               <item row="1" column="3">
+                <widget class="QLabel" name="mapSummaryLabel">
+                 <property name="text">
+                  <string>TextLabel</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="4" rowspan="2">
                 <spacer name="horizontalSpacer_4">
                  <property name="orientation">
                   <enum>Qt::Orientation::Horizontal</enum>
@@ -291,73 +284,53 @@
                  </property>
                 </spacer>
                </item>
-               <item row="2" column="0" colspan="2">
+               <item row="1" column="2">
                 <widget class="QPushButton" name="clearMapButton">
                  <property name="text">
                   <string>清除地图</string>
                  </property>
                 </widget>
                </item>
-               <item row="2" column="2">
-                <widget class="QLabel" name="mapSummaryLabel">
+               <item row="2" column="0" colspan="2">
+                <widget class="QLabel" name="grailLocationTips">
                  <property name="text">
-                  <string>TextLabel</string>
+                  <string>圣杯出现位置</string>
                  </property>
                 </widget>
                </item>
-               <item row="3" column="0">
-                <widget class="QComboBox" name="grailLocationCombo"/>
-               </item>
-              </layout>
-             </widget>
-            </item>
-            <item>
-             <widget class="QGroupBox" name="characterSetupGroup">
-              <property name="title">
-               <string>参战角色</string>
-              </property>
-              <layout class="QGridLayout" name="gridLayout_2">
-               <item row="0" column="0" colspan="2">
-                <widget class="QTableWidget" name="characterTable"/>
-               </item>
-               <item row="1" column="0">
-                <widget class="QPushButton" name="importCharacterButton">
-                 <property name="text">
-                  <string>导入角色</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="1">
-                <widget class="QPushButton" name="viewCharacterButton">
-                 <property name="text">
-                  <string>查看角色</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="2">
-                <spacer name="horizontalSpacer_5">
-                 <property name="orientation">
-                  <enum>Qt::Orientation::Horizontal</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
+               <item row="2" column="2" colspan="2">
+                <widget class="QComboBox" name="grailLocationCombo">
+                 <property name="minimumSize">
                   <size>
-                   <width>678</width>
-                   <height>20</height>
+                   <width>180</width>
+                   <height>0</height>
                   </size>
                  </property>
-                </spacer>
+                </widget>
                </item>
-               <item row="2" column="0">
-                <widget class="QPushButton" name="removeCharacterButton">
-                 <property name="text">
-                  <string>移除角色</string>
+               <item row="0" column="0" colspan="3">
+                <widget class="QLineEdit" name="mapPathEdit">
+                 <property name="readOnly">
+                  <bool>true</bool>
                  </property>
                 </widget>
                </item>
-               <item row="2" column="1">
-                <widget class="QPushButton" name="setRelationshipButton">
+               <item row="0" column="3">
+                <widget class="QPushButton" name="browseMapButton">
+                 <property name="minimumSize">
+                  <size>
+                   <width>72</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>72</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
                  <property name="text">
-                  <string>设置主从</string>
+                  <string>浏览…</string>
                  </property>
                 </widget>
                </item>
@@ -378,29 +351,147 @@
              </widget>
             </item>
             <item>
+             <widget class="QGroupBox" name="characterSetupGroup">
+              <property name="title">
+               <string>参战角色</string>
+              </property>
+              <layout class="QGridLayout" name="gridLayout_2">
+               <item row="1" column="2">
+                <spacer name="horizontalSpacer_5">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>678</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item row="2" column="0">
+                <widget class="QPushButton" name="removeCharacterButton">
+                 <property name="text">
+                  <string>移除角色</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QPushButton" name="importCharacterButton">
+                 <property name="text">
+                  <string>导入角色</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QPushButton" name="viewCharacterButton">
+                 <property name="text">
+                  <string>查看角色</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0" colspan="2">
+                <widget class="QTableWidget" name="characterTable"/>
+               </item>
+               <item row="2" column="1">
+                <widget class="QPushButton" name="setRelationshipButton">
+                 <property name="text">
+                  <string>设置主从</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
              <widget class="QGroupBox" name="ruleSetupGroup">
               <property name="title">
                <string>游戏规则</string>
               </property>
-              <layout class="QHBoxLayout" name="horizontalLayout_3">
-               <item>
-                <layout class="QFormLayout" name="formLayout">
-                 <item row="1" column="0">
-                  <widget class="QLineEdit" name="grailAppearanceLineEdit"/>
-                 </item>
-                 <item row="0" column="0">
-                  <widget class="QLineEdit" name="maximumTurnsLineEdit">
-                   <property name="text">
-                    <string/>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="2" column="0">
-                  <widget class="QLineEdit" name="grailReadyLineEdit"/>
-                 </item>
-                </layout>
+              <layout class="QGridLayout" name="ruleSetupLayout">
+               <item row="0" column="0">
+                    <widget class="QLabel" name="maximumTurnsLabel">
+                     <property name="text">
+                      <string>最大回合数</string>
+                     </property>
+                    </widget>
                </item>
-               <item>
+               <item row="0" column="2">
+                    <widget class="QSpinBox" name="MaximumTurnsSpinBox">
+                     <property name="minimum">
+                      <number>60</number>
+                     </property>
+                     <property name="maximum">
+                      <number>9999999</number>
+                     </property>
+                     <property name="value">
+                      <number>120</number>
+                     </property>
+                    </widget>
+               </item>
+               <item row="1" column="0">
+                    <widget class="QLabel" name="grailAppearanceConditionLabel">
+                     <property name="text">
+                      <string>圣杯出现条件</string>
+                     </property>
+                    </widget>
+               </item>
+               <item row="1" column="1">
+                    <widget class="QLabel" name="descriptionLabel0">
+                     <property name="text">
+                      <string>退场</string>
+                     </property>
+                    </widget>
+               </item>
+               <item row="1" column="2">
+                    <widget class="QSpinBox" name="grailAppearanceConditionSpinBox">
+                     <property name="maximum">
+                      <number>14</number>
+                     </property>
+                     <property name="value">
+                      <number>4</number>
+                     </property>
+                    </widget>
+               </item>
+               <item row="1" column="3">
+                    <widget class="QLabel" name="descriptionLabel1">
+                     <property name="text">
+                      <string>名从者</string>
+                     </property>
+                    </widget>
+               </item>
+               <item row="2" column="0">
+                    <widget class="QLabel" name="grailReadyConditionLabel">
+                     <property name="text">
+                      <string>圣杯就绪条件</string>
+                     </property>
+                    </widget>
+               </item>
+               <item row="2" column="1">
+                    <widget class="QLabel" name="descriptionLabel0_2">
+                     <property name="text">
+                      <string>退场</string>
+                     </property>
+                    </widget>
+               </item>
+               <item row="2" column="2">
+                    <widget class="QSpinBox" name="grailReadyConditionSpinBox">
+                     <property name="maximum">
+                      <number>14</number>
+                     </property>
+                     <property name="value">
+                      <number>6</number>
+                     </property>
+                    </widget>
+               </item>
+               <item row="2" column="3">
+                    <widget class="QLabel" name="descriptionLabel1_2">
+                     <property name="text">
+                      <string>名从者</string>
+                     </property>
+                    </widget>
+               </item>
+               <item row="0" column="4" rowspan="3">
                 <spacer name="horizontalSpacer_6">
                  <property name="orientation">
                   <enum>Qt::Orientation::Horizontal</enum>
@@ -579,7 +670,7 @@
                     </layout>
                    </widget>
                    <widget class="QWidget" name="numberDecisionPage">
-                    <widget class="QWidget" name="">
+                    <widget class="QWidget" name="layoutWidget">
                      <property name="geometry">
                       <rect>
                        <x>10</x>
@@ -824,7 +915,7 @@
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>171</width>
+                 <width>160</width>
                  <height>292</height>
                 </rect>
                </property>

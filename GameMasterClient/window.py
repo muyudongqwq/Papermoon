@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QHBoxLayout,
     QLabel,
     QTableWidgetItem,
@@ -59,6 +60,16 @@ class GameMasterWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.setWindowTitle(APPLICATION_NAME)
+        # Designer pages have very different natural sizes.  Ignore the
+        # largest hidden page while the compact main menu is visible; each
+        # working page is explicitly resized when opened.
+        self.ui.mainStack.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Ignored,
+        )
+        for page in (self.ui.setupPage, self.ui.gamePage,
+                     self.ui.placementPage, self.ui.groupMemberPage):
+            page.setMinimumSize(0, 0)
         self.ui.mainStack.setCurrentWidget(self.ui.mainMenuPage)
 
         self.project = CatalogProject()
@@ -95,12 +106,7 @@ class GameMasterWindow(QMainWindow):
         self._configure_tables()
         self._connect_signals()
         self._reset_game_page()
-        if not self.ui.maximumTurnsLineEdit.text().strip():
-            self.ui.maximumTurnsLineEdit.setText("120")
-        if not self.ui.grailAppearanceLineEdit.text().strip():
-            self.ui.grailAppearanceLineEdit.setText("4")
-        if not self.ui.grailReadyLineEdit.text().strip():
-            self.ui.grailReadyLineEdit.setText("6")
+        self._sync_grail_condition_bounds()
         self.ui.mapSummaryLabel.setText("无地图")
 
     def _configure_tables(self):
@@ -122,8 +128,9 @@ class GameMasterWindow(QMainWindow):
         ui.newGameButton.clicked.connect(self.open_setup)
         ui.loadGameButton.clicked.connect(self.load_game)
         ui.exitButton.clicked.connect(self.close)
-        ui.backToMenuButton.clicked.connect(lambda: ui.mainStack.setCurrentWidget(ui.mainMenuPage))
+        ui.backToMenuButton.clicked.connect(self.show_main_menu)
         ui.importMapButton.clicked.connect(self.import_map)
+        ui.browseMapButton.clicked.connect(self.browse_map)
         ui.clearMapButton.clicked.connect(self.clear_map)
         ui.importCharacterButton.clicked.connect(self.import_character)
         ui.viewCharacterButton.clicked.connect(self.view_selected_character)
@@ -147,17 +154,61 @@ class GameMasterWindow(QMainWindow):
         ui.saveGameButton.clicked.connect(self.save_game)
         ui.commandExecutionButton.clicked.connect(self.execute_gm_command)
         ui.GMCommandEdit.returnPressed.connect(self.execute_gm_command)
+        ui.grailAppearanceConditionSpinBox.valueChanged.connect(
+            self._sync_grail_condition_bounds
+        )
+        ui.grailReadyConditionSpinBox.valueChanged.connect(
+            self._sync_grail_condition_bounds
+        )
+
+    def _sync_grail_condition_bounds(self, _value=None):
+        """Keep appearance <= ready without waiting for final submission."""
+        appearance = self.ui.grailAppearanceConditionSpinBox
+        ready = self.ui.grailReadyConditionSpinBox
+        appearance.setMaximum(ready.value())
+        ready.setMinimum(appearance.value())
+        appearance.setToolTip("圣杯出现条件不能大于圣杯就绪条件")
+        ready.setToolTip("创建游戏时，该值不能大于本局从者总数")
 
     def open_setup(self):
         if self.session is not None and self.session.state not in self.session.TERMINAL_STATES:
             QMessageBox.warning(self, "游戏正在运行", "请先结束当前游戏。")
             return
         self.ui.mainStack.setCurrentWidget(self.ui.setupPage)
+        self._show_work_window()
 
-    def import_map(self):
+    def show_main_menu(self):
+        self.ui.mainStack.setCurrentWidget(self.ui.mainMenuPage)
+        self.setMinimumSize(0, 0)
+        self.resize(640, 480)
+        self._center_on_screen()
+
+    def _show_work_window(self):
+        screen = self.screen() or QApplication.primaryScreen()
+        available = screen.availableGeometry()
+        self.resize(min(1280, available.width() - 80), min(800, available.height() - 80))
+        self._center_on_screen()
+
+    def _center_on_screen(self):
+        screen = self.screen() or QApplication.primaryScreen()
+        frame = self.frameGeometry()
+        frame.moveCenter(screen.availableGeometry().center())
+        self.move(frame.topLeft())
+
+    def browse_map(self):
         path, _ = QFileDialog.getOpenFileName(self, "导入地图", "", "Papermoon地图 (*.pmap);;所有文件 (*)")
         if not path:
-            return
+            return False
+        self.ui.mapPathEdit.setText(path)
+        self.ui.mapSummaryLabel.setText("已选择，等待导入")
+        return True
+
+    def import_map(self):
+        path = self.ui.mapPathEdit.text().strip()
+        if not path:
+            if not self.browse_map():
+                return
+            path = self.ui.mapPathEdit.text().strip()
         try:
             document = load_map_document(path)
         except (OSError, ValueError) as error:
@@ -276,13 +327,20 @@ class GameMasterWindow(QMainWindow):
 
     def prepare_placement(self):
         try:
-            maximum = self._positive_int(self.ui.maximumTurnsLineEdit.text(), "最大回合数", minimum=1)
-            appearance = self._positive_int(self.ui.grailAppearanceLineEdit.text(), "圣杯出现退场数", minimum=0)
-            ready = self._positive_int(self.ui.grailReadyLineEdit.text(), "圣杯可用退场数", minimum=appearance)
+            maximum = self.ui.MaximumTurnsSpinBox.value()
+            appearance = self.ui.grailAppearanceConditionSpinBox.value()
+            ready = self.ui.grailReadyConditionSpinBox.value()
+            if appearance > ready:
+                raise ValueError("圣杯出现条件不能大于圣杯就绪条件")
             if self.map_document is None:
                 raise ValueError("请先导入地图")
             if not self.characters:
                 raise ValueError("请先导入至少一名参战角色")
+            servant_count = sum(isinstance(actor, Servant) for actor in self.characters)
+            if ready > servant_count:
+                raise ValueError(
+                    f"圣杯就绪条件为{ready}，但本局开始时只有{servant_count}名从者"
+                )
             if self.ui.grailLocationCombo.currentData() is None:
                 raise ValueError("请选择圣杯出现地点")
         except ValueError as error:
@@ -294,6 +352,7 @@ class GameMasterWindow(QMainWindow):
         self._build_runtime_map()
         self._build_placement_groups()
         self.ui.mainStack.setCurrentWidget(self.ui.placementPage)
+        self._show_work_window()
         self._refresh_placement_progress()
         self.ui.placementMapView.fitInView(self.placement_scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
@@ -492,6 +551,7 @@ class GameMasterWindow(QMainWindow):
         self.event_cursor = 0
         self.pending_decision = None
         self.ui.mainStack.setCurrentWidget(self.ui.gamePage)
+        self._show_work_window()
         self._rebuild_character_buttons()
         self._append_log("游戏已建立，等待GM启动第一回合。")
         self.ui.nextTurnButton.setEnabled(False)
@@ -864,6 +924,7 @@ class GameMasterWindow(QMainWindow):
         self.placement_scene.set_document(self.map_document)
         self.live_scene.set_document(self.map_document)
         self.ui.mainStack.setCurrentWidget(self.ui.gamePage)
+        self._show_work_window()
         self._rebuild_character_buttons()
         self._refresh_character_table()
         self._append_log(f"已加载存档，恢复到第{expected_turn}回合结束后的安全节点。")

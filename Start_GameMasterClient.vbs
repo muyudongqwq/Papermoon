@@ -5,10 +5,10 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 root = fso.GetParentFolderName(WScript.ScriptFullName)
 pythonw = root & "\.venv\Scripts\pythonw.exe"
 If Not fso.FileExists(pythonw) Then
-    MsgBox "没有找到Papermoon虚拟环境中的pythonw.exe。", vbCritical, "Papermoon GM终端"
+    MsgBox "Papermoon virtual environment was not found.", vbCritical, "Papermoon GM Client"
     WScript.Quit 1
 End If
-command = """" & pythonw & """ -m GameMasterClient"
+command = Chr(34) & pythonw & Chr(34) & " -m GameMasterClient"
 shell.CurrentDirectory = root
 shell.Run command, 1, False
 
