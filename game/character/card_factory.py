@@ -24,7 +24,7 @@ _CONTENT_FIELDS = {
     "noble_phantasms": "noble_phantasm",
 }
 _COMMON_FIELDS = {"card_id", "character_type", "name", "attributes"}
-_OPTIONAL_FIELDS = {*_CONTENT_FIELDS, "class_skills", "source"}
+_OPTIONAL_FIELDS = {*_CONTENT_FIELDS, "class_skills", "source", "tags", "true_name"}
 _TYPE_FIELDS = {"master": {"talent", "command_spell"}, "servant": {"servant_class", "noble"}}
 
 
@@ -81,6 +81,16 @@ def validate_character_card_definition(definition):
     if re.fullmatch(r"[a-z][a-z0-9_]*", definition["card_id"]) is None:
         raise ValueError("card_id必须以小写字母开头，只包含小写字母、数字和下划线")
     _text(definition["name"], "角色名")
+    if "true_name" in definition:
+        _text(definition["true_name"], "true_name")
+    if "tags" in definition:
+        tags = definition["tags"]
+        if not isinstance(tags, list) or any(
+            not isinstance(tag, str) or not tag.strip() or tag != tag.strip() for tag in tags
+        ):
+            raise ValueError("tags必须是非空标签字符串的列表，标签不能带首尾空格")
+        if len(set(tags)) != len(tags):
+            raise ValueError("tags不能有重复标签")
     if "source" in definition:
         _text(definition["source"], "source")
     attributes = definition["attributes"]
@@ -197,6 +207,8 @@ def create_character_from_card(card_id, *, name=None, position=None, master=None
         actor = Servant(**arguments, servant_class=data["servant_class"],
                         noble=_fixed_rank(data["noble"], "noble", allow_plus=True))
     actor.card_id = card_id
+    actor.true_name = data.get("true_name", data["name"])
+    actor.tags = set(data.get("tags", []))
     try:
         # Load-time passive conditions must see the requested spawn context.
         if position is not None:

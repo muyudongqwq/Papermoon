@@ -24,13 +24,21 @@ class CommandSpellService:
             and character.command_spell >= minimum
         ]
 
-    @staticmethod
-    def controlled_characters(master):
-        return [master] + [
+    def controlled_characters(self, master):
+        controlled = [master] + [
             servant
             for servant in master.servants
             if servant.is_alive() and servant.master is master
         ]
+        partner = getattr(master, "arena_partner", None)
+        if (
+            self.game_manager.arena_mode
+            and partner is not None
+            and partner.is_alive()
+            and partner not in controlled
+        ):
+            controlled.append(partner)
+        return controlled
 
     def spend(self, master, amount):
         if master not in self.available_masters(amount):
@@ -57,7 +65,7 @@ class CommandSpellService:
     def teleport_destinations(self, master, servant):
         if (
             not isinstance(servant, Servant)
-            or servant.master is not master
+            or servant.get_effective_master() is not master
             or not servant.is_alive()
         ):
             return []
@@ -70,8 +78,16 @@ class CommandSpellService:
             key=lambda location: str(location.name),
         )
 
+    def teleport_targets(self, master):
+        return [
+            character
+            for character in self.controlled_characters(master)
+            if isinstance(character, Servant)
+            and self.teleport_destinations(master, character)
+        ]
+
     def emergency_guard_targets(self, master, servant, destination):
-        if servant.master is not master:
+        if servant.get_effective_master() is not master:
             return []
         battle = self.game_manager.get_battle_at(destination)
         if battle is None:

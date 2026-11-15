@@ -592,6 +592,13 @@ class ModifierManager:
             cost = overrides[-1].total_value
         return max(0, int(cost))
 
+    def matching_effects(self, effect_type, context):
+        return (
+            modifier for modifier in self.owner.modifiers
+            if modifier.applied and modifier.effect_type == effect_type
+            and modifier.matches_context(context)
+        )
+
     def get_contextual_bonus(
         self,
         effect_type,

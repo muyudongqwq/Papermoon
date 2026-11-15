@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 from core.catalog import CatalogProject, BUILTINS
 from game.character import create_character_from_card
-from CharacterEditorClient.app import CharacterEditorClient
+from CharacterEditorClient.app import CharacterEditorClient, POINT_COLORS
 from CharacterEditorClient.dialogs import NewCardDialog
 from CharacterEditorClient.model import new_card, display_attribute
 from SkillEditorClient.app import SkillEditorClient
@@ -61,6 +61,18 @@ class CharacterEditorSmokeTests(unittest.TestCase):
             self.assertFalse(hasattr(self.app.form, "id_label"))
             self.assertFalse(hasattr(self.app.form, "command_spell"))
         self.assertTrue(all("[" not in self.app.tree.item(node, "text") for node in self.app.items))
+        self.assertEqual(
+            POINT_COLORS,
+            {"under": "#00B3FF", "valid": "#22B14C", "over": "#ED1C24"},
+        )
+        self.assertEqual(str(self.app.tree.tag_configure("under", "foreground")), "#00B3FF")
+        self.assertEqual(str(self.app.tree.tag_configure("valid", "foreground")), "#22B14C")
+        tags_by_card = {
+            card_id: self.app.tree.item(node, "tags")
+            for node, card_id in self.app.items.items()
+        }
+        self.assertIn("under", tags_by_card["servant_test_0"])
+        self.assertIn("valid", tags_by_card["master_test_0"])
 
     def test_new_master_has_generated_id_blank_attributes_and_default_command_spells(self):
         with patch("CharacterEditorClient.app.ask_new_card", return_value=("master", None)):

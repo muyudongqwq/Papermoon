@@ -18,7 +18,7 @@
     <item>
      <widget class="QStackedWidget" name="mainStack">
       <property name="currentIndex">
-       <number>2</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="mainMenuPage">
        <layout class="QVBoxLayout" name="mainMenuPageLayout">
@@ -236,7 +236,7 @@
            <property name="geometry">
             <rect>
              <x>0</x>
-             <y>0</y>
+             <y>-455</y>
              <width>900</width>
              <height>1200</height>
             </rect>
@@ -390,15 +390,15 @@
                  </property>
                 </widget>
                </item>
-               <item row="0" column="0" colspan="2">
-                <widget class="QTableWidget" name="characterTable"/>
-               </item>
                <item row="2" column="1">
                 <widget class="QPushButton" name="setRelationshipButton">
                  <property name="text">
                   <string>设置主从</string>
                  </property>
                 </widget>
+               </item>
+               <item row="0" column="0" colspan="3">
+                <widget class="QTableWidget" name="characterTable"/>
                </item>
               </layout>
              </widget>
@@ -409,89 +409,42 @@
                <string>游戏规则</string>
               </property>
               <layout class="QGridLayout" name="ruleSetupLayout">
-               <item row="0" column="0">
-                    <widget class="QLabel" name="maximumTurnsLabel">
-                     <property name="text">
-                      <string>最大回合数</string>
-                     </property>
-                    </widget>
+               <item row="7" column="1">
+                <widget class="QLabel" name="descriptionLabel0_2">
+                 <property name="text">
+                  <string>退场</string>
+                 </property>
+                </widget>
                </item>
-               <item row="0" column="2">
-                    <widget class="QSpinBox" name="MaximumTurnsSpinBox">
-                     <property name="minimum">
-                      <number>60</number>
-                     </property>
-                     <property name="maximum">
-                      <number>9999999</number>
-                     </property>
-                     <property name="value">
-                      <number>120</number>
-                     </property>
-                    </widget>
+               <item row="7" column="0">
+                <widget class="QLabel" name="grailReadyConditionLabel">
+                 <property name="text">
+                  <string>圣杯就绪条件</string>
+                 </property>
+                </widget>
                </item>
-               <item row="1" column="0">
-                    <widget class="QLabel" name="grailAppearanceConditionLabel">
-                     <property name="text">
-                      <string>圣杯出现条件</string>
-                     </property>
-                    </widget>
+               <item row="6" column="0">
+                <widget class="QLabel" name="grailAppearanceConditionLabel">
+                 <property name="text">
+                  <string>圣杯出现条件</string>
+                 </property>
+                </widget>
                </item>
-               <item row="1" column="1">
-                    <widget class="QLabel" name="descriptionLabel0">
-                     <property name="text">
-                      <string>退场</string>
-                     </property>
-                    </widget>
+               <item row="4" column="0">
+                <widget class="QLabel" name="grailLabel">
+                 <property name="text">
+                  <string>圣杯战争</string>
+                 </property>
+                </widget>
                </item>
-               <item row="1" column="2">
-                    <widget class="QSpinBox" name="grailAppearanceConditionSpinBox">
-                     <property name="maximum">
-                      <number>14</number>
-                     </property>
-                     <property name="value">
-                      <number>4</number>
-                     </property>
-                    </widget>
+               <item row="6" column="1">
+                <widget class="QLabel" name="descriptionLabel0">
+                 <property name="text">
+                  <string>退场</string>
+                 </property>
+                </widget>
                </item>
-               <item row="1" column="3">
-                    <widget class="QLabel" name="descriptionLabel1">
-                     <property name="text">
-                      <string>名从者</string>
-                     </property>
-                    </widget>
-               </item>
-               <item row="2" column="0">
-                    <widget class="QLabel" name="grailReadyConditionLabel">
-                     <property name="text">
-                      <string>圣杯就绪条件</string>
-                     </property>
-                    </widget>
-               </item>
-               <item row="2" column="1">
-                    <widget class="QLabel" name="descriptionLabel0_2">
-                     <property name="text">
-                      <string>退场</string>
-                     </property>
-                    </widget>
-               </item>
-               <item row="2" column="2">
-                    <widget class="QSpinBox" name="grailReadyConditionSpinBox">
-                     <property name="maximum">
-                      <number>14</number>
-                     </property>
-                     <property name="value">
-                      <number>6</number>
-                     </property>
-                    </widget>
-               </item>
-               <item row="2" column="3">
-                    <widget class="QLabel" name="descriptionLabel1_2">
-                     <property name="text">
-                      <string>名从者</string>
-                     </property>
-                    </widget>
-               </item>
-               <item row="0" column="4" rowspan="3">
+               <item row="5" column="4" rowspan="3">
                 <spacer name="horizontalSpacer_6">
                  <property name="orientation">
                   <enum>Qt::Orientation::Horizontal</enum>
@@ -503,6 +456,95 @@
                   </size>
                  </property>
                 </spacer>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="deathMatchLabel">
+                 <property name="text">
+                  <string>死斗模式</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="1">
+                <widget class="QCheckBox" name="arenaCheckBox">
+                 <property name="text">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="3">
+                <widget class="QLabel" name="descriptionLabel1">
+                 <property name="text">
+                  <string>名从者</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="2">
+                <widget class="QSpinBox" name="grailReadyConditionSpinBox">
+                 <property name="maximum">
+                  <number>14</number>
+                 </property>
+                 <property name="value">
+                  <number>6</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="0">
+                <widget class="QLabel" name="arenaLabel">
+                 <property name="text">
+                  <string>竞技场</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="3">
+                <widget class="QLabel" name="descriptionLabel1_2">
+                 <property name="text">
+                  <string>名从者</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QCheckBox" name="deathMatchCheckBox">
+                 <property name="text">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QCheckBox" name="grailCheckBox">
+                 <property name="text">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="2">
+                <widget class="QSpinBox" name="grailAppearanceConditionSpinBox">
+                 <property name="maximum">
+                  <number>14</number>
+                 </property>
+                 <property name="value">
+                  <number>4</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="maximumTurnsLabel">
+                 <property name="text">
+                  <string>最大回合数</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QSpinBox" name="MaximumTurnsSpinBox">
+                 <property name="minimum">
+                  <number>60</number>
+                 </property>
+                 <property name="maximum">
+                  <number>9999999</number>
+                 </property>
+                 <property name="value">
+                  <number>120</number>
+                 </property>
+                </widget>
                </item>
               </layout>
              </widget>
@@ -915,7 +957,7 @@
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>160</width>
+                 <width>171</width>
                  <height>292</height>
                 </rect>
                </property>

@@ -25,6 +25,8 @@ class Character:
     def __init__(self, name, strength, endurance, flexibility, magic, fortune):
         self._character_id = uuid4().hex
         self.name = name
+        self.true_name = name
+        self.tags = set()
         self.strength = AttributeRank(strength)
         self.endurance = AttributeRank(endurance)
         self.flexibility = AttributeRank(flexibility)
@@ -99,6 +101,10 @@ class Character:
         self.is_familiar = False
         self.controller = self
         self.summoner = None
+        # Arena games can pair any two characters.  This relationship is
+        # separate from the class-specific Master/Servant link so neither
+        # character has to change its card type.
+        self.arena_partner = None
         self.familiars = []
         self.registration_index = None
         self.registered_turn = None
@@ -838,13 +844,14 @@ class Character:
             return self.mp - old_value
         return self.resource_manager.recover(resource_id, amount)
 
-    def pay_mp_with_ledger(self, amount):
+    def pay_personal_mp_with_ledger(self, amount):
+        """Pay only from this character's own temporary and ordinary MP."""
         if isinstance(amount, bool) or not isinstance(amount, (int, float)):
             raise TypeError("MP消耗必须是数字")
         if amount < 0:
             raise ValueError("MP消耗不能小于0")
         amount = int(amount)
-        if self.get_available_mp() < amount:
+        if self.temporary_mp + self.mp < amount:
             return None
         temporary_cost = min(self.temporary_mp, amount)
         ordinary_cost = amount - temporary_cost
@@ -886,6 +893,9 @@ class Character:
         if ordinary_cost:
             ledger.append({"payer": self, "amount": ordinary_cost, "pool": "mp"})
         return ledger
+
+    def pay_mp_with_ledger(self, amount):
+        return self.pay_personal_mp_with_ledger(amount)
 
     def _emit_builtin_resource_change(
         self,
@@ -1281,6 +1291,7 @@ class Character:
         append(getattr(self, "master", None))
         for servant in getattr(self, "servants", []):
             append(servant)
+        append(getattr(self, "arena_partner", None))
         append(getattr(self, "summoner", None))
         for familiar in getattr(self, "familiars", []):
             append(familiar)

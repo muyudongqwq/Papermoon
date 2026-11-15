@@ -1,5 +1,7 @@
 import random
 
+from game.turn.roll import fixed_die_value
+
 
 class InitiativeManager:
     """Build initiative while keeping NPC/familiar registration snapshots."""
@@ -76,14 +78,24 @@ class InitiativeManager:
                 continue
 
             roll_groups = {}
+            fixed_characters = set()
             for character in group:
-                roll = random.randint(1, 10)
+                roll = fixed_die_value(character)
+                if roll is None:
+                    roll = random.randint(1, 10)
+                else:
+                    fixed_characters.add(character)
                 roll_groups.setdefault(roll, []).append(character)
 
             # The stack is LIFO: enqueue lower rolls first so higher groups
             # finish all of their own tie resolution before lower groups.
             for roll in sorted(roll_groups):
-                pending_groups.append(roll_groups[roll])
+                tied = roll_groups[roll]
+                if all(character in fixed_characters for character in tied):
+                    # Fixed ties cannot be broken by further rolls.
+                    pending_groups.extend([character] for character in reversed(tied))
+                else:
+                    pending_groups.append(tied)
 
         return result
 

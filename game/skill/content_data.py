@@ -539,3 +539,14 @@ NOBLE_PHANTASM_DATA = {
         }],
     },
 }
+
+
+# Local alpha-test cards are kept separate from the reviewed sample cards so
+# their partially GM-adjudicated clauses remain easy to identify and replace.
+from game.skill.alpha_test_data import (
+    ALPHA_NOBLE_PHANTASM_DATA,
+    ALPHA_PERSONAL_SKILL_DATA,
+)
+
+PERSONAL_SKILL_DATA.update(ALPHA_PERSONAL_SKILL_DATA)
+NOBLE_PHANTASM_DATA.update(ALPHA_NOBLE_PHANTASM_DATA)

@@ -30,6 +30,20 @@ class MapEditorModelTests(unittest.TestCase):
         document.delete_location(a.location_id)
         self.assertEqual(document.roads, {})
 
+    def test_existing_road_can_be_extended_into_a_junction(self):
+        document = MapDocument()
+        a = document.add_location("A")
+        b = document.add_location("B")
+        c = document.add_location("C")
+        road = document.add_road([a.location_id, b.location_id])
+
+        extended = document.extend_road(road.road_id, [c.location_id])
+
+        self.assertIs(extended, road)
+        self.assertEqual(road.location_ids, [a.location_id, b.location_id, c.location_id])
+        with self.assertRaises(ValueError):
+            document.extend_road(road.road_id, [c.location_id])
+
     def test_duplicate_names_roads_and_missing_references_are_rejected(self):
         document = MapDocument()
         a = document.add_location("A")

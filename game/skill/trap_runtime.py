@@ -144,7 +144,8 @@ class TrapManager:
 
     @staticmethod
     def _attack_roll(trap):
-        die = random.randint(1, 10)
+        from game.turn.roll import roll_d10
+        die = roll_d10(trap.owner, roller=lambda: random.randint(1, 10))
         critical = 0
         if die == 10 and trap.critical_success_eligible:
             critical = 15

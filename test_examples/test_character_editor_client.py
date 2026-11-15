@@ -12,11 +12,42 @@ from CharacterEditorClient.model import (
     parse_attribute, display_attribute, parse_fixed_rank, FIXED_RANK_CHOICES,
     next_card_id, new_card, validate_editor_card,
 )
+from CharacterEditorClient.point_rules import assess_character_points
 from game.character.servants import VALID_SERVANT_CLASSES
 from SkillEditorClient.launcher import character_editor_command
 
 
 class CharacterEditorModelTests(unittest.TestCase):
+    def test_legacy_point_budgets_classify_builtin_cards(self):
+        servant = assess_character_points(BUILTINS["character_card"]["servant_test_0"], BUILTINS)
+        master = assess_character_points(BUILTINS["character_card"]["master_test_0"], BUILTINS)
+        self.assertEqual((servant.points, servant.budget, servant.status), (44, 45, "under"))
+        self.assertEqual((master.points, master.budget, master.status), (30, 30, "valid"))
+
+    def test_over_budget_is_red_state_but_any_gm_rank_overrides_it(self):
+        catalogs = deepcopy(BUILTINS)
+        card = deepcopy(catalogs["character_card"]["master_test_0"])
+        card["attributes"]["strength"] = 5
+        assessment = assess_character_points(card, catalogs)
+        self.assertEqual(assessment.status, "over")
+        self.assertFalse(assessment.importable)
+
+        card["talent"] = "GM"
+        assessment = assess_character_points(card, catalogs)
+        self.assertEqual(assessment.status, "valid")
+        self.assertTrue(assessment.gm_override)
+        self.assertTrue(assessment.importable)
+
+    def test_gm_rank_on_selected_catalog_skill_also_overrides_points(self):
+        catalogs = deepcopy(BUILTINS)
+        card = deepcopy(catalogs["character_card"]["master_test_0"])
+        card["attributes"]["strength"] = 5
+        skill_id = card["personal_skills"][0]
+        catalogs["personal_skill"][skill_id]["rank"] = "GM"
+        assessment = assess_character_points(card, catalogs)
+        self.assertEqual(assessment.status, "valid")
+        self.assertTrue(assessment.gm_override)
+
     def test_all_attribute_ranks_and_plus_counts_translate_exactly(self):
         for value, rank in enumerate(("E", "D", "C", "B", "A"), 1):
             for plus in range(3):

@@ -24,6 +24,7 @@ EVENT_OPTIONS = {
     "action_declared": ("行动结算前", "before", "统一行动宣布后、执行前通知；可结合行动ID等附加条件筛选。"),
     "action_resolved": ("行动结算后", "after", "统一行动执行完成后通知，包含行动ID和执行结果。"),
     "before_damage": ("伤害结算前", "before", "伤害应用前通知，可修改或取消本次伤害；事件目标为受伤角色。"),
+    "special_attack_hit": ("特攻命中", "before", "伤害转移完成后、护盾吸收前发出；可按特攻标识筛选并修改本次伤害。"),
     "damage_received": ("受到伤害后", "after", "角色实际受到伤害后通知，事件目标为受伤角色；可用附加条件限定为自身。"),
     "damage_dealt": ("造成伤害后", "after", "伤害结算后通知，事件行动者为伤害来源、目标为受伤角色。"),
     "before_battle_continuation": ("战斗续行判定前", "before", "通用濒死不可用时，在战斗续行的保命顺序处通知。"),

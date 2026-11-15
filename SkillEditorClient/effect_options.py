@@ -13,6 +13,9 @@ from game.turn.damage_types import VALID_DAMAGE_TYPES
 EFFECT_NAMES = {
     "action_restriction": "行动限制",
     "status_immunity": "弱体无效",
+    "special_attack": "特攻",
+    "fixed_die": "固定骰面",
+    "incoming_attack_roll_bonus": "调整来袭攻击骰",
     "choices": "可选发动",
     "hp_floor": "设置生命下限", "prevent_death": "死亡免疫", "add_content": "获得已入库技能",
     "add_simple_round": "追加简易战斗轮", "add_resource": "创建自定义资源",
@@ -64,6 +67,7 @@ NUMBER_FIELDS = {
     "delay_turns", "distance",
 }
 STRING_FIELDS = {
+    "special_attack_id",
     "match_mode",
     "name", "resource", "subject", "anchor", "attacker_rule", "defender_rule", "trigger_target",
     "trigger_phase", "attack_mode", "attack_stat", "damage_type", "resolution_channel",
@@ -74,6 +78,8 @@ STRING_FIELDS = {
     "redirect_type", "new_target",
 }
 FIELD_NAMES = {
+    "special_attack_id": "特攻标识",
+    "condition": "适用条件",
     "all_actions": "限制全部行动", "action_ids": "行动ID列表",
     "action_types": "行动类别列表", "skill_ids": "技能ID列表",
     "component_ids": "技能单元ID列表", "phases": "生效阶段列表",

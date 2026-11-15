@@ -68,11 +68,7 @@ class GameTerminalDecisionProvider:
                 DecisionOption("临时MP+90（1划）", "mp", ("mp",)),
                 DecisionOption("下一次攻击伤害+90（1划）", "damage", ("damage",)),
             ]
-            teleport_targets = [
-                target
-                for target in master.servants
-                if self.command_spell_service.teleport_destinations(master, target)
-            ]
+            teleport_targets = self.command_spell_service.teleport_targets(master)
             if master.command_spell >= 2 and teleport_targets:
                 effects.append(DecisionOption(
                     "瞬间移动从者（2划）",

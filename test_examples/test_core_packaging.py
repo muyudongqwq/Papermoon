@@ -64,7 +64,7 @@ class CorePackagingTests(unittest.TestCase):
 
     def test_missing_project_uses_builtins_without_creating_a_file(self):
         self.assertEqual(self.project.effective(), BUILTINS)
-        self.assertEqual(self.project.validate()["character_card"], 2)
+        self.assertEqual(self.project.validate()["character_card"], 4)
         self.assertFalse(self.project.path.exists())
 
     def test_each_editor_template_can_be_validated_and_loaded(self):

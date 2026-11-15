@@ -5,6 +5,26 @@ from game.modifier.context import ModifierContext
 from game.turn.decision import DecisionOption, DecisionRequest
 
 
+def fixed_die_value(character, context=None):
+    manager = getattr(character, "modifier_manager", None)
+    if manager is None:
+        return None
+    context = ModifierContext.coerce(context, actor=character)
+    return next(
+        (modifier.effect_data["value"] for modifier in reversed(
+            list(manager.matching_effects("fixed_die", context)),
+        )),
+        None,
+    )
+
+
+def roll_d10(character, *, roller=None, context=None):
+    fixed = fixed_die_value(character, context)
+    if fixed is not None:
+        return fixed
+    return roller() if roller is not None else random.randint(1, 10)
+
+
 @dataclass
 class RollResult:
     character: object
@@ -74,9 +94,13 @@ class RollResolver:
         modifier_context=None,
     ):
         roller = roller or (lambda: random.randint(1, 10))
-        first_die = roller() if initial_die is None else initial_die
+        fixed = fixed_die_value(character, modifier_context)
+        first_die = (
+            fixed if fixed is not None
+            else roller() if initial_die is None else initial_die
+        )
         die = first_die
-        history = [("roll", die)]
+        history = [("fixed" if fixed is not None else "roll", die)]
         rerolls_used = 0
         flips_used = 0
         self._emit_raw_die(
@@ -89,7 +113,7 @@ class RollResolver:
             decision_provider=decision_provider,
         )
 
-        if allow_luck and character.in_battle and decision_provider is not None:
+        if fixed is None and allow_luck and character.in_battle and decision_provider is not None:
             while character.luck_reroll > 0 or character.fortune.plus > 0:
                 options = [DecisionOption("确认当前骰面", "confirm", ("确认", "confirm"))]
                 if character.luck_reroll > 0:

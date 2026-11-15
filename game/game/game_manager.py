@@ -18,6 +18,8 @@ from game.map.boat import BoatManager
 class GameManager:
     """负责游戏开始、全局结束和圣杯胜利条件。"""
 
+    GAME_MODES = {"grail_war", "deathmatch"}
+
     def __init__(
         self,
         characters,
@@ -28,6 +30,9 @@ class GameManager:
         grail_ready_deaths=6,
         turn_manager=None,
         character_id_allocator=None,
+        game_mode="grail_war",
+        teams=None,
+        arena_mode=False,
     ):
         self.characters = list(characters)
         self.dead_characters = []
@@ -36,6 +41,12 @@ class GameManager:
         if character_id_allocator is not None and not callable(character_id_allocator):
             raise ValueError("character_id_allocator必须可调用")
         self.character_id_allocator = character_id_allocator
+        if game_mode not in self.GAME_MODES:
+            raise ValueError(f"未知游戏模式：{game_mode}")
+        if not isinstance(arena_mode, bool):
+            raise ValueError("arena_mode必须是布尔值")
+        self.game_mode = game_mode
+        self.arena_mode = arena_mode
         for character in self.characters:
             self._assign_registration_metadata(character, registered_turn=0)
         self.player_characters = list(
@@ -84,6 +95,100 @@ class GameManager:
         self.summon_manager = SummonManager(self)
         self.delay_manager = DelayManager(self)
         self.boat_manager = BoatManager(self)
+        self.teams = self._normalize_teams(teams)
+        self._rebuild_team_index()
+        if self.arena_mode:
+            self._configure_arena_partners()
+
+    @property
+    def grail_enabled(self):
+        return self.game_mode == "grail_war"
+
+    def _default_teams(self):
+        """Freeze ordinary Master/Servant groups before deaths unlink them."""
+        from game.character.masters import Master
+
+        result = []
+        used = set()
+        for master in (character for character in self.characters if isinstance(character, Master)):
+            members = [master] + [
+                servant for servant in master.servants if servant in self.characters
+            ]
+            members = [member for member in members if member not in used]
+            if members:
+                result.append(tuple(members))
+                used.update(members)
+        for character in self.characters:
+            if character not in used:
+                result.append((character,))
+                used.add(character)
+        return result
+
+    def _normalize_teams(self, teams):
+        normalized = self._default_teams() if teams is None else [tuple(team) for team in teams]
+        if any(not team for team in normalized):
+            raise ValueError("阵营不能为空")
+        flattened = [character for team in normalized for character in team]
+        if len(set(flattened)) != len(flattened):
+            raise ValueError("同一角色不能属于多个阵营")
+        if set(flattened) != set(self.characters):
+            raise ValueError("每名开局角色都必须且只能属于一个阵营")
+        if self.arena_mode and any(len(team) != 2 for team in normalized):
+            raise ValueError("竞技场模式的每个阵营必须恰好有两名角色")
+        return [list(team) for team in normalized]
+
+    def _rebuild_team_index(self):
+        self.team_by_character = {
+            character: team_index
+            for team_index, team in enumerate(self.teams)
+            for character in team
+        }
+
+    def on_servant_ownership_changed(self, servant, old_master, new_master):
+        """Move a Servant immediately when ownership changes in deathmatch."""
+        if self.game_mode != "deathmatch" or self.arena_mode:
+            return False
+        current = next((team for team in self.teams if servant in team), None)
+        if current is None:
+            return False
+        target = (
+            next((team for team in self.teams if new_master in team), None)
+            if new_master is not None
+            else None
+        )
+        if target is current:
+            return False
+        current.remove(servant)
+        if not current:
+            self.teams.remove(current)
+        if target is None:
+            self.teams.append([servant])
+        else:
+            target.append(servant)
+        self._rebuild_team_index()
+        return True
+
+    def _configure_arena_partners(self):
+        from game.character.servants import Servant
+
+        # A pre-existing cross-team Master/Servant link must not leak mana,
+        # command spells, or allegiance across arena teams.
+        for character in self.characters:
+            if not isinstance(character, Servant) or character.master is None:
+                continue
+            if self.team_by_character.get(character.master) != self.team_by_character.get(character):
+                character.master.remove_servant(character, trigger_master_lost=False)
+        for team_index, team in enumerate(self.teams):
+            first, second = team
+            first.arena_partner = second
+            second.arena_partner = first
+            first.add_ally(second, source=("arena_team", team_index))
+
+    def living_teams(self):
+        return [
+            team for team in self.teams
+            if any(character in self.characters and character.is_alive() for character in team)
+        ]
 
     @property
     def field_effects(self):
@@ -398,7 +503,7 @@ class GameManager:
             return False
         if not self.characters:
             raise ValueError("游戏至少需要一名角色")
-        if self.holy_grail.designated_location is None:
+        if self.grail_enabled and self.holy_grail.designated_location is None:
             raise ValueError("游戏开始前必须指定圣杯出现地点")
 
         self.turn_manager.characters = list(self.characters)
@@ -425,12 +530,23 @@ class GameManager:
         for character in self.characters:
             if getattr(character, "is_npc", False):
                 InitiativeManager.capture_fixed_snapshot(character)
-        self.holy_grail.refresh(self.all_characters)
+        self.refresh_grail_state()
         self.turn_manager.update_visibility()
         self.started = True
         return True
 
     def check_game_end(self):
+        if not self.ended and self.started and self.game_mode == "deathmatch":
+            living = self.living_teams()
+            if len(living) <= 1:
+                winners = [
+                    character for team in living for character in team
+                    if character in self.characters and character.is_alive()
+                ]
+                self.end_game(
+                    reason="deathmatch_last_team" if living else "deathmatch_draw",
+                    winners=winners,
+                )
         return self.ended
 
     def configure_grail_thresholds(
@@ -445,6 +561,8 @@ class GameManager:
         self.holy_grail.refresh(self.all_characters)
 
     def refresh_grail_state(self):
+        if not self.grail_enabled:
+            return False
         return self.holy_grail.refresh(self.all_characters)
 
     def handle_character_death(self, character, death_location):
@@ -478,6 +596,8 @@ class GameManager:
         return character in self.player_characters
 
     def handle_grail_investigation(self, character, decision_provider=None):
+        if not self.grail_enabled:
+            return {"available": False, "action": None}
         self.refresh_grail_state()
         grail = self.holy_grail
         result = {"available": False, "action": None}
@@ -529,6 +649,8 @@ class GameManager:
         return False
 
     def announce_grail_position(self, ap_layer):
+        if not self.grail_enabled:
+            return []
         self.refresh_grail_state()
         if not self.holy_grail.appeared:
             return []
@@ -571,7 +693,7 @@ class GameManager:
     def declare_victory(self, master):
         from game.character.masters import Master
 
-        if self.ended or not isinstance(master, Master):
+        if not self.grail_enabled or self.ended or not isinstance(master, Master):
             return False
         winners = [master]
         winners.extend(

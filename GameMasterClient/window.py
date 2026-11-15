@@ -11,6 +11,7 @@ import time
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QComboBox,
     QFileDialog,
     QInputDialog,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.catalog import CatalogProject, activate_catalog_bundle, validate_catalog_bundle
+from CharacterEditorClient.point_rules import assess_character_points, describe_point_assessment
 from game.character.card_data import CHARACTER_CARD_DATA
 from game.character.card_factory import create_character_from_card
 from game.character.masters import Master
@@ -60,6 +62,12 @@ class GameMasterWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.setWindowTitle(APPLICATION_NAME)
+        self.game_mode_group = QButtonGroup(self)
+        self.game_mode_group.setExclusive(True)
+        self.game_mode_group.addButton(self.ui.grailCheckBox)
+        self.game_mode_group.addButton(self.ui.deathMatchCheckBox)
+        if not self.ui.grailCheckBox.isChecked() and not self.ui.deathMatchCheckBox.isChecked():
+            self.ui.grailCheckBox.setChecked(True)
         # Designer pages have very different natural sizes.  Ignore the
         # largest hidden page while the compact main menu is visible; each
         # working page is explicitly resized when opened.
@@ -107,6 +115,7 @@ class GameMasterWindow(QMainWindow):
         self._connect_signals()
         self._reset_game_page()
         self._sync_grail_condition_bounds()
+        self._sync_game_mode_controls()
         self.ui.mapSummaryLabel.setText("无地图")
 
     def _configure_tables(self):
@@ -160,6 +169,8 @@ class GameMasterWindow(QMainWindow):
         ui.grailReadyConditionSpinBox.valueChanged.connect(
             self._sync_grail_condition_bounds
         )
+        ui.grailCheckBox.toggled.connect(self._sync_game_mode_controls)
+        ui.deathMatchCheckBox.toggled.connect(self._sync_game_mode_controls)
 
     def _sync_grail_condition_bounds(self, _value=None):
         """Keep appearance <= ready without waiting for final submission."""
@@ -169,6 +180,28 @@ class GameMasterWindow(QMainWindow):
         ready.setMinimum(appearance.value())
         appearance.setToolTip("圣杯出现条件不能大于圣杯就绪条件")
         ready.setToolTip("创建游戏时，该值不能大于本局从者总数")
+
+    def _sync_game_mode_controls(self, _checked=None):
+        """Disable Grail-only setup fields while death match mode is active."""
+        enabled = self.ui.grailCheckBox.isChecked()
+        grail_only_widgets = (
+            self.ui.grailLocationTips,
+            self.ui.grailLocationCombo,
+            self.ui.grailAppearanceConditionLabel,
+            self.ui.descriptionLabel0,
+            self.ui.grailAppearanceConditionSpinBox,
+            self.ui.descriptionLabel1,
+            self.ui.grailReadyConditionLabel,
+            self.ui.descriptionLabel0_2,
+            self.ui.grailReadyConditionSpinBox,
+            self.ui.descriptionLabel1_2,
+        )
+        for widget in grail_only_widgets:
+            widget.setEnabled(enabled)
+        explanation = "" if enabled else "死斗模式不会出现圣杯"
+        self.ui.grailLocationCombo.setToolTip(explanation)
+        self.ui.grailAppearanceConditionLabel.setToolTip(explanation)
+        self.ui.grailReadyConditionLabel.setToolTip(explanation)
 
     def open_setup(self):
         if self.session is not None and self.session.state not in self.session.TERMINAL_STATES:
@@ -234,16 +267,29 @@ class GameMasterWindow(QMainWindow):
         self.live_scene.clear()
 
     def import_character(self):
-        cards = sorted(CHARACTER_CARD_DATA.items(), key=lambda pair: (pair[1]["character_type"], pair[1]["name"]))
+        cards = sorted(
+            self.active_catalog["character_card"].items(),
+            key=lambda pair: (pair[1]["character_type"], pair[1]["name"]),
+        )
         if not cards:
             self._error("当前角色库中没有可导入的角色卡")
             return
-        labels = [f"{data['name']}  [{card_id}]" for card_id, data in cards]
+        assessments = {
+            card_id: assess_character_points(data, self.active_catalog)
+            for card_id, data in cards
+        }
+        labels = [
+            f"{data['name']}  [{card_id}]  ·  {describe_point_assessment(assessments[card_id])}"
+            for card_id, data in cards
+        ]
         label, accepted = QInputDialog.getItem(self, "导入角色", "从已编辑的角色库选择：", labels, 0, False)
         if not accepted:
             return
         card_id = cards[labels.index(label)][0]
-        default_name = CHARACTER_CARD_DATA[card_id]["name"]
+        if not assessments[card_id].importable:
+            self._error("该角色卡点数超额，不能导入游戏；请先在角色编辑器中调整")
+            return
+        default_name = self.active_catalog["character_card"][card_id]["name"]
         name, accepted = QInputDialog.getText(self, "角色名称", "本局显示名称：", text=default_name)
         if not accepted:
             return
@@ -328,33 +374,95 @@ class GameMasterWindow(QMainWindow):
     def prepare_placement(self):
         try:
             maximum = self.ui.MaximumTurnsSpinBox.value()
-            appearance = self.ui.grailAppearanceConditionSpinBox.value()
-            ready = self.ui.grailReadyConditionSpinBox.value()
-            if appearance > ready:
-                raise ValueError("圣杯出现条件不能大于圣杯就绪条件")
+            game_mode = "deathmatch" if self.ui.deathMatchCheckBox.isChecked() else "grail_war"
+            arena_mode = self.ui.arenaCheckBox.isChecked()
             if self.map_document is None:
                 raise ValueError("请先导入地图")
             if not self.characters:
                 raise ValueError("请先导入至少一名参战角色")
-            servant_count = sum(isinstance(actor, Servant) for actor in self.characters)
-            if ready > servant_count:
-                raise ValueError(
-                    f"圣杯就绪条件为{ready}，但本局开始时只有{servant_count}名从者"
-                )
-            if self.ui.grailLocationCombo.currentData() is None:
-                raise ValueError("请选择圣杯出现地点")
+            team_ids = self._build_game_team_ids(arena_mode=arena_mode)
+            if (game_mode == "deathmatch" or arena_mode) and len(team_ids) < 2:
+                raise ValueError("死斗或竞技场模式至少需要两个阵营")
+            if game_mode == "grail_war":
+                appearance = self.ui.grailAppearanceConditionSpinBox.value()
+                ready = self.ui.grailReadyConditionSpinBox.value()
+                if appearance > ready:
+                    raise ValueError("圣杯出现条件不能大于圣杯就绪条件")
+                servant_count = sum(isinstance(actor, Servant) for actor in self.characters)
+                if ready > servant_count:
+                    raise ValueError(
+                        f"圣杯就绪条件为{ready}，但本局开始时只有{servant_count}名从者"
+                    )
+                grail_location_id = self.ui.grailLocationCombo.currentData()
+                if grail_location_id is None:
+                    raise ValueError("请选择圣杯出现地点")
+            else:
+                appearance = 0
+                ready = 0
+                grail_location_id = None
         except ValueError as error:
             self._error(error)
             return
         self.rules = {"maximum_turns": maximum, "grail_appearance_deaths": appearance,
                       "grail_ready_deaths": ready,
-                      "grail_location_id": self.ui.grailLocationCombo.currentData()}
+                      "grail_location_id": grail_location_id,
+                      "game_mode": game_mode,
+                      "arena_mode": arena_mode,
+                      "team_ids": team_ids}
         self._build_runtime_map()
         self._build_placement_groups()
         self.ui.mainStack.setCurrentWidget(self.ui.placementPage)
         self._show_work_window()
         self._refresh_placement_progress()
         self.ui.placementMapView.fitInView(self.placement_scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def _build_game_team_ids(self, *, arena_mode=False):
+        """Build stable competitive teams from custom or Master/Servant groups."""
+        known_ids = {actor.character_id for actor in self.characters}
+        used = set()
+        teams = []
+        for definition in self.custom_groups:
+            member_ids = list(definition["member_ids"])
+            if not member_ids or any(member_id not in known_ids for member_id in member_ids):
+                raise ValueError(f"分组“{definition['name']}”包含无效角色")
+            if len(set(member_ids)) != len(member_ids) or used.intersection(member_ids):
+                raise ValueError("同一角色不能属于多个分组")
+            if arena_mode and len(member_ids) != 2:
+                raise ValueError("竞技场模式下每个分组必须恰好包含两名角色")
+            teams.append(member_ids)
+            used.update(member_ids)
+
+        if arena_mode:
+            missing = known_ids - used
+            if missing:
+                names = [actor.name for actor in self.characters if actor.character_id in missing]
+                raise ValueError("竞技场模式下所有角色都必须加入两人组：" + "、".join(names))
+            return teams
+
+        for master in (actor for actor in self.characters if isinstance(actor, Master)):
+            member_ids = [master.character_id] + [
+                servant.character_id for servant in master.servants
+                if servant in self.characters
+            ]
+            member_ids = [member_id for member_id in member_ids if member_id not in used]
+            if member_ids:
+                teams.append(member_ids)
+                used.update(member_ids)
+        for actor in self.characters:
+            if actor.character_id not in used:
+                teams.append([actor.character_id])
+                used.add(actor.character_id)
+        return teams
+
+    def _runtime_teams(self):
+        team_ids = self.rules.get("team_ids")
+        if team_ids is None:
+            return None
+        by_id = {actor.character_id: actor for actor in self.characters}
+        try:
+            return [[by_id[character_id] for character_id in team] for team in team_ids]
+        except KeyError as error:
+            raise ValueError(f"阵营引用了不存在的角色：{error.args[0]}") from error
 
     def _build_runtime_map(self):
         self.game_map = self.map_document.to_game_map()
@@ -537,13 +645,16 @@ class GameMasterWindow(QMainWindow):
         }
         self.initial_random_state = random.getstate()
         self.replay_inputs = []
-        grail = self.runtime_locations[self.rules["grail_location_id"]]
+        grail = self.runtime_locations.get(self.rules.get("grail_location_id"))
         self.game_manager = GameManager(
             self.characters, grail,
             maximum_turns=self.rules["maximum_turns"],
             grail_appearance_deaths=self.rules["grail_appearance_deaths"],
             grail_ready_deaths=self.rules["grail_ready_deaths"],
             character_id_allocator=self._allocate_character_id,
+            game_mode=self.rules.get("game_mode", "grail_war"),
+            teams=self._runtime_teams(),
+            arena_mode=self.rules.get("arena_mode", False),
         )
         self.game_manager.game_map = self.game_map
         controllers = {actor.character_id: "gm" for actor in self.characters}
@@ -759,14 +870,14 @@ class GameMasterWindow(QMainWindow):
             return
         service = CommandSpellService(self.game_manager)
         effects = [("获得临时MP（1划）", "mp"), ("下一次伤害+90（1划）", "damage")]
-        if master.command_spell >= 2 and any(service.teleport_destinations(master, servant)
-                                             for servant in master.servants):
+        teleport_targets = service.teleport_targets(master)
+        if master.command_spell >= 2 and teleport_targets:
             effects.append(("瞬间移动从者（2划）", "teleport"))
         label, ok = QInputDialog.getItem(self, "使用令咒", "选择效果：", [item[0] for item in effects], 0, False)
         if not ok:
             return
         effect = dict(effects)[label]
-        targets = (master.servants if effect == "teleport" else service.controlled_characters(master))
+        targets = (teleport_targets if effect == "teleport" else service.controlled_characters(master))
         targets = [target for target in targets if target.is_alive()]
         target_labels = [f"{target.name} [{target.character_id}]" for target in targets]
         target_label, ok = QInputDialog.getItem(self, "使用令咒", "作用角色：", target_labels, 0, False)
@@ -872,6 +983,9 @@ class GameMasterWindow(QMainWindow):
         self.map_document = MapDocument.from_dict(data["map"])
         self.map_path = None
         self.rules = dict(data["rules"])
+        self.rules.setdefault("game_mode", "grail_war")
+        self.rules.setdefault("arena_mode", False)
+        self.rules.setdefault("team_ids", None)
         self.characters = []
         records = data["characters"]
         for record in records:
@@ -899,13 +1013,16 @@ class GameMasterWindow(QMainWindow):
                 raise ValueError("存档引用了不存在的初始地点")
             by_id[record["character_id"]].position = self.runtime_locations[key]
             self.initial_positions[record["character_id"]] = key
-        grail = self.runtime_locations[self.rules["grail_location_id"]]
+        grail = self.runtime_locations.get(self.rules.get("grail_location_id"))
         self.game_manager = GameManager(
             self.characters, grail,
             maximum_turns=self.rules["maximum_turns"],
             grail_appearance_deaths=self.rules["grail_appearance_deaths"],
             grail_ready_deaths=self.rules["grail_ready_deaths"],
             character_id_allocator=self._allocate_character_id,
+            game_mode=self.rules.get("game_mode", "grail_war"),
+            teams=self._runtime_teams(),
+            arena_mode=self.rules.get("arena_mode", False),
         )
         self.game_manager.game_map = self.game_map
         self.initial_random_state = ast.literal_eval(data["random_state"])

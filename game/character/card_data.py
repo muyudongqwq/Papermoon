@@ -42,4 +42,46 @@ CHARACTER_CARD_DATA = {
         "basic_magics": ["healing", "workshop"],
         "noble_phantasms": [],
     },
+    "archer_alpha_test": {
+        "card_id": "archer_alpha_test",
+        "character_type": "servant",
+        "name": "迦尔纳",
+        "source": "test_examples/samples/alphatest/Archer_alpha_test.txt",
+        # 卡面显示E、实际按A加骰；显示伪装暂由GM说明。
+        "attributes": {"strength": 5, "endurance": {"value": 3, "plus": 1},
+                       "flexibility": {"value": 5, "plus": 1}, "magic": 4, "fortune": 5},
+        "servant_class": "Archer",
+        "noble": "C",
+        "class_skills": [{"name": "对魔力", "rank": "A"}, {"name": "单独行动", "rank": "C"}],
+        "personal_skills": [
+            "archer_alpha_test:uncrowned_arms",
+            "archer_alpha_test:divinity",
+            "archer_alpha_test:vaikarthana",
+        ],
+        "basic_magics": [],
+        "noble_phantasms": [
+            "archer_alpha_test:bhargavastra",
+            "archer_alpha_test:kavacha_and_kundala",
+        ],
+    },
+    "lancer_alpha_test": {
+        "card_id": "lancer_alpha_test",
+        "character_type": "servant",
+        "name": "项羽",
+        "source": "test_examples/samples/alphatest/Lancer_alpha_test.txt",
+        "attributes": {"strength": 5, "endurance": 5, "flexibility": 4, "magic": 3, "fortune": 2},
+        "servant_class": "Lancer",
+        "noble": "C",
+        "class_skills": [{"name": "对魔力", "rank": "E"}, {"name": "骑乘", "rank": "A"}],
+        "personal_skills": [
+            "lancer_alpha_test:mystic_eyes",
+            "lancer_alpha_test:might",
+            "lancer_alpha_test:last_stand",
+        ],
+        "basic_magics": [],
+        "noble_phantasms": [
+            "lancer_alpha_test:overlord_spear",
+            "lancer_alpha_test:spear_king_annihilation",
+        ],
+    },
 }

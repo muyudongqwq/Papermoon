@@ -1,6 +1,7 @@
 """Presentation and lossless linear editing of shared skill conditions."""
 
 from copy import deepcopy
+import json
 
 from core.catalog import parse_json
 from game.action.action_rules import _BOOLEAN_CONDITIONS, _INTEGER_CONDITIONS, validate_condition
@@ -8,6 +9,8 @@ from SkillEditorClient.model import PHASE_LABELS
 
 
 CONDITION_NAMES = {
+    "character_matches": "匹配角色标签、状态或真名",
+    "special_attack_id": "命中的特攻标识",
     "condition_id": "没有御主", "actor_alive": "角色存活", "actor_type": "角色类型",
     "at_grail_position": "位于圣杯所在地点", "attack_phase_count_at_least": "可用攻击阶段至少为",
     "battle_state": "是否处于战斗中", "carry_capacity_available": "仍可携带乘客",
@@ -29,6 +32,8 @@ CONDITION_NAMES = {
     "servant_count": "拥有的从者数量等于", "travel_group_leader": "是同行队伍的队长",
 }
 CONDITION_HELP = {
+    "character_matches": '填写条件对象，例如 {"subject":"event_actor","tags":["deity"]}。可按角色所属位置选择自身、事件发起者、事件目标或同场敌方。',
+    "special_attack_id": "填入特攻标识，例如 anti_divine。用于特攻命中事件。",
     "condition_id": "角色当前没有御主。",
     "battle_state": "匹配角色是否处于战斗中；是表示战斗中，否表示战斗外。",
     "event_actor_is_self": "判断事件的行动者是不是技能持有者。",
@@ -79,6 +84,8 @@ def condition_help(field):
 
 
 def display_value(field, value):
+    if field == "character_matches":
+        return json.dumps(value, ensure_ascii=False)
     if field in _BOOLEAN_CONDITIONS:
         raw = "true" if value else "false"
     elif field in {"required_status", "forbidden_status"}:
@@ -104,7 +111,7 @@ def parse_value(field, text):
         return values
     if not text:
         raise ValueError("请填写条件的取值")
-    if field in _INTEGER_CONDITIONS or field in {"event_value_at_least", "event_value_at_most"}:
+    if field in _INTEGER_CONDITIONS or field in {"event_value_at_least", "event_value_at_most", "character_matches"}:
         value = parse_json(text)
     else:
         value = text

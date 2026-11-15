@@ -156,6 +156,7 @@ def _carry_capacity(value=1):
 
 CLASS_SKILL_DATA = {
     "对魔力": {
+        "E": [_magic_resistance(0.1)],
         "C": [_magic_resistance(0.1)],
         "B": [_magic_resistance(0.2)],
         "A": [_magic_resistance(0.3)],
@@ -175,7 +176,13 @@ CLASS_SKILL_DATA = {
         )],
         "A": [_passive_component(
             "passive_riding",
-            [_carry_capacity(1)],
+            [
+                _carry_capacity(1),
+                {
+                    "effect_type": "movement_point_bonus",
+                    "effect_data": {"value": 2},
+                },
+            ],
         )],
     },
 

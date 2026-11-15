@@ -24,7 +24,7 @@ from game.skill.effect_validation import (
 from game.skill.skill import Skill
 from game.turn.damage import AttackProfile, DamageEvent, DamageResolver
 from game.turn.damage_types import normalize_damage_type
-from game.turn.roll import RollResolver
+from game.turn.roll import RollResolver, roll_d10
 from game.turn.decision import (
     DecisionOption,
     DecisionRequest,
@@ -186,8 +186,10 @@ def resolve_perception_check_effect(effect, target, skill, **context):
             attempt_results.append({"success": False, "blocked_by": "presence_concealment"})
         else:
             for _index in range(attempts):
-                perceive_die = random.randint(1, 10)
-                hide_die = random.randint(1, 10)
+                perceive_die = roll_d10(actor, roller=lambda: random.randint(1, 10),
+                                       context={"target": candidate})
+                hide_die = roll_d10(candidate, roller=lambda: random.randint(1, 10),
+                                    context={"target": actor})
                 perceive_total = perceive_die + actor.perceive
                 hide_total = hide_die + candidate.hide
                 current = hide_total <= perceive_total
@@ -1413,6 +1415,9 @@ EFFECT_HANDLERS = {
     "add_skill": resolve_skill_mutation_effect,
     "add_status": apply_modifier_effect,
     "status_immunity": apply_modifier_effect,
+    "special_attack": apply_modifier_effect,
+    "fixed_die": apply_modifier_effect,
+    "incoming_attack_roll_bonus": apply_modifier_effect,
     "attribute_bonus": apply_modifier_effect,
     "attack_bonus": apply_modifier_effect,
     "cancel_event": resolve_cancel_event_effect,
@@ -2828,6 +2833,7 @@ def create_noble_phantasm(character, definition):
     )
     skill.source_type = "noble_phantasm"
     character.noble_phantasms.append(skill)
+    _apply_passive_skill_components(character, skill)
     return skill
 
 

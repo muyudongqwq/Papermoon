@@ -15,13 +15,13 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QGraphicsView,
-    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMainWindow, QMenuBar, QPushButton, QScrollArea,
-    QSizePolicy, QSpacerItem, QSpinBox, QSplitter,
-    QStackedWidget, QStatusBar, QTableWidget, QTableWidgetItem,
-    QTextEdit, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
+    QGraphicsView, QGridLayout, QGroupBox, QHBoxLayout,
+    QHeaderView, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QMainWindow, QMenuBar, QPushButton,
+    QScrollArea, QSizePolicy, QSpacerItem, QSpinBox,
+    QSplitter, QStackedWidget, QStatusBar, QTableWidget,
+    QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -141,7 +141,7 @@ class Ui_MainWindow(object):
         self.setupScrollArea.setWidgetResizable(True)
         self.scrollAreaWidgetContents = QWidget()
         self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
-        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 900, 1200))
+        self.scrollAreaWidgetContents.setGeometry(QRect(0, -455, 900, 1200))
         self.scrollAreaWidgetContents.setMinimumSize(QSize(900, 1200))
         self.verticalLayout_4 = QVBoxLayout(self.scrollAreaWidgetContents)
         self.verticalLayout_4.setObjectName(u"verticalLayout_4")
@@ -228,15 +228,15 @@ class Ui_MainWindow(object):
 
         self.gridLayout_2.addWidget(self.viewCharacterButton, 1, 1, 1, 1)
 
-        self.characterTable = QTableWidget(self.characterSetupGroup)
-        self.characterTable.setObjectName(u"characterTable")
-
-        self.gridLayout_2.addWidget(self.characterTable, 0, 0, 1, 2)
-
         self.setRelationshipButton = QPushButton(self.characterSetupGroup)
         self.setRelationshipButton.setObjectName(u"setRelationshipButton")
 
         self.gridLayout_2.addWidget(self.setRelationshipButton, 2, 1, 1, 1)
+
+        self.characterTable = QTableWidget(self.characterSetupGroup)
+        self.characterTable.setObjectName(u"characterTable")
+
+        self.gridLayout_2.addWidget(self.characterTable, 0, 0, 1, 3)
 
 
         self.verticalLayout_4.addWidget(self.characterSetupGroup)
@@ -245,6 +245,84 @@ class Ui_MainWindow(object):
         self.ruleSetupGroup.setObjectName(u"ruleSetupGroup")
         self.ruleSetupLayout = QGridLayout(self.ruleSetupGroup)
         self.ruleSetupLayout.setObjectName(u"ruleSetupLayout")
+        self.descriptionLabel0_2 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel0_2.setObjectName(u"descriptionLabel0_2")
+
+        self.ruleSetupLayout.addWidget(self.descriptionLabel0_2, 7, 1, 1, 1)
+
+        self.grailReadyConditionLabel = QLabel(self.ruleSetupGroup)
+        self.grailReadyConditionLabel.setObjectName(u"grailReadyConditionLabel")
+
+        self.ruleSetupLayout.addWidget(self.grailReadyConditionLabel, 7, 0, 1, 1)
+
+        self.grailAppearanceConditionLabel = QLabel(self.ruleSetupGroup)
+        self.grailAppearanceConditionLabel.setObjectName(u"grailAppearanceConditionLabel")
+
+        self.ruleSetupLayout.addWidget(self.grailAppearanceConditionLabel, 6, 0, 1, 1)
+
+        self.grailLabel = QLabel(self.ruleSetupGroup)
+        self.grailLabel.setObjectName(u"grailLabel")
+
+        self.ruleSetupLayout.addWidget(self.grailLabel, 4, 0, 1, 1)
+
+        self.descriptionLabel0 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel0.setObjectName(u"descriptionLabel0")
+
+        self.ruleSetupLayout.addWidget(self.descriptionLabel0, 6, 1, 1, 1)
+
+        self.horizontalSpacer_6 = QSpacerItem(465, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.ruleSetupLayout.addItem(self.horizontalSpacer_6, 5, 4, 3, 1)
+
+        self.deathMatchLabel = QLabel(self.ruleSetupGroup)
+        self.deathMatchLabel.setObjectName(u"deathMatchLabel")
+
+        self.ruleSetupLayout.addWidget(self.deathMatchLabel, 2, 0, 1, 1)
+
+        self.arenaCheckBox = QCheckBox(self.ruleSetupGroup)
+        self.arenaCheckBox.setObjectName(u"arenaCheckBox")
+
+        self.ruleSetupLayout.addWidget(self.arenaCheckBox, 8, 1, 1, 1)
+
+        self.descriptionLabel1 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel1.setObjectName(u"descriptionLabel1")
+
+        self.ruleSetupLayout.addWidget(self.descriptionLabel1, 6, 3, 1, 1)
+
+        self.grailReadyConditionSpinBox = QSpinBox(self.ruleSetupGroup)
+        self.grailReadyConditionSpinBox.setObjectName(u"grailReadyConditionSpinBox")
+        self.grailReadyConditionSpinBox.setMaximum(14)
+        self.grailReadyConditionSpinBox.setValue(6)
+
+        self.ruleSetupLayout.addWidget(self.grailReadyConditionSpinBox, 7, 2, 1, 1)
+
+        self.arenaLabel = QLabel(self.ruleSetupGroup)
+        self.arenaLabel.setObjectName(u"arenaLabel")
+
+        self.ruleSetupLayout.addWidget(self.arenaLabel, 8, 0, 1, 1)
+
+        self.descriptionLabel1_2 = QLabel(self.ruleSetupGroup)
+        self.descriptionLabel1_2.setObjectName(u"descriptionLabel1_2")
+
+        self.ruleSetupLayout.addWidget(self.descriptionLabel1_2, 7, 3, 1, 1)
+
+        self.deathMatchCheckBox = QCheckBox(self.ruleSetupGroup)
+        self.deathMatchCheckBox.setObjectName(u"deathMatchCheckBox")
+
+        self.ruleSetupLayout.addWidget(self.deathMatchCheckBox, 2, 1, 1, 1)
+
+        self.grailCheckBox = QCheckBox(self.ruleSetupGroup)
+        self.grailCheckBox.setObjectName(u"grailCheckBox")
+
+        self.ruleSetupLayout.addWidget(self.grailCheckBox, 4, 1, 1, 1)
+
+        self.grailAppearanceConditionSpinBox = QSpinBox(self.ruleSetupGroup)
+        self.grailAppearanceConditionSpinBox.setObjectName(u"grailAppearanceConditionSpinBox")
+        self.grailAppearanceConditionSpinBox.setMaximum(14)
+        self.grailAppearanceConditionSpinBox.setValue(4)
+
+        self.ruleSetupLayout.addWidget(self.grailAppearanceConditionSpinBox, 6, 2, 1, 1)
+
         self.maximumTurnsLabel = QLabel(self.ruleSetupGroup)
         self.maximumTurnsLabel.setObjectName(u"maximumTurnsLabel")
 
@@ -256,55 +334,7 @@ class Ui_MainWindow(object):
         self.MaximumTurnsSpinBox.setMaximum(9999999)
         self.MaximumTurnsSpinBox.setValue(120)
 
-        self.ruleSetupLayout.addWidget(self.MaximumTurnsSpinBox, 0, 2, 1, 1)
-
-        self.grailAppearanceConditionLabel = QLabel(self.ruleSetupGroup)
-        self.grailAppearanceConditionLabel.setObjectName(u"grailAppearanceConditionLabel")
-
-        self.ruleSetupLayout.addWidget(self.grailAppearanceConditionLabel, 1, 0, 1, 1)
-
-        self.descriptionLabel0 = QLabel(self.ruleSetupGroup)
-        self.descriptionLabel0.setObjectName(u"descriptionLabel0")
-
-        self.ruleSetupLayout.addWidget(self.descriptionLabel0, 1, 1, 1, 1)
-
-        self.grailAppearanceConditionSpinBox = QSpinBox(self.ruleSetupGroup)
-        self.grailAppearanceConditionSpinBox.setObjectName(u"grailAppearanceConditionSpinBox")
-        self.grailAppearanceConditionSpinBox.setMaximum(14)
-        self.grailAppearanceConditionSpinBox.setValue(4)
-
-        self.ruleSetupLayout.addWidget(self.grailAppearanceConditionSpinBox, 1, 2, 1, 1)
-
-        self.descriptionLabel1 = QLabel(self.ruleSetupGroup)
-        self.descriptionLabel1.setObjectName(u"descriptionLabel1")
-
-        self.ruleSetupLayout.addWidget(self.descriptionLabel1, 1, 3, 1, 1)
-
-        self.grailReadyConditionLabel = QLabel(self.ruleSetupGroup)
-        self.grailReadyConditionLabel.setObjectName(u"grailReadyConditionLabel")
-
-        self.ruleSetupLayout.addWidget(self.grailReadyConditionLabel, 2, 0, 1, 1)
-
-        self.descriptionLabel0_2 = QLabel(self.ruleSetupGroup)
-        self.descriptionLabel0_2.setObjectName(u"descriptionLabel0_2")
-
-        self.ruleSetupLayout.addWidget(self.descriptionLabel0_2, 2, 1, 1, 1)
-
-        self.grailReadyConditionSpinBox = QSpinBox(self.ruleSetupGroup)
-        self.grailReadyConditionSpinBox.setObjectName(u"grailReadyConditionSpinBox")
-        self.grailReadyConditionSpinBox.setMaximum(14)
-        self.grailReadyConditionSpinBox.setValue(6)
-
-        self.ruleSetupLayout.addWidget(self.grailReadyConditionSpinBox, 2, 2, 1, 1)
-
-        self.descriptionLabel1_2 = QLabel(self.ruleSetupGroup)
-        self.descriptionLabel1_2.setObjectName(u"descriptionLabel1_2")
-
-        self.ruleSetupLayout.addWidget(self.descriptionLabel1_2, 2, 3, 1, 1)
-
-        self.horizontalSpacer_6 = QSpacerItem(465, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.ruleSetupLayout.addItem(self.horizontalSpacer_6, 0, 4, 3, 1)
+        self.ruleSetupLayout.addWidget(self.MaximumTurnsSpinBox, 0, 1, 1, 1)
 
 
         self.verticalLayout_4.addWidget(self.ruleSetupGroup)
@@ -574,7 +604,7 @@ class Ui_MainWindow(object):
         self.setLocationScrollArea.setWidgetResizable(True)
         self.scrollAreaWidgetContents_2 = QWidget()
         self.scrollAreaWidgetContents_2.setObjectName(u"scrollAreaWidgetContents_2")
-        self.scrollAreaWidgetContents_2.setGeometry(QRect(0, 0, 160, 292))
+        self.scrollAreaWidgetContents_2.setGeometry(QRect(0, 0, 171, 292))
         self.scrollAreaWidgetContents_2.setMinimumSize(QSize(0, 292))
         self.placementRowsLayout = QVBoxLayout(self.scrollAreaWidgetContents_2)
         self.placementRowsLayout.setObjectName(u"placementRowsLayout")
@@ -790,7 +820,7 @@ class Ui_MainWindow(object):
 
         self.retranslateUi(MainWindow)
 
-        self.mainStack.setCurrentIndex(2)
+        self.mainStack.setCurrentIndex(1)
         self.decisionInputStack.setCurrentIndex(0)
 
 
@@ -818,13 +848,19 @@ class Ui_MainWindow(object):
         self.viewCharacterButton.setText(QCoreApplication.translate("MainWindow", u"\u67e5\u770b\u89d2\u8272", None))
         self.setRelationshipButton.setText(QCoreApplication.translate("MainWindow", u"\u8bbe\u7f6e\u4e3b\u4ece", None))
         self.ruleSetupGroup.setTitle(QCoreApplication.translate("MainWindow", u"\u6e38\u620f\u89c4\u5219", None))
-        self.maximumTurnsLabel.setText(QCoreApplication.translate("MainWindow", u"\u6700\u5927\u56de\u5408\u6570", None))
-        self.grailAppearanceConditionLabel.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u51fa\u73b0\u6761\u4ef6", None))
-        self.descriptionLabel0.setText(QCoreApplication.translate("MainWindow", u"\u9000\u573a", None))
-        self.descriptionLabel1.setText(QCoreApplication.translate("MainWindow", u"\u540d\u4ece\u8005", None))
-        self.grailReadyConditionLabel.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u5c31\u7eea\u6761\u4ef6", None))
         self.descriptionLabel0_2.setText(QCoreApplication.translate("MainWindow", u"\u9000\u573a", None))
+        self.grailReadyConditionLabel.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u5c31\u7eea\u6761\u4ef6", None))
+        self.grailAppearanceConditionLabel.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u51fa\u73b0\u6761\u4ef6", None))
+        self.grailLabel.setText(QCoreApplication.translate("MainWindow", u"\u5723\u676f\u6218\u4e89", None))
+        self.descriptionLabel0.setText(QCoreApplication.translate("MainWindow", u"\u9000\u573a", None))
+        self.deathMatchLabel.setText(QCoreApplication.translate("MainWindow", u"\u6b7b\u6597\u6a21\u5f0f", None))
+        self.arenaCheckBox.setText("")
+        self.descriptionLabel1.setText(QCoreApplication.translate("MainWindow", u"\u540d\u4ece\u8005", None))
+        self.arenaLabel.setText(QCoreApplication.translate("MainWindow", u"\u7ade\u6280\u573a", None))
         self.descriptionLabel1_2.setText(QCoreApplication.translate("MainWindow", u"\u540d\u4ece\u8005", None))
+        self.deathMatchCheckBox.setText("")
+        self.grailCheckBox.setText("")
+        self.maximumTurnsLabel.setText(QCoreApplication.translate("MainWindow", u"\u6700\u5927\u56de\u5408\u6570", None))
         self.gameStartButton.setText(QCoreApplication.translate("MainWindow", u"\u521b\u5efa\u6e38\u620f", None))
         self.globalTurnLabel.setText(QCoreApplication.translate("MainWindow", u"\u5f53\u524d\u56de\u5408:", None))
         self.gamePhaseLabel.setText(QCoreApplication.translate("MainWindow", u"\u5f53\u524d\u9636\u6bb5:", None))

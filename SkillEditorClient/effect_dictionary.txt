@@ -1823,3 +1823,65 @@ relocate本身不治疗、不清除濒死或其他状态。未配置额外规则
 
 外力转移会中断对象当前咏唱并沿用原退款规则；本技能正常解放后执行自身转移时，
 已支付的咏唱消耗视为完成解放，不会因自身转移被误判为中断而退款。
+
+
+48. special_attack（特攻）
+------------------------
+
+持续效果，授予角色一类特攻。仅在该角色的攻击造成实际伤害结算时检查，
+伤害预览不会触发技能。普通直接伤害（没有攻击ID）不触发此效果。
+
+effect_data：
+    special_attack_id：必填，用于识别特攻种类，例如 anti_divine。
+    condition：必填，按下文通用条件检查实际受击角色，可组合标签和状态。
+    multiplier：可选，非负伤害倍率，默认1。乘在常规伤害修正之后。
+        相同 special_attack_id 在同次伤害计算中只取最后一个生效倍率；
+        不同标识的倍率相乘。
+
+示例：
+    {"effect_type":"special_attack","effect_data":{"special_attack_id":"anti_divine",
+      "condition":{"character_matches":{"subject":"event_target","tags":["divine"]}},
+      "multiplier":1.5}}
+
+伤害转移会针对新目标重算。减伤后仍有伤害且命中特攻时，护盾吸收前发出
+special_attack_hit（timing=before），事件目标为最终受击者。一次伤害合并发出
+一次，payload.special_attack_ids 列出命中的全部标识。
+防守方可设 trigger 订阅此事件，使用条件：
+    {"event_target_is_self":true,"special_attack_id":"anti_divine"}
+再用 modify_event_value 的 calculation=multiply、value=1.2 增加20%。
+
+角色卡可手动加入 tags 数组及 true_name。true_name 默认读取原卡名称，
+即使实例显示名不同也能判断。标签按原字符串精确匹配，例如 divine 与 deity 独立。
+通用条件 character_matches 中的 subject 可选：
+    self：技能或效果持有者。
+    event_actor：事件行动者；在攻击或伤害修正中指攻击者。
+    event_target：事件目标；在攻击或伤害修正中指受击者。
+    battle_opponent：同一战斗中任意一名仍存活的非己方角色。
+填写 tags、statuses 或 true_name 至少一项。同一对象需满足所填的全部条件，
+也可用 all、any、not 组合。此条件可用于技能单元及下述持续效果。
+
+
+49. fixed_die（固定骰面）
+------------------------
+
+持续效果。effect_data.value 为必填的整数骰面（1至10），
+可选 effect_data.condition 限定生效条件，省略则一直生效。
+命中多个固定效果时使用最后生效的一项。固定的是原始骰面，
+仍按固定后的骰面计算暴击、失误和其他判定加值，
+且不提供幸运重骰或翻转。先攻同骰面且无法重掷分出先后时沿用原顺序。
+
+示例：同场敌方真名为西王母时，持有者的所有骰面固定为1。
+    {"effect_type":"fixed_die","effect_data":{"value":1,
+      "condition":{"character_matches":{"subject":"battle_opponent","true_name":"西王母"}}}}
+
+
+50. incoming_attack_roll_bonus（调整来袭攻击骰）
+------------------------------------------------
+
+持续效果。effect_data.value 为必填整数，加到对持有者的攻击判定总值上。
+适用于物理和魔术攻击。可选 effect_data.condition 限定生效条件，
+同一次攻击使用共享骰面时，加值仍按受击者分别处理。
+
+示例：带有 deity 标签的角色攻击持有者时，本次攻击骰 +1。
+    {"effect_type":"incoming_attack_roll_bonus","effect_data":{"value":1,
+      "condition":{"character_matches":{"subject":"event_actor","tags":["deity"]}}}}

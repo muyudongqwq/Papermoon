@@ -2,7 +2,7 @@ from game.modifier.modifier import create_modifier
 from game.map.map import get_distance
 from game.turn.damage import AttackProfile, DamageEvent, DamageResolver
 from game.turn.damage_types import normalize_damage_type
-from game.turn.roll import RollResolver
+from game.turn.roll import RollResolver, roll_d10
 from game.action.action_data import get_action_definition
 import random
 class Action:
@@ -321,8 +321,10 @@ class Action:
                 })
                 continue
 
-            perceive_die = random.randint(1, 10)
-            hide_die = random.randint(1, 10)
+            perceive_die = roll_d10(actor, roller=lambda: random.randint(1, 10),
+                                   context={"target": character})
+            hide_die = roll_d10(character, roller=lambda: random.randint(1, 10),
+                                context={"target": actor})
             perceive_roll = perceive_die + actor.perceive
             hide_roll = hide_die + character.hide
             success = hide_roll <= perceive_roll

@@ -142,6 +142,33 @@ class MapDocument:
         self.roads[road_id] = record
         return record
 
+    def extend_road(self, road_id, location_ids):
+        """Add one or more new endpoints to an existing road junction."""
+        if road_id not in self.roads:
+            raise ValueError(f"道路不存在：{road_id}")
+        location_ids = list(location_ids)
+        if not location_ids:
+            raise ValueError("请选择要连接到道路的地点")
+        if len(set(location_ids)) != len(location_ids):
+            raise ValueError("同一地点不能重复选择")
+        missing = [location_id for location_id in location_ids if location_id not in self.locations]
+        if missing:
+            raise ValueError(f"道路引用了不存在的地点：{', '.join(missing)}")
+
+        road = self.roads[road_id]
+        additions = [location_id for location_id in location_ids if location_id not in road.location_ids]
+        if not additions:
+            raise ValueError("所选地点已经连接到这条道路")
+        combined = road.location_ids + additions
+        selected = frozenset(combined)
+        if any(
+            other.road_id != road_id and frozenset(other.location_ids) == selected
+            for other in self.roads.values()
+        ):
+            raise ValueError("扩展后会与另一条道路完全重复")
+        road.location_ids = combined
+        return road
+
     def delete_road(self, road_id):
         return self.roads.pop(road_id, None)
 

@@ -175,6 +175,7 @@ class DamageEvent:
       self.target_rules = dict(target_rules or {})
       self.redirect_history = []
       self.calculated_value = None
+      self.special_attack_ids = ()
       self.shield_absorptions = []
       self.final_value = None
 
@@ -182,6 +183,7 @@ class DamageResolver:
    """统一伤害顺序：合并百分比 -> 乘除 -> 固定加减 -> 向零取整。"""
 
    def calculate(self, event):
+      event.special_attack_ids = ()
       if event.target.has_status("brink_of_death"):
          return 0
       percentage_modifiers = list(event.percentage_modifiers)
@@ -237,6 +239,20 @@ class DamageResolver:
       flat_total = sum(flat_modifiers)
       damage = event.value * (1 + percentage_total)
       damage += flat_total
+      source_manager = getattr(event.source, "modifier_manager", None)
+      if source_manager is not None and event.attack_id is not None and damage > 0:
+         context = {
+            "actor": event.source, "source": event, "target": event.target,
+            "action_id": event.action_id, "skill_id": event.skill_id,
+            "damage_type": event.damage_type, "tags": event.source_tags,
+         }
+         matched = {}
+         for modifier in source_manager.matching_effects("special_attack", context):
+            data = modifier.effect_data
+            matched[data["special_attack_id"]] = data.get("multiplier", 1)
+         event.special_attack_ids = tuple(matched)
+         for multiplier in matched.values():
+            damage *= multiplier
       return max(0, int(damage))
 
    def resolve(self, event, decision_provider=None):
@@ -268,6 +284,28 @@ class DamageResolver:
             if before_event.cancelled
             else max(0, int(before_event.value))
          )
+      special_attack_hit = damage > 0 and bool(event.special_attack_ids)
+      if event_manager is not None and special_attack_hit:
+         special_event = event_manager.emit(
+            "special_attack_hit",
+            timing="before",
+            actor=event.source,
+            source=event,
+            target=event.target,
+            value=damage,
+            phase="damage_resolution",
+            battle=getattr(event.target, "current_battle", None),
+            position=getattr(event.target, "position", None),
+            payload={
+               "special_attack_ids": event.special_attack_ids,
+               "damage_type": event.damage_type,
+               "action_id": event.action_id,
+               "skill_id": event.skill_id,
+               "damage_event": event,
+            },
+            decision_provider=decision_provider,
+         )
+         damage = 0 if special_event.cancelled else max(0, int(special_event.value))
       # Redirect reactions may have changed the actual DamageEvent target.
       # Snapshot reporting and downstream defenses only after that window.
       hp_before = event.target.hp
@@ -343,7 +381,9 @@ class DamageResolver:
       report(event.target, "damage_resolved", actor=event.source, targets=[event.target],
              position=position, battle=battle,
              public={"attack_id": event.attack_id},
-             involved={"amount": damage, "damage_type": event.damage_type},
+             involved={"amount": damage, "damage_type": event.damage_type,
+                       **({"special_attack_ids": list(event.special_attack_ids)}
+                          if special_attack_hit else {})},
              actor_data={"action_id": event.action_id, "skill_id": event.skill_id,
                          "base_damage": event.value},
              target_data={"hp_before": hp_before, "hp_after": event.target.hp,
@@ -388,7 +428,7 @@ class AttackEvent:
       self.resolved = False
       self.hit = None
       self.final_damage = 0
-      self.attack_roll = attack_roll
+      self._base_attack_roll = attack_roll
       self.attack_die = attack_die
       self.attack_roll_bonus = attack_roll_bonus
       self.percentage_modifiers = list(percentage_modifiers or [])
@@ -431,9 +471,30 @@ class AttackEvent:
       from game.game.rule_report import report
       report(target, "attack_declared", actor=source, targets=[target],
              public={"attack_id": self.attack_id, "channel": resolution_channel},
-             involved={"damage_type": self.damage_type, "attack_roll": attack_roll},
+             involved={"damage_type": self.damage_type, "attack_roll": self.attack_roll},
              actor_data={"skill_id": skill_id, "action_id": action_id,
                          "base_damage": self.value})
+
+   @property
+   def attack_roll(self):
+      if self._base_attack_roll is None:
+         return None
+      manager = getattr(self.target, "modifier_manager", None)
+      if manager is None:
+         return self._base_attack_roll
+      context = {
+         "actor": self.source, "source": self, "target": self.target,
+         "action_id": self.action_id, "skill_id": self.skill_id,
+         "damage_type": self.damage_type, "tags": self.source_tags,
+      }
+      return self._base_attack_roll + sum(
+         modifier.effect_data["value"] * modifier.stack_count
+         for modifier in manager.matching_effects("incoming_attack_roll_bonus", context)
+      )
+
+   @attack_roll.setter
+   def attack_roll(self, value):
+      self._base_attack_roll = value
 
    @property
    def name(self):

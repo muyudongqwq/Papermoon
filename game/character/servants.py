@@ -49,10 +49,21 @@ class Servant(Character):
             return False
         return self.master.remove_servant(self)
 
-    def get_available_mp(self):
-        master_mp = 0
+    def get_effective_master(self):
+        """Return the normal master, or the reciprocal arena partner."""
+        partner = getattr(self, "arena_partner", None)
+        manager = getattr(self, "game_manager", None)
+        if getattr(manager, "arena_mode", False):
+            return partner if partner is not None and partner.is_alive() else None
+        if partner is not None and partner.is_alive():
+            return partner
         if self.master is not None and self.master.is_alive():
-            master_mp = self.master.get_available_mp()
+            return self.master
+        return None
+
+    def get_available_mp(self):
+        provider = self.get_effective_master()
+        master_mp = 0 if provider is None else provider.temporary_mp + provider.mp
         return self.temporary_mp + self.mp + master_mp
 
     def consume_mp(self, amount):
@@ -92,12 +103,15 @@ class Servant(Character):
         if servant_cost:
             ledger.append({"payer": self, "amount": servant_cost, "pool": "mp"})
         if master_cost:
-            master_ledger = self.master.pay_mp_with_ledger(master_cost)
+            provider = self.get_effective_master()
+            if provider is None:
+                raise RuntimeError("御主在MP结算前已不可用")
+            master_ledger = provider.pay_personal_mp_with_ledger(master_cost)
             if master_ledger is None:
                 # Availability was checked above; this guards state corruption.
                 raise RuntimeError("御主MP支付状态在结算中发生变化")
             ledger.extend(master_ledger)
-            if battle is not None and getattr(self.master, "current_battle", None) is not battle:
+            if battle is not None and getattr(provider, "current_battle", None) is not battle:
                 for payment in master_ledger:
                     battle.record_mp_payment(
                         payment["payer"], payment["amount"], payment.get("pool", "mp")
@@ -110,7 +124,7 @@ class Servant(Character):
             return
         if self.master is not None and not self.master.is_alive():
             self.clear_master()
-        if self.master is not None:
+        if self.get_effective_master() is not None:
             return
 
         upkeep = self.modifier_manager.calculate_cost(

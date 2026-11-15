@@ -97,6 +97,22 @@ class MapEditorClientTests(unittest.TestCase):
         self.assertNotIn(a.location_id, self.window.document.locations)
         self.assertEqual(self.window.document.roads, {})
 
+    def test_selected_road_can_gain_a_third_location(self):
+        a = self.window.add_location("A", QPointF(0, 0))
+        b = self.window.add_location("B", QPointF(200, 0))
+        c = self.window.add_location("C", QPointF(100, 160))
+        road = self.window.connect_location_ids([a.location_id, b.location_id])
+        self.window._apply_selection(
+            [f"road:{road.road_id}", f"location:{c.location_id}"]
+        )
+
+        extended = self.window.connect_selected_locations()
+
+        self.assertIs(extended, road)
+        self.assertEqual(road.location_ids, [a.location_id, b.location_id, c.location_id])
+        self.assertEqual(len(self.window.road_items[road.road_id].location_items), 3)
+        self.assertEqual(self.window.ui.roadConnectionsList.count(), 3)
+
     def test_location_properties_update_document_and_graphics(self):
         record = self.window.add_location("A", QPointF(10, 20))
         self.window._apply_selection([f"location:{record.location_id}"])

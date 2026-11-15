@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QApplication, QMessageBox, QInputDialog
 
 from GameMasterClient.window import GameMasterWindow
 from MapEditorClient.model import MapDocument
@@ -48,6 +49,9 @@ class GameMasterClientTests(unittest.TestCase):
             window.session.stop()
             window.session.join(2)
         window.close()
+        # Release native widgets on the GUI thread while this test still owns them.
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def start_window(self, window):
         with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
@@ -101,6 +105,68 @@ class GameMasterClientTests(unittest.TestCase):
         self.assertTrue(warning.called)
         self.assertIn("只有0名从者", warning.call_args.args[2])
 
+    def test_death_match_disables_grail_only_setup(self):
+        window = GameMasterWindow()
+        self.addCleanup(self.close_window, window)
+        self.assertTrue(window.ui.grailCheckBox.isChecked())
+        self.assertTrue(window.ui.grailReadyConditionSpinBox.isEnabled())
+
+    def test_arena_teams_require_complete_two_character_custom_groups(self):
+        window = GameMasterWindow()
+        self.addCleanup(self.close_window, window)
+        window.characters = []
+        for number in range(4):
+            actor = create_character_from_card("master_test_0", name=f"角色{number}")
+            actor._character_id = f"character{10 + number}"
+            window.characters.append(actor)
+        window.custom_groups = [
+            {"name": "甲组", "member_ids": ["character10", "character11"]},
+            {"name": "乙组", "member_ids": ["character12", "character13"]},
+        ]
+        self.assertEqual(
+            window._build_game_team_ids(arena_mode=True),
+            [["character10", "character11"], ["character12", "character13"]],
+        )
+        window.custom_groups[1]["member_ids"] = ["character12"]
+        with self.assertRaises(ValueError):
+            window._build_game_team_ids(arena_mode=True)
+
+    def test_deathmatch_setup_does_not_require_servants_or_grail_fields(self):
+        window = GameMasterWindow()
+        self.addCleanup(self.close_window, window)
+        document = MapDocument()
+        document.add_location("竞技场", 0, 0, location_id="arena")
+        window.map_document = document
+        for number in range(2):
+            actor = create_character_from_card("master_test_0", name=f"角色{number}")
+            actor._character_id = f"character{10 + number}"
+            window.characters.append(actor)
+        window.ui.deathMatchCheckBox.click()
+
+        with patch.object(QMessageBox, "warning") as warning:
+            window.prepare_placement()
+
+        warning.assert_not_called()
+        self.assertEqual(window.rules["game_mode"], "deathmatch")
+        self.assertIsNone(window.rules["grail_location_id"])
+        self.assertEqual(window.rules["team_ids"], [["character10"], ["character11"]])
+
+        window.ui.deathMatchCheckBox.click()
+
+        self.assertTrue(window.ui.deathMatchCheckBox.isChecked())
+        self.assertFalse(window.ui.grailCheckBox.isChecked())
+        self.assertFalse(window.ui.grailLocationCombo.isEnabled())
+        self.assertFalse(window.ui.grailAppearanceConditionSpinBox.isEnabled())
+        self.assertFalse(window.ui.grailReadyConditionSpinBox.isEnabled())
+        self.assertTrue(window.ui.arenaCheckBox.isEnabled())
+
+        window.ui.grailCheckBox.click()
+        self.assertTrue(window.ui.grailCheckBox.isChecked())
+        self.assertFalse(window.ui.deathMatchCheckBox.isChecked())
+        self.assertTrue(window.ui.grailLocationCombo.isEnabled())
+        self.assertTrue(window.ui.grailAppearanceConditionSpinBox.isEnabled())
+        self.assertTrue(window.ui.grailReadyConditionSpinBox.isEnabled())
+
     def test_browse_map_button_fills_path_without_importing(self):
         window = GameMasterWindow()
         self.addCleanup(self.close_window, window)
@@ -112,6 +178,23 @@ class GameMasterClientTests(unittest.TestCase):
         self.assertEqual(window.ui.mapPathEdit.text(), r"C:\maps\example.pmap")
         self.assertIsNone(window.map_document)
         self.assertIn("等待导入", window.ui.mapSummaryLabel.text())
+
+    def test_over_budget_character_card_cannot_be_imported(self):
+        window = GameMasterWindow()
+        self.addCleanup(self.close_window, window)
+        card = window.active_catalog["character_card"]["master_test_0"]
+        card["attributes"]["strength"] = 5
+
+        def choose_master(_parent, _title, _prompt, labels, *_args):
+            return next(label for label in labels if "master_test_0" in label), True
+
+        with patch.object(QInputDialog, "getItem", side_effect=choose_master), \
+                patch.object(window, "_error") as error:
+            window.import_character()
+
+        error.assert_called_once()
+        self.assertIn("点数超额", str(error.call_args.args[0]))
+        self.assertEqual(window.characters, [])
 
     def test_safe_checkpoint_payload_replays_to_a_resumable_session(self):
         source = self.make_window()

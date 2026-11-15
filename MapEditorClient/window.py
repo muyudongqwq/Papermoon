@@ -69,7 +69,7 @@ class MapEditorWindow(QMainWindow):
         self.ui.actionNewMap.setShortcut(QKeySequence.StandardKey.New)
         self.ui.actionOpenMap.setShortcut(QKeySequence.StandardKey.Open)
         self.ui.actionSaveMap.setShortcut(QKeySequence.StandardKey.Save)
-        self.ui.actionConnectRoad.setToolTip("连接两个或更多已选地点")
+        self.ui.actionConnectRoad.setToolTip("连接两个或更多地点，或把地点接入一条已选道路")
 
     def _connect_signals(self):
         self.ui.actionNewMap.triggered.connect(self.new_map)
@@ -183,18 +183,43 @@ class MapEditorWindow(QMainWindow):
 
     def connect_selected_locations(self):
         location_ids = []
+        road_ids = []
         for key in self.selected_keys():
             kind, object_id = key.split(":", 1)
             if kind == "location" and object_id not in location_ids:
                 location_ids.append(object_id)
-        if len(location_ids) < 2:
-            self._warning("请按住Ctrl选择至少两个地点，再连接道路。")
+            elif kind == "road" and object_id not in road_ids:
+                road_ids.append(object_id)
+        if len(road_ids) > 1:
+            self._warning("一次只能扩展一条道路。")
             return None
         try:
+            if road_ids:
+                if not location_ids:
+                    self._warning("请选择一条道路和至少一个要接入的地点。")
+                    return None
+                return self.extend_road_to_locations(road_ids[0], location_ids)
+            if len(location_ids) < 2:
+                self._warning("请按住Ctrl选择至少两个地点，再连接道路。")
+                return None
             return self.connect_location_ids(location_ids)
         except ValueError as error:
             self._warning(str(error))
             return None
+
+    def extend_road_to_locations(self, road_id, location_ids):
+        if self.document is None:
+            raise ValueError("请先新建或打开地图")
+        road = self.document.extend_road(road_id, location_ids)
+        item = self.road_items[road_id]
+        item.location_items = [self.location_items[location_id] for location_id in road.location_ids]
+        item.setToolTip(self.document.road_name(road))
+        item.update_geometry()
+        key = f"road:{road_id}"
+        self._rebuild_object_list([key])
+        self._set_dirty()
+        self.statusBar().showMessage(f"已扩展道路：{self.document.road_name(road)}", 3000)
+        return road
 
     def connect_location_ids(self, location_ids):
         if self.document is None:

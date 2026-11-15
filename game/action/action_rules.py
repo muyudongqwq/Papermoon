@@ -17,6 +17,8 @@ VISIBILITY_COLLECTIONS = frozenset({
 CONDITION_FIELDS = frozenset({
     "all", "any", "not",
     "condition_id",
+    "character_matches",
+    "special_attack_id",
     "actor_alive",
     "actor_type",
     "at_grail_position",
@@ -142,6 +144,33 @@ def validate_condition(condition, *, path="condition", _depth=0):
                 validate_condition(child, path=f"{path}.{operator}[{index}]", _depth=_depth + 1)
     if "not" in condition:
         validate_condition(condition["not"], path=f"{path}.not", _depth=_depth + 1)
+    if "character_matches" in condition:
+        match = condition["character_matches"]
+        match_path = f"{path}.character_matches"
+        fields = {"tags", "statuses", "true_name"}
+        if not isinstance(match, dict) or set(match) - (fields | {"subject"}):
+            raise ValueError(f"{match_path}必须是角色匹配字典")
+        if match.get("subject") not in (
+            "self", "event_actor", "event_target", "battle_opponent",
+        ):
+            raise ValueError(f"{match_path}.subject不是支持的角色选择")
+        if not fields.intersection(match):
+            raise ValueError(f"{match_path}至少需要一个匹配条件")
+        for field in ("tags", "statuses"):
+            if field in match and (
+                not isinstance(match[field], list) or not match[field]
+                or not all(isinstance(item, str) and item.strip() for item in match[field])
+            ):
+                raise ValueError(f"{match_path}.{field}必须是非空字符串列表")
+        if "true_name" in match and (
+            not isinstance(match["true_name"], str) or not match["true_name"].strip()
+        ):
+            raise ValueError(f"{match_path}.true_name必须是非空字符串")
+    if "special_attack_id" in condition and (
+        not isinstance(condition["special_attack_id"], str)
+        or not condition["special_attack_id"].strip()
+    ):
+        raise ValueError(f"{path}.special_attack_id必须是非空字符串")
     condition_id = condition.get("condition_id")
     if condition_id is not None and condition_id not in CONDITION_IDS:
         raise ValueError(f"{path}.condition_id未知：{condition_id}")
@@ -177,6 +206,31 @@ def validate_condition(condition, *, path="condition", _depth=0):
         ):
             raise TypeError(f"{path}.{field}必须是字符串列表")
     return True
+
+
+def _character_matches(match, actor, context, event):
+    subject = match["subject"]
+    if subject == "self":
+        candidates = (actor,)
+    elif subject in {"event_actor", "event_target"}:
+        key = subject.removeprefix("event_")
+        candidates = (getattr(event, key, None) if event is not None
+                      else _context_value(context, key),)
+    else:
+        battle = getattr(event, "battle", None) or _context_value(
+            context, "battle",
+        ) or getattr(actor, "current_battle", None)
+        candidates = (
+            opponent for opponent in getattr(battle, "participants", ())
+            if opponent is not actor and opponent.is_alive() and not actor.is_ally(opponent)
+        )
+    return any(
+        callable(getattr(candidate, "has_status", None))
+        and set(match.get("tags", ())).issubset(getattr(candidate, "tags", ()))
+        and all(candidate.has_status(status) for status in match.get("statuses", ()))
+        and ("true_name" not in match or getattr(candidate, "true_name", None) == match["true_name"])
+        for candidate in candidates
+    )
 
 
 def validate_target_rules(rules, *, path="target_rules"):
@@ -222,8 +276,15 @@ def get_condition_reasons(condition, actor, context=None):
     context = context or {}
     reasons = []
     condition_id = condition.get("condition_id")
-    if condition_id == "master_is_none" and getattr(actor, "master", None) is not None:
-        reasons.append("master_exists")
+    if condition_id == "master_is_none":
+        get_effective_master = getattr(actor, "get_effective_master", None)
+        master = (
+            get_effective_master()
+            if callable(get_effective_master)
+            else getattr(actor, "master", None)
+        )
+        if master is not None:
+            reasons.append("master_exists")
     if condition.get("actor_alive") and not actor.is_alive():
         reasons.append("actor_not_alive")
     actor_type = condition.get("actor_type")
@@ -336,6 +397,14 @@ def get_condition_reasons(condition, actor, context=None):
         if not release_options(actor):
             reasons.append("no_releasable_effect")
     event = _context_value(context, "event") or _context_value(context, "game_event")
+    if "character_matches" in condition and not _character_matches(
+        condition["character_matches"], actor, context, event,
+    ):
+        reasons.append("character_matches_failed")
+    if "special_attack_id" in condition and condition["special_attack_id"] not in (
+        getattr(event, "payload", {}).get("special_attack_ids", ())
+    ):
+        reasons.append("special_attack_not_matched")
     if event is not None:
         for field, actual in {
             "event_actor": event.actor,

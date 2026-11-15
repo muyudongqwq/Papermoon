@@ -41,19 +41,32 @@ class Master(Character):
             old_master.remove_servant(
                 servant,
                 trigger_master_lost=False,
+                notify_game=False,
             )
 
         self.servants.append(servant)
         servant.master = self
         self.add_ally(servant, source=("master_servant", id(self)))
+        self._notify_servant_ownership_changed(servant, old_master, self)
         return True
 
-    def remove_servant(self, servant, trigger_master_lost=True):
+    @staticmethod
+    def _notify_servant_ownership_changed(servant, old_master, new_master):
+        manager = getattr(servant, "game_manager", None)
+        if manager is None:
+            manager = getattr(new_master or old_master, "game_manager", None)
+        callback = getattr(manager, "on_servant_ownership_changed", None)
+        if callable(callback):
+            callback(servant, old_master, new_master)
+
+    def remove_servant(self, servant, trigger_master_lost=True, notify_game=True):
         if servant not in self.servants:
             return False
         self.servants.remove(servant)
         if getattr(servant, "master", None) is self:
             servant.master = None
+            if notify_game:
+                self._notify_servant_ownership_changed(servant, self, None)
             if trigger_master_lost and servant.is_alive():
                 servant.trigger_class_skill_event(
                     "master_lost",

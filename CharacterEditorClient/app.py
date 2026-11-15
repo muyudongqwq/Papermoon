@@ -11,6 +11,14 @@ from CharacterEditorClient import APPLICATION_NAME
 from CharacterEditorClient.dialogs import ask_new_card
 from CharacterEditorClient.forms import CharacterForm
 from CharacterEditorClient.model import new_card, next_card_id
+from CharacterEditorClient.point_rules import assess_character_points, describe_point_assessment
+
+
+POINT_COLORS = {
+    "under": "#00B3FF",
+    "valid": "#22B14C",
+    "over": "#ED1C24",
+}
 
 
 class CharacterEditorClient:
@@ -39,6 +47,8 @@ class CharacterEditorClient:
         tree_area = ttk.Frame(left)
         tree_area.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(tree_area, show="tree", selectmode="browse")
+        for status, color in POINT_COLORS.items():
+            self.tree.tag_configure(status, foreground=color)
         scroll = ttk.Scrollbar(tree_area, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -77,7 +87,8 @@ class CharacterEditorClient:
         try:
             self.items.clear()
             self.tree.delete(*self.tree.get_children())
-            cards = self.project.effective()["character_card"]
+            catalogs = self.project.effective()
+            cards = catalogs["character_card"]
             term = self.search.get().strip().casefold()
             for kind, title in (("master", "Master / 御主"), ("servant", "Servant / 从者")):
                 group = self.tree.insert("", "end", text=title, open=True)
@@ -85,7 +96,13 @@ class CharacterEditorClient:
                     if data["character_type"] != kind or term not in f"{key} {data['name']}".casefold():
                         continue
                     local = "* " if key in self.project.data["character_card"] else ""
-                    node = self.tree.insert(group, "end", text=f"{local}{data['name']}")
+                    assessment = assess_character_points(data, catalogs)
+                    node = self.tree.insert(
+                        group,
+                        "end",
+                        text=f"{local}{data['name']}",
+                        tags=(assessment.status,),
+                    )
                     self.items[node] = key
                     if key == self.current:
                         self.tree.selection_set(node)
@@ -154,8 +171,10 @@ class CharacterEditorClient:
 
     def validate(self):
         try:
-            self.candidate()
-            self.status.set("校验通过，当前修改尚未保存。")
+            candidate = self.candidate()
+            catalogs = candidate.effective()
+            assessment = assess_character_points(catalogs["character_card"][self.current], catalogs)
+            self.status.set(f"校验通过；{describe_point_assessment(assessment)}。当前修改尚未保存。")
             return True
         except Exception as error:
             self.error(error)
@@ -168,7 +187,12 @@ class CharacterEditorClient:
             self.project = candidate
             self.load(self.current)
             self.refresh()
-            self.status.set("角色卡已保存；下次启动Core时加载，原文件保留为.bak。")
+            catalogs = self.project.effective()
+            assessment = assess_character_points(catalogs["character_card"][self.current], catalogs)
+            self.status.set(
+                f"角色卡已保存；{describe_point_assessment(assessment)}。"
+                "下次启动Core时加载，原文件保留为.bak。"
+            )
             return True
         except Exception as error:
             self.error(error)

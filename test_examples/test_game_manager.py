@@ -20,6 +20,73 @@ def create_servant(name="Servant"):
 
 
 class HolyGrailGameTests(unittest.TestCase):
+    def test_deathmatch_ends_when_only_one_stable_team_remains(self):
+        first = create_master("First")
+        partner = create_servant("Partner")
+        enemy = create_master("Enemy")
+        enemy_partner = create_servant("EnemyPartner")
+        game = GameManager(
+            [first, partner, enemy, enemy_partner],
+            None,
+            game_mode="deathmatch",
+            teams=[[first, partner], [enemy, enemy_partner]],
+        )
+        game.start_game()
+
+        enemy.die()
+        self.assertFalse(game.check_game_end())
+        enemy_partner.die()
+
+        self.assertTrue(game.check_game_end())
+        self.assertEqual(game.end_reason, "deathmatch_last_team")
+        self.assertEqual(game.winners, [first, partner])
+        self.assertFalse(game.holy_grail.appeared)
+        self.assertEqual(game.announce_grail_position(1), [])
+
+    def test_deathmatch_servant_changes_team_with_ownership(self):
+        first = create_master("First")
+        servant = create_servant("Servant")
+        second = create_master("Second")
+        first.add_servant(servant)
+        game = GameManager(
+            [first, servant, second],
+            None,
+            game_mode="deathmatch",
+            teams=[[first, servant], [second]],
+        )
+        game.start_game()
+
+        second.add_servant(servant)
+
+        self.assertEqual(game.teams, [[first], [second, servant]])
+        self.assertEqual(game.team_by_character[first], 0)
+        self.assertEqual(game.team_by_character[servant], 1)
+        self.assertEqual(game.team_by_character[second], 1)
+
+        second.remove_servant(servant)
+        self.assertEqual(game.teams, [[first], [second], [servant]])
+
+    def test_arena_pair_is_reciprocal_ally_and_mp_provider(self):
+        first = create_servant("First")
+        second = create_servant("Second")
+        first.mp = 1
+        second.mp = 10
+        game = GameManager(
+            [first, second],
+            Location("Unused"),
+            teams=[[first, second]],
+            arena_mode=True,
+        )
+
+        self.assertIs(first.arena_partner, second)
+        self.assertIs(second.arena_partner, first)
+        self.assertTrue(first.is_ally(second))
+        self.assertEqual(first.get_available_mp(), 11)
+        ledger = first.pay_mp_with_ledger(5)
+        self.assertEqual(first.mp, 0)
+        self.assertEqual(second.mp, 6)
+        self.assertEqual([entry["payer"] for entry in ledger], [first, second])
+
     def test_optional_runtime_character_id_allocator_is_used_for_new_entities(self):
         location = Location("Arena")
         initial = create_master("Initial")

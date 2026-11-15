@@ -155,6 +155,14 @@ EFFECT_SCHEMAS = {
         required={"steps"}, optional={"calculation"}, modifier=True,
     ),
     "status_immunity": _schema(optional={"tags"}, modifier=True),
+    "special_attack": _schema(
+        required={"special_attack_id", "condition"},
+        optional={"multiplier"}, modifier=True,
+    ),
+    "fixed_die": _schema(required={"value"}, optional={"condition"}, modifier=True),
+    "incoming_attack_roll_bonus": _schema(
+        required={"value"}, optional={"condition"}, modifier=True,
+    ),
     "deploy_reality_marble": _schema(
         required={"reality_marble_id"},
         optional={
@@ -710,13 +718,15 @@ def _validate_nested_skill_definition(definition, path):
         definition,
         path,
         allowed={
-            "skill_id", "name", "rank", "components", "negative_skill",
+            "skill_id", "name", "rank", "rank_plus", "components", "negative_skill",
             "skill_category", "casting", "rules_text",
         },
         required={"skill_id", "name", "rank", "components"},
     )
     for field in ("skill_id", "name", "rank"):
         _string(definition[field], f"{path}.{field}")
+    if "rank_plus" in definition:
+        _integer(definition["rank_plus"], f"{path}.rank_plus", minimum=0, maximum=1)
     if "negative_skill" in definition:
         _boolean(definition["negative_skill"], f"{path}.negative_skill")
     if "skill_category" in definition and definition["skill_category"] is not None:
@@ -805,6 +815,22 @@ def _validate_dynamic_action_definition(definition, path):
 
 
 def _validate_effect_data(effect_type, data, path, component_type=None):
+    if effect_type in {"special_attack", "fixed_die", "incoming_attack_roll_bonus"}:
+        if "condition" in data:
+            validate_condition(data["condition"], path=f"{path}.condition")
+        if effect_type == "special_attack":
+            _string(data["special_attack_id"], f"{path}.special_attack_id")
+            if not data["condition"]:
+                _error(f"{path}.condition", "特攻需要指定命中条件")
+            if "multiplier" in data:
+                _number(data["multiplier"], f"{path}.multiplier", minimum=0)
+        elif effect_type == "fixed_die":
+            _integer(data["value"], f"{path}.value", minimum=1)
+            if data["value"] > 10:
+                _error(f"{path}.value", "骰面不能大于10")
+        else:
+            _integer(data["value"], f"{path}.value")
+        return
     if effect_type in {"delay_attack", "delay_effect"}:
         _integer(data["delay_turns"], f"{path}.delay_turns", minimum=1)
         if effect_type == "delay_effect":
@@ -1586,6 +1612,8 @@ def validate_effect_definition(
     )
     if schema.modifier:
         _validate_modifier_common(effect, path)
+    if effect_type in {"special_attack", "fixed_die", "incoming_attack_roll_bonus"} and "consumption" in effect:
+        _error(path, "此效果不支持按次数消耗，可设置持续时间")
     if effect_type == "add_status":
         from game.status.registry import get_status_definition, validate_status_consumption
         _string(data["status_id"], f"{data_path}.status_id")

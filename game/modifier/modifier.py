@@ -34,6 +34,9 @@ class Modifier:
         "action_restriction",
         "defense_flow_modifier",
         "visibility_bonus",
+        "special_attack",
+        "fixed_die",
+        "incoming_attack_roll_bonus",
     }
     VALID_CONSUMPTION_EVENTS = {
         "action_committed",
@@ -1215,7 +1218,24 @@ class WeaknessModifier(StatusModifier):
                 refresh()
 
 
+class ConditionalCombatModifier(Modifier):
+    def matches_context(self, context=None, **kwargs):
+        if not super().matches_context(context, **kwargs):
+            return False
+        from game.action.action_rules import condition_matches
+        condition = self.effect_data.get("condition")
+        return not condition or condition_matches(condition, self.target, context)
+
+
+class SpecialAttackModifier(ConditionalCombatModifier):
+    def _build_default_modifier_id(self):
+        return f"special_attack:{self.effect_data['special_attack_id']}"
+
+
 MODIFIER_TYPES = {
+    "special_attack": SpecialAttackModifier,
+    "fixed_die": ConditionalCombatModifier,
+    "incoming_attack_roll_bonus": ConditionalCombatModifier,
     "attribute_bonus": AttributeModifier,
     "attack_bonus": AttackModifier,
     "dice_bonus": DiceModifier,
