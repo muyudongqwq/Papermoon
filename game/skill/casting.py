@@ -13,6 +13,16 @@ AREA_RANGE_TYPES = {"anti_army", "anti_fortress"}
 POSITION_REVEAL_RANGE_TYPES = {"anti_fortress"}
 
 
+def validate_noble_metadata(definition):
+    if "noble_classification" in definition:
+        classification = definition["noble_classification"]
+        if not isinstance(classification, str) or not classification.strip():
+            raise ValueError("宝具类型必须是非空文本")
+    cooldown = definition.get("cooldown_turns", -1)
+    if type(cooldown) is not int or cooldown < -1:
+        raise ValueError("宝具CD必须是 -1 或非负整数")
+
+
 def noble_damage_multiplier(skill):
     return 2 if (getattr(skill, "source_type", None) == "noble_phantasm"
                  and get_casting_config(skill).get("range_type") == "anti_fortress") else 1
@@ -306,6 +316,9 @@ class CastingState:
         if getattr(actor, "casting_state", None) is not None:
             raise ValueError("角色已经处于咏唱状态")
         component = casting_component(skill, component_id)
+        from game.skill.component_runtime import noble_on_cooldown
+        if noble_on_cooldown(actor, skill, turn_number):
+            return None
         from game.resource.costs import costs_at, pay_costs, SkillUnavailableError
         try:
             paid = pay_costs(actor, costs_at(component.get("cost", []), "casting_start"), f"casting:{skill.skill_id}")

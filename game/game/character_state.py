@@ -128,11 +128,24 @@ def component_view(actor, skill, component, component_index=0):
 def skill_view(actor, skill, category):
     components = [component_view(actor, skill, component, index) for index, component in enumerate(skill.definitions)]
     casting = get_casting_config(skill)
+    noble_details = {}
+    if category == "noble_phantasm":
+        classification = getattr(skill, "noble_classification", None)
+        if classification:
+            noble_details["noble_classification"] = classification
+        cooldown = getattr(skill, "noble_cooldown_turns", -1)
+        if cooldown >= 0:
+            ready = skill.noble_cooldown_ready_turn
+            noble_details["noble_cooldown"] = {
+                "turns": cooldown, "ready_turn": ready,
+                "turns_remaining": max(0, (ready or 0) - actor.current_global_turn),
+            }
     return {"skill_id": skill.skill_id, "name": skill.name, "rank": skill.rank_name,
             "category": category, "negative": skill.negative_skill,
             "casting": {"activation_mode": casting.get("activation_mode", "release"),
                         "range_type": casting.get("range_type")} if casting else None,
             "components": components,
+            **noble_details,
             "description": (skill.description or "；".join(component["description"]
                             for component in components if component["description"]))}
 

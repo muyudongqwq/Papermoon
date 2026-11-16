@@ -26,6 +26,8 @@ class Character:
         self._character_id = uuid4().hex
         self.name = name
         self.true_name = name
+        self.gender = None
+        self.alignment = {}
         self.tags = set()
         self.strength = AttributeRank(strength)
         self.endurance = AttributeRank(endurance)

@@ -71,10 +71,20 @@ assert len(servant.noble_phantasms) == 3
 | 字段 | 内容 |
 | --- | --- |
 | `source` | 原始样本路径等来源说明，仅作记录 |
+| `true_name` | 真实身份，用于真名条件。省略时使用卡中名称 |
+| `tags` | 手动添加的角色标签列表，如 `["divine"]` |
+| `gender` | `"男"`、`"女"` 或 `"其他"` |
+| `alignment` | 阵营的两个可选轴，例如 `{"order": "秩序", "morality": "善"}` |
 | `class_skills` | `[{"name": "对魔力", "rank": "B"}]`，引用职介技能库 |
 | `personal_skills` | 固有技能目录ID列表 |
 | `basic_magics` | 基础魔术目录ID列表，如 `["healing", "workshop"]` |
 | `noble_phantasms` | 宝具目录ID列表，仅从者卡使用 |
+
+角色编辑器可分别选择性别、秩序轴（秩序／中立／混沌）和善恶轴（善／中庸／恶）。
+创建角色时，性别和阵营选项会生成同名标签。例如「女、秩序·善」生成
+`女`、`秩序`、`善`，可由技能的 `character_matches.tags` 匹配。
+「其他」与未设置的选项不生成标签。自动标签和手动填写的 `tags` 一并使用，
+重新创建时从当前选择生成。
 
 使用Core内容项目时，`class_skills`也可引用Skill Editor创建的自定义职介技能。
 职介目录按名称组织，每个条目的`ranks`保存各等级组件；卡片通过上述name、rank

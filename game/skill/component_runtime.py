@@ -35,6 +35,11 @@ def _current_battle(actor, battle=None):
     return battle if battle is not None else getattr(actor, "current_battle", None)
 
 
+def noble_on_cooldown(actor, skill, turn_number=None):
+    ready = getattr(skill, "noble_cooldown_ready_turn", None)
+    return ready is not None and _current_turn(actor, turn_number) < ready
+
+
 def component_use_count(
     actor,
     skill,
@@ -76,6 +81,8 @@ def component_runtime_reasons(
     reasons = []
     turn_number = _current_turn(actor, turn_number)
     current_battle = _current_battle(actor, battle)
+    if component.get("type") == "active" and noble_on_cooldown(actor, skill, turn_number):
+        reasons.append("noble_phantasm_on_cooldown")
     usage = component.get("usage_limit")
     if usage:
         if usage["scope"] == "battle" and current_battle is None:
@@ -121,6 +128,10 @@ def record_component_use(
     """Commit one successful use after every component effect resolves."""
     usage = component.get("usage_limit")
     cooldown = component.get("cooldown")
+    noble_cooldown = getattr(skill, "noble_cooldown_turns", -1)
+    if component.get("type") == "active" and noble_cooldown >= 0:
+        # Match component cooldown semantics: T+1 through T+N are blocked.
+        skill.noble_cooldown_ready_turn = _current_turn(actor, turn_number) + noble_cooldown + 1
     if not usage and not cooldown:
         return None
     turn_number = _current_turn(actor, turn_number)

@@ -2757,6 +2757,7 @@ def create_noble_phantasm(character, definition):
     from game.skill.casting import (
         AREA_RANGE_TYPES,
         component_casting_requirement,
+        validate_noble_metadata,
     )
 
     required = {
@@ -2775,6 +2776,7 @@ def create_noble_phantasm(character, definition):
     range_type = definition["range_type"]
     if range_type not in {"anti_unit", "anti_army", "anti_fortress", "bounded_field"}:
         raise ValueError(f"未知的宝具范围类型：{range_type}")
+    validate_noble_metadata(definition)
     if any(
         noble.skill_id == definition["skill_id"]
         for noble in character.noble_phantasms
@@ -2832,6 +2834,9 @@ def create_noble_phantasm(character, definition):
         description=definition.get("description"),
     )
     skill.source_type = "noble_phantasm"
+    skill.noble_classification = definition.get("noble_classification")
+    skill.noble_cooldown_turns = definition.get("cooldown_turns", -1)
+    skill.noble_cooldown_ready_turn = None
     character.noble_phantasms.append(skill)
     _apply_passive_skill_components(character, skill)
     return skill

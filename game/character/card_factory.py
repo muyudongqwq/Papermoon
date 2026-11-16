@@ -24,8 +24,16 @@ _CONTENT_FIELDS = {
     "noble_phantasms": "noble_phantasm",
 }
 _COMMON_FIELDS = {"card_id", "character_type", "name", "attributes"}
-_OPTIONAL_FIELDS = {*_CONTENT_FIELDS, "class_skills", "source", "tags", "true_name"}
+_OPTIONAL_FIELDS = {
+    *_CONTENT_FIELDS, "class_skills", "source", "tags", "true_name", "gender", "alignment",
+}
 _TYPE_FIELDS = {"master": {"talent", "command_spell"}, "servant": {"servant_class", "noble"}}
+
+GENDER_CHOICES = ("男", "女", "其他")
+ALIGNMENT_CHOICES = {
+    "order": ("秩序", "中立", "混沌"),
+    "morality": ("善", "中庸", "恶"),
+}
 
 
 def _fields(data, required, optional, label):
@@ -83,6 +91,15 @@ def validate_character_card_definition(definition):
     _text(definition["name"], "角色名")
     if "true_name" in definition:
         _text(definition["true_name"], "true_name")
+    if "gender" in definition and definition["gender"] not in GENDER_CHOICES:
+        raise ValueError("gender必须是男、女或其他")
+    if "alignment" in definition:
+        alignment = definition["alignment"]
+        _fields(alignment, set(), set(ALIGNMENT_CHOICES), "alignment")
+        for axis, value in alignment.items():
+            choices = ALIGNMENT_CHOICES[axis]
+            if value not in choices:
+                raise ValueError(f"alignment.{axis}必须是{'、'.join(choices)}之一")
     if "tags" in definition:
         tags = definition["tags"]
         if not isinstance(tags, list) or any(
@@ -208,7 +225,12 @@ def create_character_from_card(card_id, *, name=None, position=None, master=None
                         noble=_fixed_rank(data["noble"], "noble", allow_plus=True))
     actor.card_id = card_id
     actor.true_name = data.get("true_name", data["name"])
-    actor.tags = set(data.get("tags", []))
+    actor.gender = data.get("gender")
+    actor.alignment = data.get("alignment", {})
+    actor.tags.update(data.get("tags", []))
+    actor.tags.update(actor.alignment.values())
+    if actor.gender in ("男", "女"):
+        actor.tags.add(actor.gender)
     try:
         # Load-time passive conditions must see the requested spawn context.
         if position is not None:

@@ -13,6 +13,9 @@ from SkillEditorClient.cost_editor import CostRow
 from SkillEditorClient.editor_documents import format_json
 
 
+ATTACK_ID_LABELS = {"action_id": "行动标识", "skill_id": "技能标识"}
+
+
 class ParameterRow(ttk.Frame):
     def __init__(self, parent, editor, key, value=None, *, empty=False):
         super().__init__(parent, style="PhaseArea.TFrame")
@@ -30,6 +33,13 @@ class ParameterRow(ttk.Frame):
         self.initial_text = self.value.get()
         self.has_initial = not empty
         self.input = None
+        self.override_button = None
+        if key in ATTACK_ID_LABELS:
+            self.override = tk.BooleanVar(master=self, value=self.has_initial)
+            self.override_button = ttk.Checkbutton(
+                self, text="手动指定", variable=self.override, style="PhaseArea.TCheckbutton",
+                command=self.toggle_override,
+            )
         self.remove_button = ttk.Button(self, text="删除", width=5, command=lambda: editor.remove_field(key))
         self.remove_button.pack(side="right", padx=(4, 0))
         self.refresh()
@@ -56,13 +66,40 @@ class ParameterRow(ttk.Frame):
                 self.input.destroy()
             self.input = (ttk.Combobox(self, textvariable=self.value, state="normal") if choices else
                           ttk.Entry(self, textvariable=self.value))
-            self.input.pack(side="left", fill="x", expand=True, before=self.remove_button)
+            self.input.pack(side="left", fill="x", expand=True)
             if choices:
                 self.input.bind("<MouseWheel>", lambda _event: "break")
         if choices:
             self.input.configure(values=choices)
         if not self.complex_value:
             self.value.set(labels.get(value, value))
+        if self.override_button is not None:
+            self.refresh_override()
+
+    def refresh_override(self):
+        if self.editor.effect_type == "create_attack_event":
+            self.label.configure(text=f"{ATTACK_ID_LABELS[self.key]} · {self.key}")
+            if not self.override_button.winfo_manager():
+                self.override.set(bool(self.value.get().strip()))
+                self.remove_button.pack_forget()
+                self.override_button.pack(side="right", padx=(4, 0))
+            if self.override.get():
+                self.input.pack(side="left", fill="x", expand=True)
+            else:
+                self.input.pack_forget()
+        elif self.override_button.winfo_manager():
+            self.override_button.pack_forget()
+            self.input.pack_forget()
+            self.remove_button.pack(side="right", padx=(4, 0))
+            self.input.pack(side="left", fill="x", expand=True)
+
+    def toggle_override(self):
+        if not self.override.get():
+            self.value.set("")
+        self.refresh_override()
+        if self.override.get():
+            self.input.focus_set()
+        request_layout(self)
 
     def read(self):
         text = self.value.get()
@@ -247,6 +284,8 @@ class EffectDataEditor(ttk.Frame):
         schema = EFFECT_SCHEMAS.get(self.effect_type)
         required = schema.required_data if schema is not None else ()
         for key, row in self.rows.items():
+            if self.effect_type == "create_attack_event" and key in ATTACK_ID_LABELS and not row.override.get():
+                continue
             if self.is_blank(row):
                 if key in required:
                     if row.has_initial:

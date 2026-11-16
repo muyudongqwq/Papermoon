@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 import tkinter as tk
+from tkinter import ttk
 import unittest
 from unittest.mock import Mock, patch
 
@@ -79,13 +80,15 @@ class CharacterEditorSmokeTests(unittest.TestCase):
             self.app.new()
         self.assertEqual(self.app.current, "master10")
         self.assertTrue(all(value.get() == "" for value in self.app.form.attributes.values()))
+        self.assertTrue(all(value.get() == "0" for value in self.app.form.attribute_pluses.values()))
         self.assertEqual(self.app.form.original["command_spell"], 3)
         self.assertFalse(self.app.save())
         self.assertFalse(self.path.exists())
         self.app.form.name.set("御主")
         for variable in self.app.form.attributes.values():
             variable.set("C")
-        self.app.form.attributes["magic"].set("A++")
+        self.app.form.attributes["magic"].set("A")
+        self.app.form.attribute_pluses["magic"].set("2")
         self.assertTrue(self.app.save())
         with self.app.project.activate():
             actor = create_character_from_card("master10")
@@ -94,7 +97,7 @@ class CharacterEditorSmokeTests(unittest.TestCase):
     def test_new_servant_and_all_attribute_plus_values_save_and_create(self):
         form = self.new("servant", "Archer")
         self.assertEqual(self.app.current, "archer_10")
-        form.attributes["strength"].set("C+")
+        form.attribute_pluses["strength"].set("1")
         form.rank.set("A+")
         self.assertNotIn("GM", form.rank_box.cget("values"))
         self.assertTrue(self.app.save())
@@ -102,8 +105,44 @@ class CharacterEditorSmokeTests(unittest.TestCase):
             actor = create_character_from_card("archer_10")
             self.assertEqual((actor.strength.base_value, actor.strength.base_plus), (3, 1))
             self.assertEqual(actor.servant_class, "Archer")
+        self.assertEqual(self.app.form.attributes["strength"].get(), "C")
+        self.assertEqual(self.app.form.attribute_pluses["strength"].get(), "1")
+        self.app.form.attribute_pluses["strength"].set("0")
+        self.assertTrue(self.app.dirty())
+        self.assertTrue(self.app.save())
+        with self.app.project.activate():
+            self.assertEqual(create_character_from_card("archer_10").strength.base_plus, 0)
         form = self.new("servant", "Archer")
         self.assertEqual(self.app.current, "archer_11")
+
+    def test_identity_edits_round_trip_and_replace_generated_tags(self):
+        form = self.new()
+        alignment_row = next(
+            row for row in form.winfo_children()
+            if any(isinstance(child, ttk.Label) and child.cget("text") == "阵营"
+                   for child in row.winfo_children())
+        )
+        boxes = [child for child in alignment_row.winfo_children() if isinstance(child, ttk.Combobox)]
+        self.assertEqual([box.get() for box in boxes], ["未设置", "未设置"])
+        self.assertEqual([box.cget("values") for box in boxes], [
+            ("未设置", "秩序", "中立", "混沌"), ("未设置", "善", "中庸", "恶"),
+        ])
+        self.assertTrue(self.app.save())
+        form = self.app.form
+        form.gender.set("男")
+        form.alignment["order"].set("秩序")
+        form.alignment["morality"].set("善")
+        self.assertTrue(self.app.dirty())
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.form.read()["alignment"], {"order": "秩序", "morality": "善"})
+        with self.app.project.activate():
+            self.assertEqual(create_character_from_card("master10").tags, {"男", "秩序", "善"})
+
+        self.app.form.gender.set("其他")
+        self.app.form.alignment["morality"].set("恶")
+        self.assertTrue(self.app.save())
+        with self.app.project.activate():
+            self.assertEqual(create_character_from_card("master10").tags, {"秩序", "恶"})
 
     def test_typed_gm_is_valid_for_talent_and_noble_but_not_basic_attributes(self):
         for kind, servant_class in (("master", None), ("servant", "Saber")):
@@ -155,6 +194,12 @@ class CharacterEditorSmokeTests(unittest.TestCase):
         for box in [*form.attribute_boxes.values(), form.rank_box]:
             self.assertEqual(box.cget("width"), 7)
             self.assertFalse(int(box.pack_info()["expand"]))
+        for box in form.attribute_boxes.values():
+            grade, plus = [child for child in box.master.winfo_children()
+                           if isinstance(child, ttk.Combobox)]
+            self.assertIs(grade, box)
+            self.assertEqual(grade.cget("values"), ("E", "D", "C", "B", "A"))
+            self.assertEqual(tuple(map(str, plus.cget("values"))), ("0", "1", "2"))
         self.assertEqual(form.placeholder.cget("text"), "礼装（预留）")
         data = form.read()
         data["command_spell"] = 2

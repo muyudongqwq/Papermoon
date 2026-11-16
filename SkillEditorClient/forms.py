@@ -7,6 +7,7 @@ from tkinter.scrolledtext import ScrolledText
 
 from game.rank.rank import SkillRank
 from game.resource.costs import default_noble_costs, NOBLE_PHANTASM_MP_COSTS
+from game.skill.casting import validate_noble_metadata
 from SkillEditorClient.cost_editor import CostRow
 from SkillEditorClient.condition_editor import ConditionEditor
 from SkillEditorClient.trigger_editor import TriggerEditor
@@ -27,6 +28,7 @@ from SkillEditorClient.editor_documents import format_json
 
 # Edit this text to change the note directly below the cost heading.
 COST_HINT = "资源可下拉选择，也可填写自定义资源ID。无AP1/AP2时不提供action_point。"
+NOBLE_CLASSIFICATION_CHOICES = ("对人", "对军", "对城", "对界", "对国", "对神", "结界")
 
 
 def extras_box(parent, data, controlled, title="高级设置"):
@@ -552,8 +554,22 @@ class SkillForm(ttk.Frame):
         self.original = deepcopy(data)
         self.catalogs = catalogs
         self.components = []
+        self.is_noble_phantasm = "noble_phantasm_type" in data
+        if self.is_noble_phantasm:
+            self.fields = self.fields | {"noble_classification", "cooldown_turns"}
         self.name, self.name_box = entry_row(self, "名称 name", data.get("name", ""), compact=True, font=UNIT_FONT)
         self.rank, self.rank_box = entry_row(self, "等级 rank", data.get("rank", ""), choices=RANKS, compact=True, font=UNIT_FONT)
+        if self.is_noble_phantasm:
+            self.noble_classification, _ = entry_row(
+                self, "宝具类型（可自填）", data.get("noble_classification", ""),
+                choices=NOBLE_CLASSIFICATION_CHOICES, compact=True,
+            )
+            self.noble_cooldown, _ = entry_row(
+                self, "宝具 CD（全局回合）", str(data.get("cooldown_turns", -1)), compact=True,
+            )
+            ttk.Label(self, text="-1 表示无宝具 CD。宝具发动后，同一宝具的主动单元共享冷却。").pack(
+                anchor="w", pady=(0, 4),
+            )
         ttk.Label(self, text="技能说明 description").pack(anchor="w", pady=(5, 3))
         self.description = ScrolledText(self, height=3, wrap="word", undo=True, font=("Microsoft YaHei UI", 11))
         self.description.pack(fill="x")
@@ -629,6 +645,16 @@ class SkillForm(ttk.Frame):
         if "cost" in object_value(self.extras.get(), "技能高级设置"):
             raise ValueError("不再使用技能公共消耗，请在各技能单元的消耗栏配置")
         result = merge_extras(self.extras.get(), self.fields, "技能高级设置")
+        if self.is_noble_phantasm:
+            classification = self.noble_classification.get().strip()
+            if classification:
+                result["noble_classification"] = classification
+            try:
+                cooldown = int(self.noble_cooldown.get().strip())
+            except ValueError as error:
+                raise ValueError("宝具CD必须是 -1 或非负整数") from error
+            optional_field(result, self.original, "cooldown_turns", cooldown, -1)
+            validate_noble_metadata(result)
         if not self.components:
             raise ValueError("请至少新建一个技能单元，并为它配置效果或可选分支。")
         result.update(skill_id=self.original["skill_id"], name=self.name.get().strip(),
@@ -654,4 +680,5 @@ class SkillForm(ttk.Frame):
 
     def snapshot(self):
         return (self.name.get(), self.rank.get(), self.description.get("1.0", "end-1c"),
-                [panel.snapshot() for panel in self.components], self.extras.get())
+                [panel.snapshot() for panel in self.components], self.extras.get(),
+                (self.noble_classification.get(), self.noble_cooldown.get()) if self.is_noble_phantasm else None)

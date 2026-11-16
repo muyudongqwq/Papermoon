@@ -40,7 +40,8 @@ def run():
                 app.form.name.set("打包验证角色")
                 for variable in app.form.attributes.values():
                     variable.set("C")
-                app.form.attributes["magic"].set("A++")
+                app.form.attributes["magic"].set("A")
+                app.form.attribute_pluses["magic"].set("2")
                 if not app.save():
                     raise ValueError("打包后无法保存角色卡")
                 reopened = CatalogProject(app.project.path)

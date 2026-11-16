@@ -536,6 +536,38 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
         self.assertEqual(set(effect.data.rows["damage_type"].input.cget("values")), {"physical", "magic", "true_damage"})
         self.assertNotIn("damage_type", effect.data.field_choices.values())
 
+    def test_generated_attack_ids_are_automatic_until_manually_overridden(self):
+        from SkillEditorClient.effect_editor import EffectDataEditor
+
+        editor = EffectDataEditor(self.root, "create_attack_event", {"skill_id": "custom_skill"})
+        self.addCleanup(editor.destroy)
+        action = editor.rows["action_id"]
+        skill = editor.rows["skill_id"]
+        self.assertFalse(action.override.get())
+        self.assertEqual(action.input.winfo_manager(), "")
+        self.assertTrue(skill.override.get())
+        self.assertEqual(skill.input.winfo_manager(), "pack")
+        self.assertEqual(editor.read_form(), {"skill_id": "custom_skill"})
+
+        action.override_button.invoke()
+        self.assertEqual(action.input.winfo_manager(), "pack")
+        action.value.set("custom_action")
+        editor.show_json()
+        self.assertEqual(json.loads(editor.get()), {"action_id": "custom_action", "skill_id": "custom_skill"})
+        editor.show_form()
+        skill = editor.rows["skill_id"]
+        skill.override_button.invoke()
+        self.assertEqual(skill.input.winfo_manager(), "")
+        self.assertEqual(editor.read_form(), {"action_id": "custom_action"})
+
+        editor.set_effect_type("damage")
+        action = editor.rows["action_id"]
+        self.assertEqual(action.override_button.winfo_manager(), "")
+        action.value.set("edited_action")
+        editor.set_effect_type("create_attack_event")
+        self.assertTrue(action.override.get())
+        self.assertEqual(editor.read_form(), {"action_id": "edited_action"})
+
     def test_all_effect_parameters_are_displayed_required_first_without_creating_values(self):
         from game.skill.effect_validation import EFFECT_SCHEMAS
         from SkillEditorClient.effect_editor import EffectDataEditor
@@ -1558,6 +1590,24 @@ raise SystemExit(main())
         self.assertEqual(self.app.definition(), self.app.project.effective()["personal_skill"][key])
         self.assertNotIn("trigger", json.loads(panel.extras.get()))
         self.assertFalse(self.app.dirty())
+
+    def test_noble_classification_and_cooldown_save_without_changing_units(self):
+        key = "servant_test_0:golden_theatre"
+        self.app.load("noble_phantasm", key)
+        baseline = self.app.definition()
+        self.assertEqual(self.app.form.noble_cooldown.get(), "-1")
+        self.app.form.noble_classification.set("对仪式")
+        self.app.form.noble_cooldown.set("2")
+        self.assertTrue(self.app.dirty())
+        self.assertTrue(self.app.save())
+        self.app.load("noble_phantasm", key)
+        self.assertEqual(self.app.definition(), {
+            **baseline, "noble_classification": "对仪式", "cooldown_turns": 2,
+        })
+        self.app.form.noble_classification.set("")
+        self.app.form.noble_cooldown.set("-1")
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.definition(), {**baseline, "cooldown_turns": -1})
 
     def test_unit_cost_form_edits_prepaid_and_activation_costs_without_public_costs(self):
         key = "servant_test_0:golden_theatre"

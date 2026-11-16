@@ -7,7 +7,10 @@ from game.action.action_resolver import ActionResolver
 from game.character.masters import Master
 from game.character.servants import Servant
 from game.map.map import Location
-from game.skill.casting import CastingState
+from game.resource.costs import SkillUnavailableError
+from game.skill.casting import CastingState, castable_options, noble_damage_multiplier, release_options
+from game.skill.content_registry import validate_noble_phantasm_definition
+from game.skill.skill_runtime import resolve_skill_component
 from game.turn.decision import ScriptedDecisionProvider
 from game.turn.roll import RollResolver
 
@@ -56,6 +59,63 @@ def casting_skill(
 
 
 class CastingTests(unittest.TestCase):
+    @staticmethod
+    def noble_with_cooldown(cooldown):
+        return {
+            "skill_id": "cooldown_noble", "name": "测试宝具", "rank": "C",
+            "noble_phantasm_type": "support", "range_type": "anti_unit",
+            "noble_classification": "对城", "cooldown_turns": cooldown,
+            "components": [{
+                "component_id": key, "type": "active", "target": "self",
+                "casting_requirement": rounds,
+                "cost": [{"resource": "mp", "value": 5, "timing": "casting_start"}] if rounds else [],
+                "effects": [{"effect_type": "attack_bonus", "effect_data": {"value": 1}}],
+            } for key, rounds in (("instant", 0), ("chant", 1))],
+        }
+
+    def test_noble_cooldown_begins_after_success_and_covers_other_release_units(self):
+        actor = create_servant()
+        noble = actor.create_noble_phantasm(self.noble_with_cooldown(1))
+        self.assertEqual(noble.noble_classification, "对城")
+        self.assertEqual(noble_damage_multiplier(noble), 1)
+        actor.current_global_turn = 1
+        state = CastingState.start(actor, noble, 1, "chant")
+        self.assertIsNone(noble.noble_cooldown_ready_turn)
+        state.interrupt()
+        resolve_skill_component(actor, noble, "instant", phase="release", casting_release=True)
+        mp = actor.mp
+        for turn in (1, 2):
+            with self.subTest(turn=turn):
+                actor.current_global_turn = turn
+                self.assertEqual(castable_options(actor, noble), [])
+                self.assertEqual(release_options(actor), [])
+                self.assertIsNone(CastingState.start(actor, noble, turn, "chant"))
+                self.assertEqual(actor.mp, mp)
+                with self.assertRaisesRegex(SkillUnavailableError, "noble_phantasm_on_cooldown"):
+                    resolve_skill_component(actor, noble, "instant", phase="release", casting_release=True)
+        actor.current_global_turn = 3
+        self.assertEqual([component["component_id"] for _, component in castable_options(actor, noble)], ["chant"])
+        self.assertEqual([component["component_id"] for _, component in release_options(actor)], ["instant"])
+
+    def test_noble_no_cooldown_keeps_unit_cooldown_in_force(self):
+        actor = create_servant()
+        data = self.noble_with_cooldown(-1)
+        data["components"][0]["cooldown"] = {"unit": "global_turn", "turns": 1}
+        noble = actor.create_noble_phantasm(data)
+        actor.current_global_turn = 1
+        resolve_skill_component(actor, noble, "instant", phase="release", casting_release=True)
+        self.assertIsNone(noble.noble_cooldown_ready_turn)
+        with self.assertRaisesRegex(SkillUnavailableError, "component_on_cooldown"):
+            resolve_skill_component(actor, noble, "instant", phase="release", casting_release=True)
+        self.assertIsNotNone(CastingState.start(actor, noble, 1, "chant"))
+        actor.interrupt_casting()
+
+    def test_noble_catalog_rejects_invalid_classification_and_cooldown(self):
+        for data in ({"cooldown_turns": -2}, {"cooldown_turns": True},
+                     {"cooldown_turns": 1.5}, {"noble_classification": " "}):
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                validate_noble_phantasm_definition({**self.noble_with_cooldown(0), **data})
+
     def test_action_list_exposes_chant_then_release_and_interrupt(self):
         actor = create_master()
         skill = casting_skill(actor, target="self", requirements=(1,))

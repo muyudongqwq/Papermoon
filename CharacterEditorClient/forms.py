@@ -8,7 +8,12 @@ from CharacterEditorClient.model import (
     ATTRIBUTE_NAMES, ATTRIBUTE_RANKS, FIXED_RANK_CHOICES, class_ranks,
     display_attribute, display_fixed_rank, parse_attribute, parse_fixed_rank, validate_editor_card,
 )
+from game.character.card_factory import ALIGNMENT_CHOICES, GENDER_CHOICES
 from SkillEditorClient.widgets import Collapsible, UNIT_FONT, configure_unit_style, entry_row, request_layout
+
+
+UNSET = "未设置"
+PLUS_CHOICES = ("0", "1", "2")
 
 
 class LibrarySelection(Collapsible):
@@ -98,15 +103,33 @@ class CharacterForm(ttk.Frame):
         kind = definition["character_type"]
         ttk.Label(self, text="Master / 御主" if kind == "master" else f"Servant / 从者  ·  {definition['servant_class']}", font=UNIT_FONT).pack(anchor="w", pady=4)
         self.name, _ = entry_row(self, "角色名称", definition.get("name", ""), font=UNIT_FONT)
+        self.gender, _ = self.rank_row(
+            self, "性别", definition.get("gender", UNSET), (UNSET, *GENDER_CHOICES), editable=False,
+        )
+        alignment = definition.get("alignment", {})
+        order, order_box = self.rank_row(
+            self, "阵营", alignment.get("order", UNSET),
+            (UNSET, *ALIGNMENT_CHOICES["order"]), editable=False,
+        )
+        morality = self.append_choice(
+            order_box, alignment.get("morality", UNSET), (UNSET, *ALIGNMENT_CHOICES["morality"]),
+        )
+        self.alignment = {"order": order, "morality": morality}
         attributes = ttk.LabelFrame(self, text="基础属性", padding=8)
         attributes.pack(fill="x", pady=7)
-        ttk.Label(attributes, text="只接受E～A，最多两个加符，例如C+、A++；请填写全部五项。", wraplength=650).pack(anchor="w", pady=3)
+        ttk.Label(attributes, text="每项先选 E～A，再选加符数量 0～2。请填写全部五项。", wraplength=650).pack(anchor="w", pady=3)
         self.attributes = {}
         self.attribute_boxes = {}
+        self.attribute_pluses = {}
         for key, label in ATTRIBUTE_NAMES.items():
             value = initial_attributes[key]
-            variable, box = self.rank_row(attributes, label, value, ATTRIBUTE_RANKS)
+            variable, box = self.rank_row(
+                attributes, label, value.rstrip("+"), ATTRIBUTE_RANKS, editable=False,
+            )
             self.attributes[key], self.attribute_boxes[key] = variable, box
+            self.attribute_pluses[key] = self.append_choice(
+                box, str(value.count("+")), PLUS_CHOICES, width=4,
+            )
         field = "talent" if kind == "master" else "noble"
         self.rank_field = field
         self.rank, self.rank_box = self.rank_row(self, "天赋等级" if kind == "master" else "宝具等级", display_fixed_rank(definition[field]), FIXED_RANK_CHOICES)
@@ -125,11 +148,20 @@ class CharacterForm(ttk.Frame):
         ttk.Label(self.placeholder, text=f"暂未开放{title}选择。").pack(anchor="w")
 
     @staticmethod
-    def rank_row(parent, label, value, choices):
-        variable, box = entry_row(parent, label, value, choices=choices)
+    def rank_row(parent, label, value, choices, *, editable=True):
+        variable, box = entry_row(parent, label, value, choices=choices, editable=editable)
         box.pack_configure(fill="none", expand=False)
         box.configure(width=7)
         return variable, box
+
+    @staticmethod
+    def append_choice(first_box, value, choices, *, width=7):
+        row = first_box.master
+        variable = tk.StringVar(master=row, value=value)
+        box = ttk.Combobox(row, textvariable=variable, values=choices, state="readonly", width=width)
+        box.pack(side="left", padx=(8, 0), after=first_box)
+        box.bind("<MouseWheel>", lambda _event: "break")
+        return variable
 
     def update_catalogs(self, catalogs):
         self.catalogs = catalogs
@@ -142,13 +174,26 @@ class CharacterForm(ttk.Frame):
     def read(self):
         data = deepcopy(self.original)
         data["name"] = self.name.get().strip()
+        gender = self.gender.get()
+        if gender == UNSET:
+            data.pop("gender", None)
+        else:
+            data["gender"] = gender
+        alignment = {
+            axis: variable.get()
+            for axis, variable in self.alignment.items() if variable.get() != UNSET
+        }
+        if alignment:
+            data["alignment"] = alignment
+        else:
+            data.pop("alignment", None)
         for key, variable in self.attributes.items():
-            try:
-                parsed = parse_attribute(variable.get())
-            except ValueError as error:
-                raise ValueError(f"{ATTRIBUTE_NAMES[key]}：{error}") from error
-            original = self.original["attributes"][key]
-            data["attributes"][key] = deepcopy(original) if variable.get().strip() == display_attribute(original) else parsed
+            grade, plus = variable.get(), self.attribute_pluses[key].get()
+            if grade not in ATTRIBUTE_RANKS or plus not in PLUS_CHOICES:
+                raise ValueError(f"{ATTRIBUTE_NAMES[key]}：请选择 E～A 和加符数量 0～2")
+            displayed = grade + "+" * int(plus)
+            if displayed != display_attribute(data["attributes"][key]):
+                data["attributes"][key] = parse_attribute(displayed)
         parsed_rank = parse_fixed_rank(self.rank.get(), allow_plus=self.rank_field == "noble")
         if self.rank.get().strip() != display_fixed_rank(self.original[self.rank_field]):
             data[self.rank_field] = parsed_rank
@@ -160,5 +205,7 @@ class CharacterForm(ttk.Frame):
 
     def snapshot(self):
         return (self.name.get(), tuple(variable.get() for variable in self.attributes.values()), self.rank.get(),
+                tuple(variable.get() for variable in self.attribute_pluses.values()),
+                self.gender.get(), tuple(variable.get() for variable in self.alignment.values()),
                 self.classes.snapshot() if self.classes is not None else None,
                 self.basic.snapshot() if self.basic is not None else None, self.personal.snapshot())

@@ -6,6 +6,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from game.action.action_rules import condition_matches
 from game.character import (
     CHARACTER_CARD_DATA,
     create_character_from_card,
@@ -111,6 +112,28 @@ class CharacterCardTests(unittest.TestCase):
         self.assertEqual(second.personal_skills[0].expired_component_ids, set())
         self.assertEqual(len(second.magic_skill), 2)
         self.assertEqual(get_character_card_definition("master_test_0")["attributes"]["magic"]["value"], 5)
+
+    def test_gender_and_alignment_create_tags_for_skill_conditions(self):
+        self.card.update(gender="女", alignment={"order": "中立", "morality": "中庸"},
+                         tags=["divine"])
+        actor = create_character_from_card(self.card["card_id"])
+        tags = {"女", "中立", "中庸", "divine"}
+        self.assertEqual(actor.tags, tags)
+        self.assertTrue(condition_matches({
+            "character_matches": {"subject": "event_target", "tags": sorted(tags)},
+        }, actor, {"target": actor}))
+
+        self.card.update(gender="其他", alignment={"order": "混沌", "morality": "恶"})
+        other = create_character_from_card(self.card["card_id"])
+        self.assertEqual(other.gender, "其他")
+        self.assertEqual(other.tags, {"混沌", "恶", "divine"})
+        self.assertEqual(actor.tags, tags)
+
+    def test_invalid_identity_choices_are_rejected(self):
+        for fields in ({"gender": "善"}, {"alignment": {"order": "中庸"}},
+                       {"alignment": {"morality": "中立"}}, {"alignment": "秩序·善"}):
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                validate_character_card_definition({**self.card, **fields})
 
     def test_servant_loads_all_content_kinds_and_links_through_existing_rules(self):
         owner = Master("Owner", 3, 3, 3, 3, 3, "C", 3)

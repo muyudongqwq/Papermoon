@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 from game.skill.basic_magic_data import BASIC_MAGIC_DATA
+from game.skill.casting import validate_noble_metadata
 from game.skill.class_skill_data import CLASS_SKILL_DATA
 from game.skill.content_data import NOBLE_PHANTASM_DATA, PERSONAL_SKILL_DATA
 from game.skill.skill_runtime import (
@@ -45,6 +46,7 @@ def validate_noble_phantasm_definition(definition):
         "bounded_field",
     }:
         raise ValueError("宝具范围必须是anti_unit、anti_army、anti_fortress或bounded_field")
+    validate_noble_metadata(definition)
 
     # 复用技能组件的结构校验；宝具Rank若由角色卡提供，校验时使用占位值。
     skill_shape = deepcopy(definition)
