@@ -24,7 +24,8 @@ _EFFECTS = {
     "plus_bonus": "加符容量", "carry_capacity": "载员容量", "cost_modifier": "消耗修正",
     "damage_modifier": "伤害修正", "movement_point_bonus": "移动力变化",
     "change_damage_type": "改变伤害类型", "deploy_reality_marble": "展开固有结界",
-    "trap": "设置陷阱", "add_simple_round": "进行简易战斗轮", "extra_attack_phase": "额外攻击阶段",
+    "trap": "设置陷阱", "add_simple_round": "进行简易战斗轮", "add_fixed_simple_round": "固定攻击轮",
+    "extra_attack_phase": "额外攻击阶段",
     "restore_component": "恢复次数或冷却", "add_content": "获得能力", "remove_content": "失去能力",
     "growth_system": "成长效果", "order_change": "调整行动顺序",
 }
@@ -142,6 +143,7 @@ def skill_view(actor, skill, category):
             }
     return {"skill_id": skill.skill_id, "name": skill.name, "rank": skill.rank_name,
             "category": category, "negative": skill.negative_skill,
+            "is_hidden_trump": bool(getattr(skill, "is_hidden_trump", False)),
             "casting": {"activation_mode": casting.get("activation_mode", "release"),
                         "range_type": casting.get("range_type")} if casting else None,
             "components": components,
@@ -167,6 +169,7 @@ def character_state(character):
     return {
         "status_instances": [status_view(runtime.status_modifier) for runtime in iter_status_runtimes(character)],
         "card_id": getattr(character, "card_id", None),
+        "hidden_trump": getattr(character, "hidden_trump_id", None),
         "servant_class": getattr(character, "servant_class", None),
         "skills": skills, "casting": casting,
         "attribute_details": {name: {"value": getattr(character, name).value,

@@ -619,7 +619,7 @@ class BattleManager:
     def add_effect(self, effect, actor, target):
         battle_effect = create_battle_effect(effect, actor, target)
         self.effects.append(battle_effect)
-        if battle_effect.is_ambush and battle_effect.attack_mode == "fixed":
+        if battle_effect.is_ambush and battle_effect.fixed_attack:
             for defender in battle_effect.targets:
                 defender.status_flags.add("ambushed")
         return battle_effect
@@ -688,7 +688,7 @@ class BattleManager:
                 decision_provider,
             )
             print(f"{actor.name}进行额外攻击阶段")
-            if effect.attack_mode == "select":
+            if not effect.fixed_attack:
                 return self.run_virtual_attack_phase(
                     actor,
                     decision_provider,

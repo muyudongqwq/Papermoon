@@ -107,7 +107,7 @@ class AmbushSimpleRoundTests(unittest.TestCase):
             + 5
             + 15  # 最终骰面10触发大成功。
         )
-        self.assertEqual(effect.effect_type, "add_simple_round")
+        self.assertEqual(effect.effect_type, "add_fixed_simple_round")
         self.assertEqual(effect.attack_event.attack_roll_bonus, 5)
         self.assertEqual(effect.attack_event.attack_roll, expected_roll)
         # 额外攻防轮不消耗攻击阶段；随后明确选择stay会消耗它。
@@ -129,7 +129,7 @@ class AmbushSimpleRoundTests(unittest.TestCase):
         ):
             battle.add_effect(
                 {
-                    "effect_type": "add_simple_round",
+                    "effect_type": "add_fixed_simple_round",
                     "effect_data": {
                         "trigger_phase": "battle_start",
                         "attack_roll_bonus": 5,
@@ -163,7 +163,7 @@ class AmbushSimpleRoundTests(unittest.TestCase):
         battle.start_battle()
         effect = battle.add_effect(
             {
-                "effect_type": "add_simple_round",
+                "effect_type": "add_fixed_simple_round",
                 "effect_data": {
                     "trigger_phase": "attack",
                     "attack_stat": "magic_attack",

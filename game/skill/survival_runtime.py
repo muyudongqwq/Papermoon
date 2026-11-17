@@ -47,13 +47,4 @@ def resolve_prevent_death_effect(effect, target, skill, **context):
             "effect_data": {"value": hp},
         }, target, source=target, source_actor=target, source_type="survival",
             source_id=skill.skill_id, applied_turn=event.global_turn))
-    if data.get("remove_skill_when_exhausted", False):
-        from game.skill.component_runtime import component_use_count
-        from game.skill.skill_runtime import remove_personal_skill
-        component = next(item for item in skill.definitions
-                         if item["component_id"] == context["skill_component_id"])
-        usage = component.get("usage_limit", {})
-        if usage and component_use_count(target, skill, component, turn_number=event.global_turn,
-                                         battle=event.battle) + 1 >= usage["maximum"]:
-            remove_personal_skill(target, skill, reason="survival_exhausted")
     return {"hp": hp, "hp_floor_duration": duration}

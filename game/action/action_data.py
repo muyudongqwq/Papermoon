@@ -596,9 +596,6 @@ ACTION_DATA = {
                 "effect_type": "add_simple_round",
                 "effect_data": {
                     "trigger_phase": "immediate",
-                    "attack_mode": "select",
-                    "attack_stat": "physical_attack",
-                    "damage_type": "physical",
                     "is_ambush": False,
                     "enter_battle": False,
                     "source": "direct_attack",

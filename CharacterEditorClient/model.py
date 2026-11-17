@@ -4,6 +4,7 @@ from copy import deepcopy
 import re
 
 from game.character.character import Character
+from game.character.card_factory import initial_noble_limit
 from game.character.servants import VALID_SERVANT_CLASSES
 from game.rank.rank import FixedRank
 
@@ -95,4 +96,34 @@ def validate_editor_card(data, catalogs):
         raise ValueError("基础魔术不能重复选择")
     if any(key not in catalogs["basic_magic"] for key in basic):
         raise ValueError("所选基础魔术不在技能库中，请刷新技能库后重新选择")
+    nobles = data.get("noble_phantasms", [])
+    if data.get("character_type") == "servant":
+        limit = initial_noble_limit(data["noble"])
+        if len(nobles) > limit or len(set(nobles)) != len(nobles):
+            raise ValueError(f"宝具至多选择{limit}件，不能重复")
+        if any(key not in catalogs["noble_phantasm"] for key in nobles):
+            raise ValueError("所选宝具不在技能库中，请刷新技能库后重新选择")
+    elif nobles:
+        raise ValueError("御主卡不能选择宝具")
+    hidden_trump = data.get("hidden_trump")
+    if hidden_trump is not None:
+        if not isinstance(hidden_trump, str) or not hidden_trump.strip():
+            raise ValueError("底力技必须是一个技能或宝具ID")
+        matches = [
+            category
+            for category in ("personal_skill", "noble_phantasm")
+            if hidden_trump in catalogs[category]
+        ]
+        if not matches:
+            raise ValueError("底力技必须来自固有技能或宝具库")
+        if len(matches) > 1:
+            raise ValueError("底力技ID同时存在于固有技能和宝具库")
+        category = matches[0]
+        if data.get("character_type") == "master" and category == "noble_phantasm":
+            raise ValueError("御主不能将宝具设为底力技")
+        definition = catalogs[category][hidden_trump]
+        rank = definition.get("rank", data.get("noble"))
+        rank = rank.get("rank") if isinstance(rank, dict) else rank
+        if rank == "EX":
+            raise ValueError("EX级技能或宝具不能设为底力技")
     return deepcopy(data)

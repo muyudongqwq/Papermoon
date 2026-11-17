@@ -62,6 +62,12 @@ _DAMAGE_EVENT_FIELDS = {
 }
 
 
+_SIMPLE_ROUND_FIELDS = {
+    "attacker_rule", "defender_rule", "trigger_phase", "trigger_target",
+    "consume_attack_phase", "enter_battle", "is_ambush",
+}
+
+
 EFFECT_SCHEMAS = {
     "action_restriction": _schema(
         optional={
@@ -72,20 +78,17 @@ EFFECT_SCHEMAS = {
         modifier=True,
     ),
     "hp_floor": _schema(required={"value"}, modifier=True),
-    "prevent_death": _schema(optional={"hp", "hp_floor_duration", "remove_skill_when_exhausted"}),
+    "prevent_death": _schema(optional={"hp", "hp_floor_duration"}),
     "add_content": _schema(
         required={"content_type", "content_id"},
         optional={"permanent", "remove_with_source"},
     ),
-    "add_simple_round": _schema(
-        optional={
-            "attacker_rule", "defender_rule", "trigger_phase",
-            "trigger_target", "attack_mode", "consume_attack_phase",
-            "enter_battle", "is_ambush", "attack_stat",
-            "attack_roll_bonus", "damage_value", "damage_type",
-            "damage_percentage_modifiers", "damage_flat_modifiers",
-            "damage_value_source", "damage_attribute",
-            "damage_multiplier", "damage_flat", "resolution_channel",
+    "add_simple_round": _schema(optional=_SIMPLE_ROUND_FIELDS),
+    "add_fixed_simple_round": _schema(
+        optional=_SIMPLE_ROUND_FIELDS | {
+            "attack_stat", "attack_roll_bonus", "damage_value", "damage_type",
+            "percentage_modifiers", "flat_modifiers", "damage_value_source",
+            "damage_attribute", "multiplier", "flat", "resolution_channel",
         },
     ),
     "add_resource": _schema(
@@ -104,7 +107,7 @@ EFFECT_SCHEMAS = {
     ),
     "add_skill": _schema(
         optional={
-            "skill_definition", "skill_ref", "collection",
+            "skill_definition", "skill_ref",
             "duplicate_policy", "remove_with_source",
         },
     ),
@@ -122,7 +125,7 @@ EFFECT_SCHEMAS = {
     ),
     "create_attack_event": _schema(
         optional={
-            "attack_stat", "attack_stat_multiplier", "attack_stat_flat",
+            "attack_stat", "attack_stat_multiplier",
             "attack_roll_bonus", "initial_die", "damage_type",
             "damage_value", "damage_segments", "resolution_channel",
             "ignore_block",
@@ -131,12 +134,11 @@ EFFECT_SCHEMAS = {
     "delay_attack": _schema(required={"delay_turns"}),
     "delay_effect": _schema(required={"delay_turns", "effects"}),
     "create_field": _schema(
-        required={"field_id"},
         optional={
-            "name", "field_type", "center", "center_rule", "radius", "duration",
+            "field_id", "name", "field_type", "center", "center_rule", "radius", "duration",
             "include_area_levels", "remove_on_source_death",
             "remove_with_source",
-            "exclusive_center", "owner_unique_key", "owner_vision",
+            "exclusive_center", "owner_unique_key", "replace_previous", "owner_vision",
             "center_target", "requirements", "cost",
             "selected_targets", "effects", "apply_once",
             "battle_bound", "exit_penalty",
@@ -164,9 +166,8 @@ EFFECT_SCHEMAS = {
         required={"value"}, optional={"condition"}, modifier=True,
     ),
     "deploy_reality_marble": _schema(
-        required={"reality_marble_id"},
         optional={
-            "name", "entrance", "capture_radius", "duration", "cost",
+            "reality_marble_id", "name", "entrance", "capture_radius", "duration", "cost",
             "selected_targets", "interior", "remove_with_source",
         },
     ),
@@ -209,7 +210,7 @@ EFFECT_SCHEMAS = {
         optional={"scope", "attempts"},
     ),
     "order_change": _schema(
-        required={"calculation", "duration"}, optional={"subject", "anchor"},
+        required={"calculation", "duration"}, optional={"move_actor", "anchor"},
     ),
     "plus_bonus": _schema(
         required={"effect_target", "value"}, modifier=True,
@@ -229,7 +230,7 @@ EFFECT_SCHEMAS = {
         optional={"permanent"},
     ),
     "remove_skill": _schema(
-        optional={"skill", "skill_id", "collection"},
+        optional={"skill", "skill_id"},
     ),
     "restore_component": _schema(
         optional={
@@ -891,7 +892,7 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         for field in ("skill_ids", "component_ids"):
             if field in data:
                 _string_list(data[field], f"{path}.{field}", nonempty=True)
-    elif effect_type == "add_simple_round":
+    elif effect_type in {"add_simple_round", "add_fixed_simple_round"}:
         _enum(
             data.get("attacker_rule", "actor"),
             f"{path}.attacker_rule",
@@ -919,15 +920,13 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
                 f"{path}.trigger_target",
                 {"actor", "target", "first_defender"},
             )
-        attack_mode = data.get("attack_mode", "fixed")
-        _enum(attack_mode, f"{path}.attack_mode", {"fixed", "select"})
         for field in ("consume_attack_phase", "enter_battle", "is_ambush"):
             if field in data:
                 _boolean(data[field], f"{path}.{field}")
         if "attack_stat" in data:
             _string(data["attack_stat"], f"{path}.attack_stat")
         for field in (
-            "attack_roll_bonus", "damage_value", "damage_multiplier", "damage_flat",
+            "attack_roll_bonus", "damage_value", "multiplier", "flat",
         ):
             if field in data and data[field] is not None:
                 _number(data[field], f"{path}.{field}")
@@ -950,23 +949,10 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         if "damage_type" in data:
             _validate_damage_type(data["damage_type"], f"{path}.damage_type")
         for field in (
-            "damage_percentage_modifiers", "damage_flat_modifiers",
+            "percentage_modifiers", "flat_modifiers",
         ):
             if field in data:
                 _number_list(data[field], f"{path}.{field}")
-        if attack_mode == "select":
-            fixed_only = {
-                "attack_stat", "attack_roll_bonus", "damage_value",
-                "damage_type", "damage_percentage_modifiers",
-                "damage_flat_modifiers", "damage_value_source",
-                "damage_attribute", "damage_multiplier", "damage_flat",
-                "resolution_channel",
-            } & set(data)
-            if fixed_only:
-                _error(
-                    path,
-                    f"attack_mode=select不能定义固定攻击字段：{sorted(fixed_only)}",
-                )
     elif effect_type == "add_action":
         _validate_dynamic_action_definition(
             data["action_definition"],
@@ -1013,12 +999,6 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
                 {"personal_skill"},
             )
             _string(reference["skill_id"], f"{reference_path}.skill_id")
-        if "collection" in data:
-            _enum(
-                data["collection"],
-                f"{path}.collection",
-                {"personal_skills"},
-            )
         if "duplicate_policy" in data:
             _enum(
                 data["duplicate_policy"],
@@ -1037,12 +1017,6 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
             _enum(data["skill"], f"{path}.skill", {"self"})
         if "skill_id" in data:
             _string(data["skill_id"], f"{path}.skill_id")
-        if "collection" in data:
-            _enum(
-                data["collection"],
-                f"{path}.collection",
-                {"personal_skills"},
-            )
     elif effect_type == "growing":
         _string(data["growth_id"], f"{path}.growth_id")
         _integer(data["value"], f"{path}.value")
@@ -1147,8 +1121,6 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         _integer(data.get("hp", 1), f"{path}.hp", positive=True)
         if "hp_floor_duration" in data:
             _integer(data["hp_floor_duration"], f"{path}.hp_floor_duration", positive=True)
-        if "remove_skill_when_exhausted" in data:
-            _boolean(data["remove_skill_when_exhausted"], f"{path}.remove_skill_when_exhausted")
     elif effect_type == "hidden":
         _string(data["value"], f"{path}.value")
         for field in (
@@ -1354,7 +1326,7 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         if "damage_type" in data:
             _validate_damage_type(data["damage_type"], f"{path}.damage_type")
         for field in (
-            "attack_stat_multiplier", "attack_stat_flat", "attack_roll_bonus",
+            "attack_stat_multiplier", "attack_roll_bonus",
             "damage_value", "multiplier", "flat",
         ):
             if field in data:
@@ -1436,8 +1408,8 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
         )
         if data["duration"] is not None:
             _integer(data["duration"], f"{path}.duration", positive=True)
-        if "subject" in data:
-            _enum(data["subject"], f"{path}.subject", {"actor", "target"})
+        if "move_actor" in data:
+            _boolean(data["move_actor"], f"{path}.move_actor")
         if calculation in {"move_before", "move_after"}:
             if "anchor" not in data:
                 _error(path, f"{calculation}必须提供anchor")
@@ -1484,7 +1456,8 @@ def _validate_effect_data(effect_type, data, path, component_type=None):
 
 
 def _validate_field_definition(data, path):
-    _string(data["field_id"], f"{path}.field_id")
+    if "field_id" in data:
+        _string(data["field_id"], f"{path}.field_id")
     if "name" in data:
         _string(data["name"], f"{path}.name")
     if "field_type" in data:
@@ -1495,7 +1468,7 @@ def _validate_field_definition(data, path):
         _integer(data["duration"], f"{path}.duration", positive=True)
     for field in (
         "include_area_levels", "remove_on_source_death", "remove_with_source",
-        "exclusive_center", "apply_once", "battle_bound",
+        "exclusive_center", "apply_once", "battle_bound", "replace_previous",
     ):
         if field in data:
             _boolean(data[field], f"{path}.{field}")
@@ -1537,7 +1510,8 @@ def _validate_field_definition(data, path):
 
 
 def _validate_reality_marble_definition(data, path):
-    _string(data["reality_marble_id"], f"{path}.reality_marble_id")
+    if "reality_marble_id" in data:
+        _string(data["reality_marble_id"], f"{path}.reality_marble_id")
     if "name" in data:
         _string(data["name"], f"{path}.name")
     if "capture_radius" in data:
@@ -1686,11 +1660,13 @@ def validate_component_effects(component, *, path="component"):
         _keys(
             usage_limit,
             usage_path,
-            allowed={"scope", "maximum"},
+            allowed={"scope", "maximum", "remove_skill_when_exhausted"},
             required={"scope", "maximum"},
         )
         _enum(usage_limit["scope"], f"{usage_path}.scope", USAGE_LIMIT_SCOPES)
         _integer(usage_limit["maximum"], f"{usage_path}.maximum", positive=True)
+        if "remove_skill_when_exhausted" in usage_limit:
+            _boolean(usage_limit["remove_skill_when_exhausted"], f"{usage_path}.remove_skill_when_exhausted")
     if cooldown is not None:
         cooldown_path = f"{path}.cooldown"
         _keys(

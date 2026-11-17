@@ -23,7 +23,7 @@ class SimpleRoundEffect:
     skill: object = None
     source: object = None
     is_ambush: bool = False
-    attack_mode: str = "fixed"
+    fixed_attack: bool = False
     consume_attack_phase: bool = False
     enter_battle: bool = False
     targets: list = field(default_factory=list)
@@ -35,16 +35,14 @@ class SimpleRoundEffect:
     used_guarders: set = field(default_factory=set)
     defender_positions: dict = field(default_factory=dict)
 
-    effect_type = "add_simple_round"
+    @property
+    def effect_type(self):
+        return "add_fixed_simple_round" if self.fixed_attack else "add_simple_round"
 
     def __post_init__(self):
         if not self.targets:
             self.targets = [self.target]
         self.targets = list(dict.fromkeys(self.targets))
-        if self.attack_mode not in {"fixed", "select"}:
-            raise ValueError(
-                f"未知的简易战斗轮攻击模式：{self.attack_mode}"
-            )
 
     @classmethod
     def from_effect(cls, effect, actor, target):
@@ -75,22 +73,22 @@ class SimpleRoundEffect:
             damage_value=data.get("damage_value"),
             damage_value_source=data.get("damage_value_source"),
             damage_attribute=data.get("damage_attribute"),
-            damage_multiplier=data.get("damage_multiplier", 1),
-            damage_flat=data.get("damage_flat", 0),
+            damage_multiplier=data.get("multiplier", 1),
+            damage_flat=data.get("flat", 0),
             damage_type=normalize_damage_type(
                 data.get("damage_type", default_damage_type)
             ),
             resolution_channel=data.get("resolution_channel", "attack"),
             damage_percentage_modifiers=list(
-                data.get("damage_percentage_modifiers", [])
+                data.get("percentage_modifiers", [])
             ),
             damage_flat_modifiers=list(
-                data.get("damage_flat_modifiers", [])
+                data.get("flat_modifiers", [])
             ),
             skill=data.get("skill"),
             source=data.get("source"),
             is_ambush=data.get("is_ambush", False),
-            attack_mode=data.get("attack_mode", "fixed"),
+            fixed_attack=effect["effect_type"] == "add_fixed_simple_round",
             consume_attack_phase=data.get("consume_attack_phase", False),
             enter_battle=data.get("enter_battle", False),
             targets=defenders,
@@ -99,6 +97,6 @@ class SimpleRoundEffect:
 
 def create_battle_effect(effect, actor, target):
     effect_type = effect.get("effect_type")
-    if effect_type == "add_simple_round":
+    if effect_type in {"add_simple_round", "add_fixed_simple_round"}:
         return SimpleRoundEffect.from_effect(effect, actor, target)
     raise ValueError(f"未知的战斗效果：{effect_type}")

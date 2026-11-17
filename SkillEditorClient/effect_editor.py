@@ -7,13 +7,34 @@ from tkinter import messagebox, ttk
 
 from core.catalog import parse_json
 from game.skill.effect_validation import EFFECT_SCHEMAS
-from SkillEditorClient.effect_options import FIELD_NAMES, parameter_options, parameter_spec, parse_parameter
+from SkillEditorClient.effect_options import (
+    ADVANCED_FIELDS, BOOLEAN_FIELDS, CONFIRMED_FIELD_NAMES,
+    parameter_label, parameter_options, parameter_spec, parse_parameter,
+)
 from SkillEditorClient.widgets import JsonBox, configure_gray_area, request_layout
 from SkillEditorClient.cost_editor import CostRow
 from SkillEditorClient.editor_documents import format_json
 
 
 ATTACK_ID_LABELS = {"action_id": "行动标识", "skill_id": "技能标识"}
+BOOLEAN_DEFAULTS = {
+    "add_action": {"remove_with_source": True},
+    "add_content": {"permanent": True},
+    "create_field": {"exclusive_center": True},
+    "hidden": {"remove_on_position_change": True, "remove_on_battle_entry": True, "requires_building": True},
+    "remove_content": {"permanent": True},
+    "restore_component": {"exclude_source": True},
+    "summon": {"remove_with_source": True},
+    "trap": {"share_knowledge": True},
+}
+BOOLEAN_DEPENDENTS = {
+    "create_field": {"battle_bound": (True, ("exit_penalty",))},
+    "hidden": {
+        "remove_on_position_change": (True, ("requires_building",)),
+        "withdraw_from_battle": (True, ("rejoin_on_expire",)),
+    },
+    "add_content": {"permanent": (False, ("remove_with_source",))},
+}
 
 
 class ParameterRow(ttk.Frame):
@@ -42,6 +63,23 @@ class ParameterRow(ttk.Frame):
             )
         self.remove_button = ttk.Button(self, text="删除", width=5, command=lambda: editor.remove_field(key))
         self.remove_button.pack(side="right", padx=(4, 0))
+        self.is_checkbox = key in BOOLEAN_FIELDS and not self.complex_value
+        if self.is_checkbox:
+            self.checked = tk.BooleanVar(master=self)
+            self.input = ttk.Checkbutton(self, variable=self.checked, command=self.toggle_boolean,
+                                         style="PhaseArea.TCheckbutton")
+            self.label.pack_forget()
+            self.remove_button.pack_forget()
+            self.input.pack(side="left")
+        if key == "initial_die":
+            self.label.pack_forget()
+            self.die_enabled = tk.BooleanVar(master=self, value=self.has_initial)
+            self.die_toggle = ttk.Checkbutton(self, variable=self.die_enabled, command=self.refresh_die_input,
+                                              style="PhaseArea.TCheckbutton")
+            self.die_toggle.pack(anchor="w")
+            self.die_area = ttk.LabelFrame(self, text="骰面（1～10）", padding=5)
+            self.input = ttk.Entry(self.die_area, textvariable=self.value, width=6)
+            self.input.pack(anchor="w")
         self.refresh()
         if self.spec.kind == "tags":
             self.input.configure(width=25)
@@ -52,14 +90,28 @@ class ParameterRow(ttk.Frame):
         schema = EFFECT_SCHEMAS.get(self.editor.effect_type)
         required = schema is not None and self.key in schema.required_data
         unknown = self.key not in parameter_options(self.editor.effect_type)
-        label = f"{FIELD_NAMES.get(self.key, self.key)}"
-        if label != self.key:
-            label += f" · {self.key}"
+        label = parameter_label(self.key)
         label += " *" if required else ""
         label += "（当前类型不支持）" if unknown else ""
         self.label.configure(text=label)
         labels = dict(self.spec.choice_labels)
         self.choice_values = {label: key for key, label in labels.items()}
+        if self.key == "initial_die":
+            self.die_toggle.configure(text="固定骰面" + ("（当前类型不支持）" if unknown else ""))
+            if unknown:
+                self.remove_button.pack(side="right", padx=(4, 0))
+            else:
+                self.remove_button.pack_forget()
+            self.refresh_die_input()
+            return
+        if self.is_checkbox:
+            self.input.configure(text=label)
+            self.checked.set(self.editor.boolean_value(self.key))
+            if unknown:
+                self.remove_button.pack(side="right", padx=(4, 0))
+            else:
+                self.remove_button.pack_forget()
+            return
         choices = tuple(labels.get(choice, choice) for choice in self.spec.choices) if not self.complex_value else ()
         if self.input is None or isinstance(self.input, ttk.Combobox) != bool(choices):
             if self.input is not None:
@@ -76,9 +128,20 @@ class ParameterRow(ttk.Frame):
         if self.override_button is not None:
             self.refresh_override()
 
+    def toggle_boolean(self):
+        self.value.set("true" if self.checked.get() else "false")
+        self.editor.refresh()
+
+    def refresh_die_input(self):
+        if self.die_enabled.get():
+            self.die_area.pack(fill="x", padx=(20, 0), pady=(0, 4))
+        else:
+            self.die_area.pack_forget()
+        request_layout(self)
+
     def refresh_override(self):
         if self.editor.effect_type == "create_attack_event":
-            self.label.configure(text=f"{ATTACK_ID_LABELS[self.key]} · {self.key}")
+            self.label.configure(text=CONFIRMED_FIELD_NAMES.get(self.key, f"{ATTACK_ID_LABELS[self.key]} · {self.key}"))
             if not self.override_button.winfo_manager():
                 self.override.set(bool(self.value.get().strip()))
                 self.remove_button.pack_forget()
@@ -103,6 +166,14 @@ class ParameterRow(ttk.Frame):
 
     def read(self):
         text = self.value.get()
+        if self.key == "initial_die":
+            try:
+                die = int(text)
+            except ValueError as error:
+                raise ValueError("固定骰面必须填写 1～10 的整数") from error
+            if not 1 <= die <= 10:
+                raise ValueError("固定骰面必须填写 1～10 的整数")
+            return die
         if self.has_initial and text == self.initial_text:
             return deepcopy(self.initial)
         text = self.choice_values.get(text, text)
@@ -175,6 +246,10 @@ class EffectDataEditor(ttk.Frame):
         self.notice.pack(anchor="w", pady=(0, 4))
         self.fields = ttk.Frame(self.form, style="PhaseArea.TFrame")
         self.fields.pack(fill="x")
+        self.boolean_grid = ttk.Frame(self.fields, style="PhaseArea.TFrame")
+        for column in range(2):
+            self.boolean_grid.columnconfigure(column, weight=1)
+        self.dependent_boxes = {}
         controls = self.controls = ttk.Frame(self.form, style="PhaseArea.TFrame")
         controls.pack(fill="x", pady=4)
         self.field = tk.StringVar(master=self)
@@ -217,7 +292,6 @@ class EffectDataEditor(ttk.Frame):
             row.has_initial = not empty
         else:
             row = ParameterRow(self.fields, self, key, value, empty=empty)
-        row.pack(fill="x", pady=2)
         self.rows[key] = row
         self.refresh()
         return row
@@ -227,7 +301,7 @@ class EffectDataEditor(ttk.Frame):
         return not row.rows if isinstance(row, CostParameterRow) else not row.value.get().strip()
 
     def fill_available_fields(self):
-        options = parameter_options(self.effect_type)
+        options = parameter_options(self.effect_type, include_advanced=False)
         for key, row in list(self.rows.items()):
             if key not in options and not row.has_initial and self.is_blank(row):
                 self.rows.pop(key).destroy()
@@ -243,12 +317,59 @@ class EffectDataEditor(ttk.Frame):
         if key and key not in self.rows:
             self.add_field(key, empty=True).input.focus_set()
 
+    def boolean_value(self, key):
+        row = self.rows.get(key)
+        text = row.value.get() if row is not None else ""
+        if text in ("true", "false"):
+            return text == "true"
+        if self.effect_type == "hidden" and key == "rejoin_on_expire":
+            return self.boolean_value("withdraw_from_battle")
+        return BOOLEAN_DEFAULTS.get(self.effect_type, {}).get(key, False)
+
+    def layout_rows(self, hidden_fields):
+        for row in self.rows.values():
+            if row.winfo_manager() == "grid":
+                row.grid_forget()
+            else:
+                row.pack_forget()
+        self.boolean_grid.pack_forget()
+        for box in self.dependent_boxes.values():
+            box.pack_forget()
+
+        dependencies = BOOLEAN_DEPENDENTS.get(self.effect_type, {})
+        dependents = {key for _, keys in dependencies.values() for key in keys}
+        standalone = []
+        for key, row in self.rows.items():
+            if key in hidden_fields or key in dependents:
+                continue
+            if getattr(row, "is_checkbox", False) and not row.remove_button.winfo_manager() and key not in dependencies:
+                standalone.append(row)
+                continue
+            row.pack(fill="x", pady=2)
+            if key not in dependencies:
+                continue
+            active_value, keys = dependencies[key]
+            children = [self.rows[child] for child in keys if child in self.rows]
+            if self.boolean_value(key) != active_value or not children:
+                continue
+            if key not in self.dependent_boxes:
+                self.dependent_boxes[key] = ttk.LabelFrame(self.fields, text="附属参数", padding=5)
+            box = self.dependent_boxes[key]
+            box.pack(fill="x", padx=(20, 0), pady=(0, 4))
+            for child in children:
+                child.pack(in_=box, fill="x", pady=2)
+                child.lift()
+        if standalone:
+            self.boolean_grid.pack(fill="x", pady=2)
+            for index, row in enumerate(standalone):
+                row.grid(in_=self.boolean_grid, row=index // 2, column=index % 2, sticky="w", padx=(0, 12), pady=2)
+                row.lift()
+
     def refresh(self):
-        # resource_id is displayed as the resource name. Keep an older,
-        # separate name losslessly in advanced JSON without a duplicate row.
-        hidden_fields = {"name"} if self.effect_type == "add_resource" else set()
+        # Keep the old separate resource name and manual field IDs in advanced JSON.
+        hidden_fields = {"name"} if self.effect_type == "add_resource" else ADVANCED_FIELDS.get(self.effect_type, set())
         options = [key for key in parameter_options(self.effect_type) if key not in self.rows and key not in hidden_fields]
-        self.field_choices = {f"{key} · {FIELD_NAMES[key]}" if key in FIELD_NAMES else key: key for key in options}
+        self.field_choices = {parameter_label(key): key for key in options}
         self.field_box.configure(values=tuple(self.field_choices))
         if self.field.get() not in self.field_choices:
             self.field.set("")
@@ -263,14 +384,9 @@ class EffectDataEditor(ttk.Frame):
         order.extend(key for key in self.rows if key not in order)
         if order != list(self.rows):
             self.rows = {key: self.rows[key] for key in order}
-        visible = [row for key, row in self.rows.items() if key not in hidden_fields]
-        if self.fields.pack_slaves() != visible:
-            for row in self.rows.values():
-                row.pack_forget()
-            for row in visible:
-                row.pack(fill="x", pady=2)
         for row in self.rows.values():
             row.refresh()
+        self.layout_rows(hidden_fields)
         request_layout(self)
 
     def set_effect_type(self, effect_type):
@@ -284,7 +400,15 @@ class EffectDataEditor(ttk.Frame):
         schema = EFFECT_SCHEMAS.get(self.effect_type)
         required = schema.required_data if schema is not None else ()
         for key, row in self.rows.items():
+            if key == "initial_die":
+                if row.die_enabled.get():
+                    result[key] = row.read()
+                continue
             if self.effect_type == "create_attack_event" and key in ATTACK_ID_LABELS and not row.override.get():
+                continue
+            if self.effect_type == "create_field" and key == "exit_penalty" and not self.boolean_value("battle_bound"):
+                continue
+            if self.effect_type == "add_content" and key == "remove_with_source" and self.boolean_value("permanent") and self.boolean_value(key):
                 continue
             if self.is_blank(row):
                 if key in required:

@@ -354,7 +354,11 @@ class ComponentPanel(Collapsible):
                 "timing": "casting_start" if self.chant_choice.get() == "是" else "activation"})).pack(anchor="w")
         for cost in data.get("cost", []):
             self.add_cost(cost)
-        self.extras, section = extras_box(self.body, data, self.controlled_fields, "技能单元高级设置（条件、次数、触发等）")
+        advanced_data = deepcopy(data)
+        usage = advanced_data.get("usage_limit") or {}
+        self.remove_when_exhausted = tk.BooleanVar(self, value=usage.pop("remove_skill_when_exhausted", False))
+        self.extras, section = extras_box(self.body, advanced_data, self.controlled_fields, "技能单元高级设置（条件、次数、触发等）")
+        ttk.Checkbutton(section.body, text="次数用尽后移除该固有技能", variable=self.remove_when_exhausted).pack(anchor="w", pady=(0, 4))
         self.extras.pack(fill="x")
         self.delete_button = ttk.Button(self.body, text="删除此技能单元", command=lambda: remove(self), style="NewSkillUnit.TButton")
         self.delete_button.pack(anchor="w", pady=(6, 2))
@@ -501,6 +505,12 @@ class ComponentPanel(Collapsible):
         self.sync_condition_owner()
         self.sync_trigger_owner()
         result = merge_extras(self.extras.get(), self.controlled_fields, "技能单元高级设置")
+        usage = result.get("usage_limit")
+        if self.remove_when_exhausted.get() and not isinstance(usage, dict):
+            raise ValueError("移除用尽次数的技能前，请先配置次数上限")
+        if isinstance(usage, dict):
+            optional_field(usage, self.original.get("usage_limit") or {},
+                           "remove_skill_when_exhausted", self.remove_when_exhausted.get(), False)
         result.update(component_id=self.component_id.get().strip(), type=self.kind.get())
         if self.kind.get() == "active":
             requirement = 0
@@ -543,7 +553,7 @@ class ComponentPanel(Collapsible):
                 [row.snapshot() for row in self.costs], [panel.snapshot() for panel in self.effects], self.extras.get(),
                 self.condition_in_form, self.condition_editor.snapshot(),
                 self.trigger_in_form, self.trigger_editor.snapshot(),
-                self.chant_choice.get(), self.chant_rounds.get())
+                self.chant_choice.get(), self.chant_rounds.get(), self.remove_when_exhausted.get())
 
 
 class SkillForm(ttk.Frame):

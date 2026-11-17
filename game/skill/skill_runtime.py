@@ -72,13 +72,7 @@ def apply_modifier_effect(
 
 
 def resolve_order_change_effect(effect, target, skill, **context):
-    """Queue a neutral order operation for the next formal battle round.
-
-    ``subject`` and ``anchor`` are selectors whose supported values are
-    ``actor`` and ``target``.  This lets a normal one-target skill express
-    both "move myself before the selected target" and "move the selected
-    target before me" without storing unstable numeric positions.
-    """
+    """Queue an order change for the next formal battle round."""
     data = effect.get("effect_data", {})
     if "duration" not in data:
         raise ValueError("order_change必须由效果提供duration")
@@ -88,10 +82,7 @@ def resolve_order_change_effect(effect, target, skill, **context):
         "actor": actor,
         "target": target,
     }
-    subject_selector = data.get("subject", "target")
-    if subject_selector not in objects:
-        raise ValueError("order_change的subject必须是'actor'或'target'")
-    subject = objects[subject_selector]
+    subject = actor if data.get("move_actor", False) else target
 
     operation = data.get("calculation")
     anchor = None
@@ -671,6 +662,12 @@ def resolve_create_field_effect(effect, target, skill, **context):
     if game_manager is None:
         raise ValueError("create_field需要已加入游戏的创建者")
     data = deepcopy(effect.get("effect_data", {}))
+    if "field_id" not in data:
+        data["field_id"] = game_manager.field_manager.allocate_field_id(skill, context.get("skill_component_id"))
+        data.setdefault("name", getattr(skill, "name", "阵地"))
+    if data.get("replace_previous") and not data.get("owner_unique_key"):
+        source = getattr(skill, "skill_id", "field")
+        data["owner_unique_key"] = f"auto-replace:{source}:{context.get('skill_component_id') or 'effect'}"
     if "selected_targets" not in data:
         data["selected_targets"] = list(context.get("effect_targets", []))
     center_rule = data.pop("center_rule", None)
@@ -851,6 +848,10 @@ def resolve_deploy_reality_marble_effect(effect, target, skill, **context):
         data["entrance"] = entrance
     data["selected_targets"] = selected_targets
     data.setdefault("entrance", actor.position)
+    if "reality_marble_id" not in data:
+        data["reality_marble_id"] = game_manager.field_manager.allocate_field_id(skill, context.get("skill_component_id"))
+        data.setdefault("name", getattr(skill, "name", "固有结界"))
+        data.setdefault("interior", {}).setdefault("location_name", f"{data['name']}内部")
     marble = RealityMarble(
         data,
         actor,
@@ -912,14 +913,13 @@ def build_attack_profile_from_effect(effect, skill, target=None, **context):
         "attack_stat_multiplier",
         custom_roll.get("multiplier", 1),
     )
-    stat_flat = data.get(
-        "attack_stat_flat",
+    attack_roll_bonus = data.get(
+        "attack_roll_bonus",
         custom_roll.get("flat", 0),
     )
     situational_bonus = (
         stat_value * (stat_multiplier - 1)
-        + stat_flat
-        + data.get("attack_roll_bonus", 0)
+        + attack_roll_bonus
     )
     for_offset = context.get("for_offset", False)
     skill_id = data.get("skill_id", getattr(skill, "skill_id", None))
@@ -1039,7 +1039,7 @@ def build_attack_profile_from_effect(effect, skill, target=None, **context):
         damage_type=damage_type,
         attack_roll=None if roll_result is None else roll_result.total,
         attack_die=None if roll_result is None else roll_result.die,
-        attack_roll_bonus=data.get("attack_roll_bonus", 0),
+        attack_roll_bonus=attack_roll_bonus,
         skill=skill,
         percentage_modifiers=(
             list(data.get("percentage_modifiers", [])) + percentages
@@ -1411,6 +1411,7 @@ EFFECT_HANDLERS = {
     "add_action": resolve_add_action_effect,
     "add_content": resolve_add_content_effect,
     "add_simple_round": resolve_add_simple_round_effect,
+    "add_fixed_simple_round": resolve_add_simple_round_effect,
     "add_resource": resolve_add_resource_effect,
     "add_skill": resolve_skill_mutation_effect,
     "add_status": apply_modifier_effect,
@@ -1963,8 +1964,6 @@ def execute_skill_mutation_transaction(
     definitions = []
     for effect in additions:
         data = effect["effect_data"]
-        if data.get("collection", "personal_skills") != "personal_skills":
-            raise ValueError("add_skill当前只允许加入personal_skills")
         if data.get("duplicate_policy", "reject") != "reject":
             raise ValueError("add_skill当前只支持duplicate_policy=reject")
         definition = _definition_from_add_skill_effect(effect)
@@ -1986,6 +1985,10 @@ def execute_skill_mutation_transaction(
     new_skills = []
     for definition, effect in definitions:
         new_skill = _instantiate_personal_skill(definition)
+        new_skill.is_hidden_trump = (
+            definition["skill_id"]
+            == getattr(character, "hidden_trump_id", None)
+        )
         new_skill.dynamic = True
         new_skill.granted_by = source_skill
         new_skill.remove_with_source = bool(
@@ -2043,6 +2046,10 @@ def _create_defined_skill(
         )
 
     skill = _instantiate_personal_skill(definition)
+    skill.is_hidden_trump = (
+        definition["skill_id"]
+        == getattr(character, "hidden_trump_id", None)
+    )
     skill.source_type = source_type
     collection.append(skill)
     _apply_passive_skill_components(character, skill)
@@ -2113,19 +2120,12 @@ def _effect_is_usable(effect, target, actor=None, source_skill=None):
         permanent = getattr(target, "permanently_gained_content", set())
         return key not in permanent and canonical_key not in permanent
     if effect.get("effect_type") == "create_field":
-        data = effect.get("effect_data", {})
-        return bool(
-            actor is not None
-            and actor.position is not None
-            and data.get("field_id")
-        )
+        return actor is not None and actor.position is not None
     if effect.get("effect_type") == "deploy_reality_marble":
-        data = effect.get("effect_data", {})
         game_manager = getattr(actor, "game_manager", None)
         return bool(
             actor is not None
             and actor.position is not None
-            and data.get("reality_marble_id", data.get("field_id"))
             and game_manager is not None
             and game_manager.active_reality_marble is None
             and not getattr(
@@ -2146,7 +2146,7 @@ def _effect_is_usable(effect, target, actor=None, source_skill=None):
         ):
             return False
         objects = {"actor": actor or target, "target": target}
-        subject = objects.get(data.get("subject", "target"))
+        subject = objects["actor"] if data.get("move_actor", False) else target
         anchor = objects.get(data.get("anchor"))
         battle = getattr(subject, "current_battle", None)
         if (
@@ -2832,6 +2832,10 @@ def create_noble_phantasm(character, definition):
         skill_id=definition["skill_id"],
         casting=casting,
         description=definition.get("description"),
+    )
+    skill.is_hidden_trump = (
+        definition["skill_id"]
+        == getattr(character, "hidden_trump_id", None)
     )
     skill.source_type = "noble_phantasm"
     skill.noble_classification = definition.get("noble_classification")

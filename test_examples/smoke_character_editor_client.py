@@ -189,7 +189,7 @@ class CharacterEditorSmokeTests(unittest.TestCase):
             self.assertEqual({skill.skill_id for skill in actor.magic_skill},
                              {"basic_magic:healing", "basic_magic:workshop", "basic_magic:familiar"})
 
-    def test_compact_rank_boxes_hidden_command_spells_and_kind_specific_placeholders(self):
+    def test_compact_rank_boxes_hidden_command_spells_and_master_placeholder(self):
         form = self.new()
         for box in [*form.attribute_boxes.values(), form.rank_box]:
             self.assertEqual(box.cget("width"), 7)
@@ -201,6 +201,7 @@ class CharacterEditorSmokeTests(unittest.TestCase):
             self.assertEqual(grade.cget("values"), ("E", "D", "C", "B", "A"))
             self.assertEqual(tuple(map(str, plus.cget("values"))), ("0", "1", "2"))
         self.assertEqual(form.placeholder.cget("text"), "礼装（预留）")
+        self.assertIsNone(form.nobles)
         data = form.read()
         data["command_spell"] = 2
         self.app.load(data["card_id"], data)
@@ -209,8 +210,48 @@ class CharacterEditorSmokeTests(unittest.TestCase):
         self.assertIs(self.app.new_button.master.master, self.app.tree.master.master)
         with patch.object(self.app, "leave", return_value=True):
             servant = self.new("servant", "Saber")
-        self.assertEqual(servant.placeholder.cget("text"), "宝具（预留）")
+        self.assertEqual(servant.nobles.title_text, "宝具")
         self.assertIsNone(servant.basic)
+
+    def test_servant_selects_library_nobles_with_dynamic_limit_and_saves(self):
+        form = self.new("servant", "Saber")
+        ids = ["servant_test_0:golden_theatre", "servant_test_0:original_fire"]
+        inherited = "user_noble_inherits_rank"
+        project = CatalogProject(self.path)
+        definition = deepcopy(project.effective()["noble_phantasm"][ids[0]])
+        definition.update(skill_id=inherited, name="测试继承等级的宝具")
+        definition.pop("rank")
+        project.put("noble_phantasm", inherited, definition)
+        project.save()
+
+        for key in ids:
+            form.nobles.rows[key]["button"].invoke()
+        self.assertTrue(self.app.reload_library())
+        self.assertEqual(form.nobles.read(), ids)
+        self.assertTrue(form.nobles.rows[inherited]["button"].instate(["disabled"]))
+        form.nobles.search.set("测试继承")
+        self.assertEqual(form.nobles.rows[inherited]["frame"].winfo_manager(), "pack")
+        self.assertEqual(form.nobles.rows[ids[0]]["frame"].winfo_manager(), "")
+
+        form.rank.set("A+")
+        form.nobles.rows[inherited]["button"].invoke()
+        ids.append(inherited)
+        self.assertEqual(form.nobles.read(), ids)
+        form.trump.set(form._trump_label_by_id[inherited])
+        form.rank.set("A")
+        with self.assertRaisesRegex(ValueError, "宝具至多选择2件"):
+            form.read()
+        self.assertEqual(form.nobles.read(), ids)
+        form.rank.set("A+")
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.form.read()["noble_phantasms"], ids)
+        self.assertEqual(self.app.form.read()["hidden_trump"], inherited)
+        with self.app.project.activate():
+            actor = create_character_from_card("saber_10")
+        self.assertEqual([skill.skill_id for skill in actor.noble_phantasms], ids)
+        self.assertEqual(actor.noble_phantasms[-1].rank_name, "A")
+        self.app.form.nobles.rows[inherited]["button"].invoke()
+        self.assertNotIn("hidden_trump", self.app.form.read())
 
     def test_basic_magic_library_refresh_keeps_selection_and_incomplete_attributes(self):
         form = self.new()
@@ -238,6 +279,25 @@ class CharacterEditorSmokeTests(unittest.TestCase):
         self.assertFalse(self.app.save())
         rows[3]["selected"].set(False)
         self.assertTrue(self.app.save())
+
+    def test_hidden_trump_selector_uses_one_selected_non_ex_skill(self):
+        form = self.new()
+        skill_id = next(
+            key for key, definition in self.app.project.effective()["personal_skill"].items()
+            if definition.get("rank") != "EX"
+        )
+        form.personal.rows[skill_id]["button"].invoke()
+        self.assertIn(skill_id, form._trump_label_by_id)
+        form.trump.set(form._trump_label_by_id[skill_id])
+
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.form.read()["hidden_trump"], skill_id)
+        with self.app.project.activate():
+            actor = create_character_from_card("master10")
+        self.assertEqual(actor.hidden_trump_id, skill_id)
+        self.assertTrue(next(
+            skill for skill in actor.personal_skills if skill.content_catalog_id == skill_id
+        ).is_hidden_trump)
 
     def test_new_dialog_requires_class_for_servant_and_never_asks_for_id(self):
         dialog = NewCardDialog(self.root)

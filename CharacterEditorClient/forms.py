@@ -8,7 +8,7 @@ from CharacterEditorClient.model import (
     ATTRIBUTE_NAMES, ATTRIBUTE_RANKS, FIXED_RANK_CHOICES, class_ranks,
     display_attribute, display_fixed_rank, parse_attribute, parse_fixed_rank, validate_editor_card,
 )
-from game.character.card_factory import ALIGNMENT_CHOICES, GENDER_CHOICES
+from game.character.card_factory import ALIGNMENT_CHOICES, GENDER_CHOICES, initial_noble_limit
 from SkillEditorClient.widgets import Collapsible, UNIT_FONT, configure_unit_style, entry_row, request_layout
 
 
@@ -20,6 +20,7 @@ class LibrarySelection(Collapsible):
     def __init__(self, parent, title, catalog, selected, maximum, *, ranked=False):
         super().__init__(parent, title)
         self.title_text, self.maximum, self.ranked = title, maximum, ranked
+        self.on_change = None
         self.rows, self.order = {}, []
         self.search = tk.StringVar(self)
         ttk.Entry(self.body, textvariable=self.search).pack(fill="x", pady=4)
@@ -46,7 +47,8 @@ class LibrarySelection(Collapsible):
             checked = tk.BooleanVar(self, value=key in state)
             text = f"{definition.get('name', key)} [{key}]" if definition else f"{key}（已不在技能库）"
             if not self.ranked and definition:
-                text += f"  Rank {definition.get('rank', '')}"
+                rank = definition.get("rank")
+                text += f"  Rank {rank}" if rank else "  随角色宝具等级"
             button = ttk.Checkbutton(row, text=text, variable=checked, command=lambda key=key: self.changed(key))
             button.pack(side="left", fill="x", expand=True)
             ranks = class_ranks(definition) if definition and self.ranked else ()
@@ -65,6 +67,8 @@ class LibrarySelection(Collapsible):
         if self.rows[key]["selected"].get() and key not in self.order:
             self.order.append(key)
         self.update_limits()
+        if self.on_change is not None:
+            self.on_change()
 
     def update_limits(self):
         count = sum(row["selected"].get() for row in self.rows.values())
@@ -142,10 +146,40 @@ class CharacterForm(ttk.Frame):
             self.classes.pack(fill="x", pady=5)
         self.personal = LibrarySelection(self, "固有技能", catalogs["personal_skill"], definition.get("personal_skills", []), 3)
         self.personal.pack(fill="x", pady=5)
-        title = "礼装" if kind == "master" else "宝具"
-        self.placeholder = ttk.LabelFrame(self, text=f"{title}（预留）", padding=9)
-        self.placeholder.pack(fill="x", pady=6)
-        ttk.Label(self.placeholder, text=f"暂未开放{title}选择。").pack(anchor="w")
+        self.nobles = None
+        if kind == "servant":
+            self.nobles = LibrarySelection(self, "宝具", catalogs["noble_phantasm"],
+                                           definition.get("noble_phantasms", []), initial_noble_limit(definition["noble"]))
+            self.nobles.pack(fill="x", pady=5)
+        self.trump = tk.StringVar(self, value=UNSET)
+        trump_row = ttk.Frame(self)
+        trump_row.pack(fill="x", pady=5)
+        ttk.Label(trump_row, text="底力技").pack(side="left")
+        self.trump_box = ttk.Combobox(
+            trump_row, textvariable=self.trump, state="readonly", width=52,
+        )
+        self.trump_box.pack(side="left", padx=(12, 0), fill="x", expand=True)
+        self.trump_box.bind("<MouseWheel>", lambda _event: "break")
+        self._trump_by_label = {}
+        self._trump_label_by_id = {}
+        self.refresh_trump_choices(definition.get("hidden_trump"))
+        self.personal.on_change = self.refresh_trump_choices
+        if self.nobles is None:
+            self.placeholder = ttk.LabelFrame(self, text="礼装（预留）", padding=9)
+            self.placeholder.pack(fill="x", pady=6)
+            ttk.Label(self.placeholder, text="暂未开放礼装选择。").pack(anchor="w")
+        else:
+            self.nobles.on_change = self.refresh_trump_choices
+            self.rank.trace_add("write", self.noble_rank_changed)
+
+    def noble_rank_changed(self, *_):
+        try:
+            rank = parse_fixed_rank(self.rank.get(), allow_plus=True)
+        except ValueError:
+            return
+        self.nobles.maximum = initial_noble_limit(rank)
+        self.nobles.update_limits()
+        self.refresh_trump_choices()
 
     @staticmethod
     def rank_row(parent, label, value, choices, *, editable=True):
@@ -170,6 +204,41 @@ class CharacterForm(ttk.Frame):
         if self.basic is not None:
             self.basic.rebuild(catalogs["basic_magic"])
         self.personal.rebuild(catalogs["personal_skill"])
+        if self.nobles is not None:
+            self.nobles.rebuild(catalogs["noble_phantasm"])
+        self.refresh_trump_choices()
+
+    def refresh_trump_choices(self, preferred_id=None):
+        if preferred_id is None:
+            preferred_id = self._trump_by_label.get(self.trump.get())
+        candidate_ids = list(self.personal.read())
+        if self.nobles is not None:
+            candidate_ids.extend(self.nobles.read())
+        legacy_trump = (preferred_id == self.original.get("hidden_trump")
+                        and preferred_id not in self.original.get("noble_phantasms", []))
+        if preferred_id and (preferred_id not in self.catalogs["noble_phantasm"] or legacy_trump):
+            candidate_ids.append(preferred_id)
+        by_label = {}
+        label_by_id = {}
+        for content_id in dict.fromkeys(candidate_ids):
+            definition = self.catalogs["personal_skill"].get(content_id)
+            category = "personal_skill"
+            if definition is None and self.nobles is not None:
+                definition = self.catalogs["noble_phantasm"].get(content_id)
+                category = "noble_phantasm"
+            if definition is None:
+                continue
+            rank = definition.get("rank", self.rank.get().strip().removesuffix("+"))
+            if rank == "EX":
+                continue
+            kind_label = "技能" if category == "personal_skill" else "宝具"
+            label = f"{kind_label}：{definition.get('name', content_id)} [{content_id}]"
+            by_label[label] = content_id
+            label_by_id[content_id] = label
+        self._trump_by_label = by_label
+        self._trump_label_by_id = label_by_id
+        self.trump_box.configure(values=(UNSET, *by_label))
+        self.trump.set(label_by_id.get(preferred_id, UNSET))
 
     def read(self):
         data = deepcopy(self.original)
@@ -201,6 +270,13 @@ class CharacterForm(ttk.Frame):
         if self.basic is not None:
             data["basic_magics"] = self.basic.read()
         data["personal_skills"] = self.personal.read()
+        if self.nobles is not None:
+            data["noble_phantasms"] = self.nobles.read()
+        hidden_trump = self._trump_by_label.get(self.trump.get())
+        if hidden_trump is None:
+            data.pop("hidden_trump", None)
+        else:
+            data["hidden_trump"] = hidden_trump
         return validate_editor_card(data, self.catalogs)
 
     def snapshot(self):
@@ -208,4 +284,6 @@ class CharacterForm(ttk.Frame):
                 tuple(variable.get() for variable in self.attribute_pluses.values()),
                 self.gender.get(), tuple(variable.get() for variable in self.alignment.values()),
                 self.classes.snapshot() if self.classes is not None else None,
-                self.basic.snapshot() if self.basic is not None else None, self.personal.snapshot())
+                self.basic.snapshot() if self.basic is not None else None, self.personal.snapshot(),
+                self.nobles.snapshot() if self.nobles is not None else None,
+                self.trump.get())

@@ -63,6 +63,44 @@ class FieldSkillTests(unittest.TestCase):
         self.game = GameManager([self.first, self.second], self.ground)
         self.game.start_game()
 
+    def test_field_ids_are_generated_for_each_creation_when_omitted(self):
+        definition = field_skill_definition("auto_field_skill", "auto field", field_type="territory")
+        component = definition["components"][0]
+        data = component["effects"][0]["effect_data"]
+        data.pop("field_id")
+        data.pop("name")
+        data["exclusive_center"] = False
+        component["effects"].append({"effect_type": "create_field", "effect_data": {}})
+        skill = self.first.create_personal_skill(definition)
+        result = self.first.resolve_skill_component(skill.skill_id, "deploy")
+        fields = [entry["field"] for entry in result["results"]]
+        self.assertTrue(all(entry["created"] for entry in result["results"]))
+        self.assertEqual([field.field_id for field in fields], [
+            "auto:auto_field_skill:deploy:1", "auto:auto_field_skill:deploy:2",
+        ])
+        self.assertEqual([field.field_type for field in fields], ["territory", "bounded_field"])
+        self.assertEqual(fields[0].name, skill.name)
+
+    def test_replacement_key_is_stable_per_effect_for_the_same_owner(self):
+        definition = field_skill_definition("rebuild_skill", "first")
+        component = definition["components"][0]
+        component["cost"] = []
+        data = component["effects"][0]["effect_data"]
+        data.update(exclusive_center=False, replace_previous=True)
+        component["effects"].append({"effect_type": "create_field", "effect_data": {
+            **data, "field_id": "second",
+        }})
+        self.first.create_personal_skill(definition)
+        self.first.resolve_skill_component("rebuild_skill", "deploy")
+        original = list(self.game.field_manager.fields)
+        self.assertEqual(len({field.owner_unique_key for field in original}), 2)
+        self.first.position = self.other
+        self.first.resolve_skill_component("rebuild_skill", "deploy")
+        replacements = self.game.field_manager.fields
+        self.assertEqual(len(replacements), 2)
+        self.assertTrue(all(field.removed for field in original))
+        self.assertTrue(all(field.center is self.other for field in replacements))
+
     def test_territory_covers_and_reserves_ground_and_upper_level(self):
         skill = self.first.create_personal_skill(field_skill_definition(
             "territory_skill",

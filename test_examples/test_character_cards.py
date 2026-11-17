@@ -129,6 +129,38 @@ class CharacterCardTests(unittest.TestCase):
         self.assertEqual(other.tags, {"混沌", "恶", "divine"})
         self.assertEqual(actor.tags, tags)
 
+    def test_hidden_trump_is_an_informational_non_ex_skill_flag(self):
+        self.card["hidden_trump"] = "fixture:passive"
+        actor = create_character_from_card(self.card["card_id"])
+        skill = actor.personal_skills[0]
+
+        self.assertEqual(actor.hidden_trump_id, "fixture:passive")
+        self.assertTrue(skill.is_hidden_trump)
+        self.assertFalse(actor.noble_phantasms[0].is_hidden_trump)
+
+        self.card["hidden_trump"] = "fixture:blade"
+        actor = create_character_from_card(self.card["card_id"])
+        self.assertTrue(actor.noble_phantasms[0].is_hidden_trump)
+
+    def test_hidden_trump_rejects_ex_unknown_and_multiple_values(self):
+        ex_skill = {
+            **CONTENT_CATALOGS["personal_skill"]["fixture:passive"],
+            "skill_id": "fixture:ex_skill",
+            "rank": "EX",
+        }
+        with patch.dict(CONTENT_CATALOGS["personal_skill"], {
+            "fixture:ex_skill": ex_skill,
+        }):
+            for value, message in (
+                ("fixture:ex_skill", "EX级"),
+                ("missing", "固有技能或宝具"),
+                (["fixture:passive", "fixture:blade"], "非空字符串"),
+            ):
+                with self.subTest(value=value), self.assertRaisesRegex(ValueError, message):
+                    validate_character_card_definition({
+                        **self.card,
+                        "hidden_trump": value,
+                    })
     def test_invalid_identity_choices_are_rejected(self):
         for fields in ({"gender": "善"}, {"alignment": {"order": "中庸"}},
                        {"alignment": {"morality": "中立"}}, {"alignment": "秩序·善"}):

@@ -930,7 +930,7 @@ class TurnManager:
 
             for actor, target in encounter.get_ambush_pairs():
                 effect = {
-                    "effect_type": "add_simple_round",
+                    "effect_type": "add_fixed_simple_round",
                     "effect_data": {
                         "trigger_phase": "battle_start",
                         "attack_roll_bonus": 5,
@@ -1009,7 +1009,7 @@ class TurnManager:
             for request in requests:
                 if request.is_ambush:
                     effect = {
-                        "effect_type": "add_simple_round",
+                        "effect_type": "add_fixed_simple_round",
                         "effect_data": {
                             "trigger_phase": "battle_start",
                             "attack_roll_bonus": 5,

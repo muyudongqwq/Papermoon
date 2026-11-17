@@ -137,8 +137,9 @@ def assess_character_points(card, catalogs):
         if _rank_and_plus(definition.get("rank"))[0] == "GM":
             gm_override = True
 
+    noble_rank, _ = _rank_and_plus(card.get("noble"))
     for definition in _selected_definitions(card, catalogs, "noble_phantasm", "noble_phantasms"):
-        rank = _rank_and_plus(definition.get("rank"))[0]
+        rank = definition.get("rank", noble_rank)
         if rank != "GM":
             points += _rank_points(rank, NOBLE_PHANTASM_COSTS, f"宝具{definition.get('name', '')}")
             points += definition.get("rank_plus", 0) * PLUS_COST

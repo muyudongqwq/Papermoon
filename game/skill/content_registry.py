@@ -102,10 +102,16 @@ def load_content(character, content_type, entry_id):
     if content_type == "personal_skill":
         loaded = create_personal_skill(character, definition)
         loaded.content_catalog_id = entry_id
+        loaded.is_hidden_trump = (
+            entry_id == getattr(character, "hidden_trump_id", None)
+        )
         return loaded
     if content_type == "noble_phantasm":
         loaded = create_noble_phantasm(character, definition)
         loaded.content_catalog_id = entry_id
+        loaded.is_hidden_trump = (
+            entry_id == getattr(character, "hidden_trump_id", None)
+        )
         return loaded
     raise ValueError(f"未知的内容类型：{content_type}")
 

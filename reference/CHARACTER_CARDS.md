@@ -75,6 +75,7 @@ assert len(servant.noble_phantasms) == 3
 | `tags` | 手动添加的角色标签列表，如 `["divine"]` |
 | `gender` | `"男"`、`"女"` 或 `"其他"` |
 | `alignment` | 阵营的两个可选轴，例如 `{"order": "秩序", "morality": "善"}` |
+| `hidden_trump` | 可选的底力技内容ID；只能引用一个非EX固有技能或宝具 |
 | `class_skills` | `[{"name": "对魔力", "rank": "B"}]`，引用职介技能库 |
 | `personal_skills` | 固有技能目录ID列表 |
 | `basic_magics` | 基础魔术目录ID列表，如 `["healing", "workshop"]` |
@@ -85,6 +86,11 @@ assert len(servant.noble_phantasms) == 3
 `女`、`秩序`、`善`，可由技能的 `character_matches.tags` 匹配。
 「其他」与未设置的选项不生成标签。自动标签和手动填写的 `tags` 一并使用，
 重新创建时从当前选择生成。
+
+`hidden_trump`只是角色卡上的隐藏情报标记。它不会改变技能或宝具的伤害、消耗、
+触发条件及其他战斗效果；真名揭露时是否向对方隐去该内容由GM处理。角色编辑器的
+“底力技”下拉框只列出当前卡可选择的非EX固有技能和宝具，并且只能选择一项。
+运行时对应内容带有`is_hidden_trump=True`，供GM界面识别，不会触发自动公开逻辑。
 
 使用Core内容项目时，`class_skills`也可引用Skill Editor创建的自定义职介技能。
 职介目录按名称组织，每个条目的`ranks`保存各等级组件；卡片通过上述name、rank

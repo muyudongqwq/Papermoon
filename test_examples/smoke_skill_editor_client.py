@@ -575,7 +575,7 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 editor = EffectDataEditor(self.root, kind, {}, self.app.project.effective())
                 try:
-                    self.assertEqual(list(editor.rows), list(parameter_options(kind)))
+                    self.assertEqual(list(editor.rows), list(parameter_options(kind, include_advanced=False)))
                     for key in schema.required_data:
                         self.assertIn("*", editor.rows[key].label.cget("text"))
                     self.assertEqual(json.loads(editor.get()), {})
@@ -586,6 +586,112 @@ class SkillEditorClientSmokeTests(unittest.TestCase):
                     self.assertEqual(editor.input_hint.cget("text"), "文本直接填写，数值填写数字。嵌套对象和列表可在效果参数高级设置中填写")
                 finally:
                     editor.destroy()
+
+    def test_effect_booleans_use_grid_and_keep_untouched_engine_defaults(self):
+        from SkillEditorClient.effect_editor import EffectDataEditor
+
+        editor = EffectDataEditor(self.root, "create_field", {})
+        self.addCleanup(editor.destroy)
+        exclusive = editor.rows["exclusive_center"]
+        apply_once = editor.rows["apply_once"]
+        self.assertIsInstance(exclusive.input, ttk.Checkbutton)
+        self.assertEqual(exclusive.grid_info()["row"], apply_once.grid_info()["row"])
+        self.assertNotEqual(exclusive.grid_info()["column"], apply_once.grid_info()["column"])
+        self.assertTrue(exclusive.checked.get())
+        self.assertEqual(editor.read_form(), {})
+        exclusive.input.invoke()
+        self.assertEqual(editor.read_form(), {"exclusive_center": False})
+        editor.show_json()
+        editor.show_form()
+        self.assertFalse(editor.rows["exclusive_center"].checked.get())
+
+    def test_initial_die_has_an_optional_checkbox_and_validates_the_face(self):
+        from SkillEditorClient.effect_editor import EffectDataEditor
+
+        editor = EffectDataEditor(self.root, "create_attack_event", {})
+        self.addCleanup(editor.destroy)
+        row = editor.rows["initial_die"]
+        self.assertEqual(row.die_toggle.cget("text"), "固定骰面")
+        self.assertFalse(row.die_enabled.get())
+        self.assertEqual(row.die_area.winfo_manager(), "")
+        self.assertEqual(editor.read_form(), {})
+        row.die_toggle.invoke()
+        self.assertEqual(row.die_area.winfo_manager(), "pack")
+        for invalid in ("", "0", "11", "5.5", "true"):
+            row.value.set(invalid)
+            with self.assertRaisesRegex(ValueError, "固定骰面"):
+                editor.read_form()
+        row.value.set("7")
+        editor.show_json()
+        self.assertEqual(json.loads(editor.get()), {"initial_die": 7})
+        editor.show_form()
+        row = editor.rows["initial_die"]
+        self.assertTrue(row.die_enabled.get())
+        row.die_toggle.invoke()
+        self.assertEqual(editor.read_form(), {})
+        row.die_toggle.invoke()
+        self.assertEqual(editor.read_form(), {"initial_die": 7})
+
+    def test_create_field_form_shows_type_and_keeps_manual_ids_in_advanced_json(self):
+        from SkillEditorClient.effect_editor import EffectDataEditor
+
+        editor = EffectDataEditor(self.root, "create_field", {})
+        self.addCleanup(editor.destroy)
+        self.assertNotIn("field_id", editor.rows)
+        self.assertIn("场地类型", editor.rows["field_type"].label.cget("text"))
+        self.assertIn("workshop", editor.rows["field_type"].input.cget("values"))
+        self.set_json(editor, {"field_id": "existing_field", "field_type": "workshop"})
+        editor.show_form()
+        self.assertEqual(editor.rows["field_id"].winfo_manager(), "")
+        self.assertEqual(editor.read_form(), {"field_id": "existing_field", "field_type": "workshop"})
+
+    def test_confirmed_labels_omit_english_and_new_switches_use_defaults(self):
+        from SkillEditorClient.effect_editor import EffectDataEditor
+
+        editor = EffectDataEditor(self.root, "order_change", {})
+        self.addCleanup(editor.destroy)
+        self.assertEqual(editor.rows["anchor"].label.cget("text"), "顺序参照角色")
+        self.assertNotIn("subject", editor.rows)
+        self.assertFalse(editor.rows["move_actor"].checked.get())
+        editor.rows["move_actor"].input.invoke()
+        self.assertTrue(editor.read_form()["move_actor"])
+        editor.set_effect_type("create_field")
+        self.assertNotIn("owner_unique_key", editor.rows)
+        self.assertFalse(editor.rows["replace_previous"].checked.get())
+
+    def test_controlling_booleans_show_nested_parameters_and_keep_drafts(self):
+        from SkillEditorClient.effect_editor import EffectDataEditor
+
+        penalty = {"value": 60, "damage_type": "magic"}
+        editor = EffectDataEditor(self.root, "create_field", {"battle_bound": True, "exit_penalty": penalty})
+        self.addCleanup(editor.destroy)
+        controller = editor.rows["battle_bound"]
+        dependent = editor.rows["exit_penalty"]
+        self.assertEqual(controller.winfo_manager(), "pack")
+        self.assertEqual(dependent.pack_info()["in"], editor.dependent_boxes["battle_bound"])
+        controller.input.invoke()
+        self.assertEqual(dependent.winfo_manager(), "")
+        self.assertEqual(editor.read_form(), {"battle_bound": False})
+        controller.input.invoke()
+        self.assertEqual(editor.read_form(), {"battle_bound": True, "exit_penalty": penalty})
+
+        editor.set_effect_type("hidden")
+        self.assertEqual(editor.rows["rejoin_on_expire"].winfo_manager(), "")
+        editor.rows["withdraw_from_battle"].input.invoke()
+        self.assertTrue(editor.rows["rejoin_on_expire"].checked.get())
+        self.assertNotIn("rejoin_on_expire", editor.read_form())
+
+        editor.set_effect_type("add_content")
+        permanent = editor.rows["permanent"]
+        remove_with_source = editor.rows["remove_with_source"]
+        self.assertTrue(permanent.checked.get())
+        self.assertEqual(remove_with_source.winfo_manager(), "")
+        permanent.input.invoke()
+        remove_with_source.input.invoke()
+        self.assertTrue(editor.read_form()["remove_with_source"])
+        permanent.input.invoke()
+        self.assertEqual(remove_with_source.winfo_manager(), "")
+        self.assertNotIn("remove_with_source", editor.read_form())
 
     def test_optional_blanks_are_omitted_but_zero_false_and_empty_lists_are_saved(self):
         component = self.new().components[0]

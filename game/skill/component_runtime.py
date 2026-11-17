@@ -161,6 +161,11 @@ def record_component_use(
                 skill.cooldown_group_ready_turns = ready
             ready[group] = state.cooldown_ready_turn
     state.last_used_turn = turn_number
+    if (usage and usage.get("remove_skill_when_exhausted", False)
+            and skill in getattr(actor, "personal_skills", ())
+            and component_use_count(actor, skill, component, turn_number=turn_number, battle=current_battle) >= usage["maximum"]):
+        from game.skill.skill_runtime import remove_personal_skill
+        remove_personal_skill(actor, skill, reason="usage_exhausted")
     return state
 
 

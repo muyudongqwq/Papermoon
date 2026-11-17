@@ -110,6 +110,14 @@ class RealityMarbleTests(unittest.TestCase):
         self.assertIn(marble.interior, self.owner.seen_locations)
         self.assertEqual(self.owner.visibility, 1)
 
+    def test_reality_marble_can_use_an_automatic_id(self):
+        data = self.skill.definitions[0]["effects"][0]["effect_data"]
+        data.pop("reality_marble_id")
+        data["interior"].pop("location_name")
+        marble = self.deploy()
+        self.assertEqual(marble.reality_marble_id, "auto:test_reality_marble_skill:deploy:1")
+        self.assertEqual(marble.interior.name, "测试固有结界内部")
+
     def test_owner_leaving_immediately_collapses_and_returns_occupants(self):
         marble = self.deploy()
         self.owner.position = self.outside

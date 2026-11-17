@@ -45,7 +45,7 @@ def setup_simple_round(*helpers):
 
     effect = battle.add_effect(
         {
-            "effect_type": "add_simple_round",
+            "effect_type": "add_fixed_simple_round",
             "effect_data": {
                 "trigger_phase": "battle_start",
                 "damage_value": 10,
@@ -309,10 +309,9 @@ class MultiDefenderSimpleRoundTests(unittest.TestCase):
         battle.start_battle()
         effect = battle.add_effect(
             {
-                "effect_type": "add_simple_round",
+                "effect_type": "add_fixed_simple_round",
                 "effect_data": {
                     "trigger_phase": "battle_start",
-                    "attack_mode": "fixed",
                     "damage_value": 10,
                 },
             },
@@ -375,7 +374,6 @@ class MultiDefenderSimpleRoundTests(unittest.TestCase):
                 "effect_type": "add_simple_round",
                 "effect_data": {
                     "trigger_phase": "battle_start",
-                    "attack_mode": "select",
                 },
             },
             actor,

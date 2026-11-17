@@ -14,6 +14,7 @@ from game.character.card_data import CHARACTER_CARD_DATA
 from game.character.card_factory import validate_character_card_catalog
 from game.skill.content_registry import CONTENT_CATALOGS, validate_content_catalogs
 from game.skill.class_skill_data import CLASS_SKILL_DATA
+from game.skill.legacy_effects import migrate_legacy_effects
 from game.rank.rank import SkillRank
 from game.status.data import STATUS_DATA
 
@@ -125,6 +126,7 @@ def validate_catalog_bundle(catalogs):
     if any(not isinstance(catalogs[key], dict) for key in CATEGORIES):
         raise ValueError("内容库快照中的每类目录都必须是对象")
     detached = deepcopy(catalogs)
+    migrate_legacy_effects(detached)
     json.dumps(detached, ensure_ascii=False, allow_nan=False)
     with _installed(detached):
         validate_content_catalogs()
@@ -145,6 +147,7 @@ class CatalogProject:
         self.path = Path(path).resolve()
         self._saved_bytes = self.path.read_bytes() if self.path.exists() else None
         self.data = empty_project() if self._saved_bytes is None else parse_json(self._saved_bytes.decode("utf-8-sig"))
+        migrate_legacy_effects(self.data)
         self.validate()
 
     def effective(self):

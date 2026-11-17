@@ -3,6 +3,7 @@ import unittest
 from game.character.servants import Servant
 from game.map.map import Location
 from game.skill.effect_validation import validate_effect_definition
+from game.skill.legacy_effects import migrate_legacy_effects
 from game.turn.battle import BattleManager
 from game.turn.decision import ScriptedDecisionProvider
 
@@ -21,7 +22,7 @@ def add_simple_round_skill(actor, effect_data):
             "type": "active",
             "target": "selectable_character",
             "effects": [{
-                "effect_type": "add_simple_round",
+                "effect_type": "add_fixed_simple_round",
                 "effect_data": effect_data,
             }],
         }],
@@ -29,12 +30,28 @@ def add_simple_round_skill(actor, effect_data):
 
 
 class AddSimpleRoundValidationTests(unittest.TestCase):
+    def test_legacy_round_and_survival_parameters_are_migrated(self):
+        round_effect = {"effect_type": "add_simple_round", "effect_data": {
+            "attack_mode": "fixed", "damage_multiplier": 1.2, "damage_flat": 3,
+            "damage_percentage_modifiers": [-0.1], "damage_flat_modifiers": [2],
+        }}
+        survival_effect = {"effect_type": "prevent_death", "effect_data": {
+            "remove_skill_when_exhausted": True,
+        }}
+        component = {"component_id": "one", "type": "react", "effects": [round_effect, survival_effect],
+                     "usage_limit": {"scope": "game", "maximum": 1}}
+        migrate_legacy_effects(component)
+        self.assertEqual(round_effect, {"effect_type": "add_fixed_simple_round", "effect_data": {
+            "multiplier": 1.2, "flat": 3, "percentage_modifiers": [-0.1], "flat_modifiers": [2],
+        }})
+        self.assertEqual(survival_effect["effect_data"], {})
+        self.assertTrue(component["usage_limit"]["remove_skill_when_exhausted"])
+
     def test_canonical_fixed_definition_is_valid(self):
         self.assertTrue(validate_effect_definition({
-            "effect_type": "add_simple_round",
+            "effect_type": "add_fixed_simple_round",
             "effect_data": {
                 "trigger_phase": "immediate",
-                "attack_mode": "fixed",
                 "damage_type": "magic",
                 "damage_value": 30,
                 "defender_rule": "all_targets",
@@ -42,11 +59,10 @@ class AddSimpleRoundValidationTests(unittest.TestCase):
         }))
 
     def test_select_mode_rejects_ignored_fixed_attack_fields(self):
-        with self.assertRaisesRegex(ValueError, "固定攻击字段"):
+        with self.assertRaisesRegex(ValueError, "damage_value"):
             validate_effect_definition({
                 "effect_type": "add_simple_round",
                 "effect_data": {
-                    "attack_mode": "select",
                     "damage_value": 30,
                 },
             })

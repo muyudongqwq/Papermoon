@@ -8,6 +8,7 @@ from game.modifier.dice_targets import DICE_TARGET_GROUPS
 from game.skill.effect_validation import EFFECT_SCHEMAS, EffectSchema
 from game.status.data import STATUS_DATA
 from game.turn.damage_types import VALID_DAMAGE_TYPES
+from SkillEditorClient.effect_translations import CONFIRMED_FIELD_NAMES
 
 
 EFFECT_NAMES = {
@@ -19,6 +20,7 @@ EFFECT_NAMES = {
     "choices": "可选发动",
     "hp_floor": "设置生命下限", "prevent_death": "死亡免疫", "add_content": "获得已入库技能",
     "add_simple_round": "追加简易战斗轮", "add_resource": "创建自定义资源",
+    "add_fixed_simple_round": "追加固定攻击轮",
     "add_action": "增加行动", "add_skill": "增加技能", "add_status": "施加状态",
     "attribute_bonus": "属性增减", "attack_bonus": "基础攻击增减", "cancel_event": "取消事件",
     "change_damage_type": "改变伤害类型", "cost_modifier": "消耗增减",
@@ -57,23 +59,23 @@ BOOLEAN_FIELDS = {
     "remove_on_position_change", "remove_on_battle_entry", "requires_building",
     "withdraw_from_battle", "rejoin_on_expire", "prevent_movement", "allow_other",
     "exclude_source", "activate_immediately", "share_knowledge", "investigation_immunity",
-    "active_hide_perception_immunity", "remove_when_revealed", "remove_skill_when_exhausted",
+    "active_hide_perception_immunity", "remove_when_revealed", "move_actor", "replace_previous",
 }
 NUMBER_FIELDS = {
     "value", "hp", "hp_floor_duration", "duration", "radius", "capture_radius", "initial_value",
-    "minimum", "maximum", "multiplier", "flat", "attack_stat_multiplier", "attack_stat_flat",
-    "attack_roll_bonus", "damage_value", "damage_multiplier", "damage_flat", "initial_die",
+    "minimum", "maximum", "multiplier", "flat", "attack_stat_multiplier",
+    "attack_roll_bonus", "damage_value", "initial_die",
     "attempts", "count", "maximum_active", "base_damage", "usage_amount", "cooldown_turns",
     "delay_turns", "distance",
 }
 STRING_FIELDS = {
     "special_attack_id",
     "match_mode",
-    "name", "resource", "subject", "anchor", "attacker_rule", "defender_rule", "trigger_target",
-    "trigger_phase", "attack_mode", "attack_stat", "damage_type", "resolution_channel",
+    "name", "resource", "anchor", "attacker_rule", "defender_rule", "trigger_target",
+    "trigger_phase", "attack_stat", "damage_type", "resolution_channel",
     "field_type", "center_rule", "duration_timing", "direction", "calculation", "value_source",
     "damage_value_source", "attribute", "damage_attribute", "effect_target", "reason", "rank",
-    "scope", "usage_scope", "collection", "skill", "content_type", "duplicate_policy",
+    "scope", "usage_scope", "skill", "content_type", "duplicate_policy",
     "placement_rule", "limit_scope", "at_limit", "name_prefix", "owner_unique_key",
     "redirect_type", "new_target",
 }
@@ -91,16 +93,41 @@ FIELD_NAMES = {
     "resolution_channel": "解放或一般攻击",
     "value": "数值", "value_source": "数值来源", "damage_type": "伤害类型",
     "damage_types": "适用伤害类型", "resource_id": "资源名称", "status_id": "状态ID",
-    "multiplier": "倍率", "flat": "额外数值",
+    "multiplier": "倍率", "flat": "基础数值加减",
+    "flat_modifiers": "伤害固定修正", "percentage_modifiers": "伤害百分比修正",
+    "move_actor": "改为移动发动者", "replace_previous": "替换自己先前用此效果创建的场地",
     "calculation": "计算方式", "direction": "生效方向", "effect_target": "调整的属性",
     "attribute": "来源属性", "ignore_shield": "忽略护盾", "ignore_block": "忽略格挡减伤",
+    "battle_bound": "绑定正式战斗", "exit_penalty": "退场惩罚", "exclusive_center": "独占中心",
+    "field_type": "场地类型",
+    "remove_on_position_change": "移动后解除隐蔽", "requires_building": "要求建筑物",
+    "withdraw_from_battle": "隐蔽时退出战斗", "rejoin_on_expire": "到期后重返战斗",
+    "remove_on_battle_entry": "进入战斗时解除隐蔽", "prevent_movement": "禁止移动",
+    "permanent": "永久生效", "remove_with_source": "随来源移除", "share_knowledge": "共享陷阱情报",
+    "target_lock": "锁定目标", "is_ambush": "视为偷袭",
+    "consume_attack_phase": "消耗攻击阶段", "enter_battle": "进入正式战斗",
     "maximum": "数量上限", "duration": "持续回合", "template_id": "召唤模板",
     "count": "数量", "damage_value": "伤害数值", "attack_stat": "攻击判定属性",
+    "attack_roll_bonus": "攻击检定加值",
+    "initial_die": "固定骰面",
     "rank": "等级", "scope": "范围", "name": "名称",
     "delay_turns": "延迟同名阶段数", "effects": "到期执行的效果列表",
     "steps": "有序防御步骤",
     "distance": "最大转移距离（格）",
 }
+FIELD_NAMES.update(CONFIRMED_FIELD_NAMES)
+
+ADVANCED_FIELDS = {
+    "create_field": {"field_id", "owner_unique_key"},
+    "deploy_reality_marble": {"reality_marble_id"},
+    "trap": {"trap_id"},
+}
+
+
+def parameter_label(field):
+    if field in CONFIRMED_FIELD_NAMES or field in {"move_actor", "replace_previous", "flat", "flat_modifiers", "percentage_modifiers"}:
+        return FIELD_NAMES[field]
+    return f"{FIELD_NAMES[field]} · {field}" if field in FIELD_NAMES else field
 
 
 @dataclass(frozen=True)
@@ -110,11 +137,14 @@ class ParameterSpec:
     choice_labels: tuple = ()
 
 
-def parameter_options(effect_type):
+def parameter_options(effect_type, *, include_advanced=True):
     schema = editor_effect_schema(effect_type)
     if schema is None:
         return ()
-    return (*sorted(schema.required_data), *sorted(schema.optional_data))
+    optional = schema.optional_data
+    if not include_advanced:
+        optional = optional - ADVANCED_FIELDS.get(effect_type, set())
+    return (*sorted(schema.required_data), *sorted(optional))
 
 
 def parameter_spec(effect_type, field, catalogs=None):
@@ -141,17 +171,17 @@ def parameter_spec(effect_type, field, catalogs=None):
         "resolution_channel": ("attack", "release"),
         "direction": ("incoming", "outgoing"),
         "field_type": ("workshop", "territory", "bounded_field"),
-        "center_rule": ("actor_position",), "subject": ("actor", "target"),
+        "center_rule": ("actor_position",),
         "anchor": ("actor", "target"), "attacker_rule": ("actor", "target"),
         "defender_rule": ("actor", "target", "all_targets"),
         "trigger_target": ("actor", "target", "first_defender"),
         "trigger_phase": ("immediate", "battle_start", "turn_start", "guard", "defense", "attack", "turn_end"),
-        "attack_mode": ("fixed", "select"), "duration_timing": ("global_turn_end",),
+        "duration_timing": ("global_turn_end",),
         "placement_rule": ("current_position", "target_position"),
         "limit_scope": ("template", "skill", "summoner"),
         "at_limit": ("reject", "replace_oldest", "select"),
         "usage_scope": ("global_turn", "battle", "game"),
-        "collection": ("personal_skills",), "skill": ("self",),
+        "skill": ("self",),
         "redirect_type": ("attack", "damage"),
         "new_target": (
             "self", "event_actor", "event_source", "event_target",

@@ -413,8 +413,9 @@ effect_data.attack_stat
     默认根据宝具类型选择physical_attack或magic_attack。
 
 effect_data.attack_stat_multiplier=1
-effect_data.attack_stat_flat=0
-effect_data.attack_roll_bonus=0
+effect_data.attack_roll_bonus
+    本次攻击的固定检定加值，属性倍率结算后加上。省略时沿用技能的
+    roll_profile.flat，两处都未填写时为0。填0会显式覆盖技能默认值。
 effect_data.damage_type
 effect_data.damage_value
 effect_data.damage_segments
@@ -574,8 +575,8 @@ effect_data.duration
 
 可选：
 
-effect_data.subject="target"
-    actor | target
+effect_data.move_actor=false
+    默认移动效果目标；true时移动技能发动者。
 
 effect_data.anchor
     move_before与move_after必填，actor | target。
@@ -597,7 +598,7 @@ effect_data.anchor
 
 effect_data常用字段：
 
-field_id               必填
+field_id               省略时由游戏生成；也可保留已有手动标识。
 name
 field_type="bounded_field"
     workshop | territory | bounded_field
@@ -607,7 +608,10 @@ include_area_levels=false
 remove_on_source_death=false
 remove_with_source=false
 exclusive_center=true
+replace_previous=false
+    是否替换同一角色先前使用此效果创建的场地。开启时自动生成固定的替换键。
 owner_unique_key
+    已有手动键可继续使用，同一角色的跨技能替换仍按键匹配。
 owner_vision
 battle_bound=false
     true时绑定创建者当前的正式战斗；没有有效战斗时不能注册。战斗结束时移除
@@ -660,7 +664,7 @@ effect_target.relation
 
 effect_data常用字段：
 
-reality_marble_id        必填
+reality_marble_id        省略时自动生成；已有手动标识可继续使用。
 name
 entrance                 默认actor.position
 capture_radius=0
@@ -830,25 +834,8 @@ effect_data.trigger_phase="immediate"
 effect_data.trigger_target="first_defender"
     actor | target | first_defender。battle_start不检查阶段所属角色。
 
-effect_data.attack_mode="fixed"
-    fixed：由下列字段直接生成一次共享攻击骰的攻击。
-    select：打开一次完整虚拟攻击阶段，由攻击方选择合法的攻击、技能、魔术或
+add_simple_round打开一次完整虚拟攻击阶段，由攻击方选择合法的攻击、技能、魔术或
     宝具；此时不得填写fixed专用字段，也不会返还已经支付的技能消耗。
-
-fixed模式可选字段：
-
-attack_stat="physical_attack"
-attack_roll_bonus=0
-damage_value
-damage_type
-damage_percentage_modifiers=[]
-damage_flat_modifiers=[]
-damage_value_source
-    actor_attribute | target_attribute。提供时必须同时填写damage_attribute。
-damage_multiplier=1
-damage_flat=0
-resolution_channel="attack"
-    attack | release。用于确保“攻击只能抵消攻击、解放只能抵消解放”。
 
 其余可选字段：
 
@@ -863,9 +850,29 @@ enter_battle=false
 is_ambush=false
     标记该简易轮为偷袭轮。偷袭的具体攻击加值仍应由attack_roll_bonus明确填写。
 
+自选行动仍执行普通攻击阶段的目标合法性检查。
+
+
+16.1 add_fixed_simple_round
+--------------------------
+
+按预设公式发动攻击，多个防守方共用攻击骰。复用上一节的参与方、阶段、
+consume_attack_phase、enter_battle和is_ambush参数。
+attack_stat="physical_attack"
+attack_roll_bonus=0
+damage_value
+damage_type
+percentage_modifiers=[]
+flat_modifiers=[]
+damage_value_source
+    actor_attribute | target_attribute。提供时必须同时填写damage_attribute。
+multiplier=1
+flat=0
+resolution_channel="attack"
+    attack | release。用于确保“攻击只能抵消攻击、解放只能抵消解放”。
+
 固定模式的目标已由技能效果选定，因此不会再次执行普通攻击指令的个人视野
-检查；目标合法性应由组件target_rules和技能本身保证。select模式仍执行普通
-攻击阶段的目标合法性检查。
+检查；目标合法性由组件的target_rules和技能本身保证。
 
 
 17. change_damage_type
@@ -948,7 +955,6 @@ game/skill/content_data.py中的PERSONAL_SKILL_DATA：
                 "rank": "C",
                 "components": [...]
             },
-            "collection": "personal_skills",
             "duplicate_policy": "reject",
             "remove_with_source": false
         }
@@ -961,8 +967,7 @@ game/skill/content_data.py中的PERSONAL_SKILL_DATA：
         "skill_id": "registered_skill_id"
     }
 
-skill_definition与skill_ref必须且只能提供一个。当前collection只接受
-personal_skills，重复skill_id严格拒绝；技能显示名称允许重复。新技能默认永久，
+skill_definition与skill_ref必须且只能提供一个。该效果只操作固有技能，重复skill_id严格拒绝；技能显示名称允许重复。新技能默认永久，
 本次事件中新加入的trigger/react不会反过来响应同一个事件。
 
 remove_with_source=true表示：授予该技能的源技能被移除时，连带移除这个子技能。
@@ -977,8 +982,7 @@ remove_with_source=true表示：授予该技能的源技能被移除时，连带
     {
         "effect_type": "remove_skill",
         "effect_data": {
-            "skill_id": "old_skill",
-            "collection": "personal_skills"
+            "skill_id": "old_skill"
         }
     }
 
@@ -1306,8 +1310,7 @@ hp=1
 hp_floor_duration
     可选正整数。额外产生hp_floor Modifier，持续指定个真实全局回合结束点。
     这一保护独立于提供技能，因此最后一次发动并移除技能后仍保留至本回合结束。
-remove_skill_when_exhausted=false
-    true时检查当前组件的usage_limit，最后一次成功使用时移除所持固有技能。
+可在技能单元的usage_limit设置remove_skill_when_exhausted=true。最后一次成功发动后移除所持固有技能。
 
 一回合HP下限允许正常回复HP，后续伤害只会降低至下限；不会重复消耗保命次数。
 被此效果截断的伤害会反映在DamageEvent.final_value及后续受伤事件中。

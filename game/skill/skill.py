@@ -8,6 +8,19 @@ from game.rank.rank import SkillRank
 VALID_SKILL_TYPES = {"active", "passive", "trigger", "react"}
 
 
+def _assign_field_replacement_keys(value, path):
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _assign_field_replacement_keys(item, f"{path}:{index}")
+    elif isinstance(value, dict):
+        if value.get("effect_type") == "create_field":
+            data = value.get("effect_data", {})
+            if data.get("replace_previous") and not data.get("owner_unique_key"):
+                data["owner_unique_key"] = f"auto-replace:{path}"
+        for key, item in value.items():
+            _assign_field_replacement_keys(item, f"{path}:{key}")
+
+
 class Skill:
     def __init__(
         self,
@@ -37,6 +50,8 @@ class Skill:
         self.remove_with_source = False
         self.dynamic = False
         self.removed = False
+        # Informational card flag only; it never changes skill resolution.
+        self.is_hidden_trump = False
         # Component lifecycles are runtime state, not card data.  Keeping the
         # expired identifiers on the skill instance lets one-shot triggers
         # survive across global turns without mutating their definitions.
@@ -53,6 +68,7 @@ class Skill:
             }]
         self.definitions = deepcopy(definitions)
         for definition in self.definitions:
+            _assign_field_replacement_keys(definition, f"{self.skill_id}:{definition.get('component_id', 'effect')}")
             if definition.get("type") not in VALID_SKILL_TYPES:
                 raise ValueError(
                     f"未知的技能类型：{definition.get('type')}"

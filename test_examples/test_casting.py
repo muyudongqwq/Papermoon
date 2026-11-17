@@ -10,7 +10,7 @@ from game.map.map import Location
 from game.resource.costs import SkillUnavailableError
 from game.skill.casting import CastingState, castable_options, noble_damage_multiplier, release_options
 from game.skill.content_registry import validate_noble_phantasm_definition
-from game.skill.skill_runtime import resolve_skill_component
+from game.skill.skill_runtime import build_attack_profile_from_effect, resolve_skill_component
 from game.turn.decision import ScriptedDecisionProvider
 from game.turn.roll import RollResolver
 
@@ -373,6 +373,7 @@ class CastingTests(unittest.TestCase):
                 "type": "custom",
                 "attribute": "fortune",
                 "multiplier": 2,
+                "flat": 3,
             },
             "components": [{
                 "component_id": "release",
@@ -397,9 +398,19 @@ class CastingTests(unittest.TestCase):
 
         self.assertEqual(
             attack.attack_roll,
-            5 + actor.fortune.value * 2 + actor.dice_bonus,
+            5 + actor.fortune.value * 2 + actor.dice_bonus + 3,
         )
         self.assertEqual(attack.value, 70)
+
+        effect = noble.definitions[0]["effects"][0]
+        for bonus in (0, 5, -2):
+            with self.subTest(bonus=bonus):
+                profile = build_attack_profile_from_effect(
+                    {**effect, "effect_data": {**effect["effect_data"], "attack_roll_bonus": bonus}},
+                    noble, actor=actor, target=target,
+                )
+                self.assertEqual(profile.attack_roll, 5 + actor.fortune.value * 2 + actor.dice_bonus + bonus)
+                self.assertEqual(profile.attack_roll_bonus, bonus)
         self.assertEqual(actor.mp, actor.mpmax - 30)
 
     def test_physical_noble_requires_card_defined_damage(self):

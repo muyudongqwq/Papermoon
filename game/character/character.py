@@ -26,6 +26,7 @@ class Character:
         self._character_id = uuid4().hex
         self.name = name
         self.true_name = name
+        self.hidden_trump_id = None
         self.gender = None
         self.alignment = {}
         self.tags = set()

@@ -303,6 +303,13 @@ class FieldManager:
     def __init__(self, game_manager):
         self.game_manager = game_manager
         self.fields = []
+        self._next_field_number = 1
+
+    def allocate_field_id(self, skill, component_id):
+        number = self._next_field_number
+        self._next_field_number += 1
+        source = getattr(skill, "skill_id", "field")
+        return f"auto:{source}:{component_id or 'effect'}:{number}"
 
     def can_register(self, field):
         if field.battle_bound and (field.bound_battle is None or field.bound_battle.ended):

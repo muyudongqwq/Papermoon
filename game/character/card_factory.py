@@ -26,6 +26,7 @@ _CONTENT_FIELDS = {
 _COMMON_FIELDS = {"card_id", "character_type", "name", "attributes"}
 _OPTIONAL_FIELDS = {
     *_CONTENT_FIELDS, "class_skills", "source", "tags", "true_name", "gender", "alignment",
+    "hidden_trump",
 }
 _TYPE_FIELDS = {"master": {"talent", "command_spell"}, "servant": {"servant_class", "noble"}}
 
@@ -75,6 +76,11 @@ def _fixed_rank(value, label, *, allow_plus):
         raise ValueError(f"{label}.plus必须是整数")
     FixedRank(rank, plus, allow_plus=allow_plus)
     return rank, plus
+
+
+def initial_noble_limit(rank):
+    _, plus = _fixed_rank(rank, "noble", allow_plus=True)
+    return 3 if plus else 2
 
 
 def validate_character_card_definition(definition):
@@ -166,10 +172,28 @@ def validate_character_card_definition(definition):
             record_skill_id(content["skill_id"])
     if kind == "master" and data["noble_phantasms"]:
         raise ValueError("御主卡不能声明初始宝具")
-    if kind == "servant":
-        _, plus = _fixed_rank(data["noble"], "noble", allow_plus=True)
-        if len(data["noble_phantasms"]) > (3 if plus else 2):
-            raise ValueError("初始宝具持有数量超过上限")
+    if kind == "servant" and len(data["noble_phantasms"]) > initial_noble_limit(data["noble"]):
+        raise ValueError("初始宝具持有数量超过上限")
+    hidden_trump = data.get("hidden_trump")
+    if hidden_trump is not None:
+        _text(hidden_trump, "hidden_trump")
+        matches = [
+            content_type
+            for content_type in ("personal_skill", "noble_phantasm")
+            if hidden_trump in CONTENT_CATALOGS[content_type]
+        ]
+        if not matches:
+            raise ValueError("底力技必须引用固有技能或宝具目录中的内容")
+        if len(matches) > 1:
+            raise ValueError("底力技ID同时存在于固有技能和宝具目录，无法确定类型")
+        content_type = matches[0]
+        if kind == "master" and content_type == "noble_phantasm":
+            raise ValueError("御主不能将宝具设为底力技")
+        content = CONTENT_CATALOGS[content_type][hidden_trump]
+        rank = content.get("rank", data.get("noble"))
+        rank = rank.get("rank") if isinstance(rank, dict) else rank
+        if rank == "EX":
+            raise ValueError("EX级技能或宝具不能设为底力技")
     return data
 
 
@@ -225,6 +249,7 @@ def create_character_from_card(card_id, *, name=None, position=None, master=None
                         noble=_fixed_rank(data["noble"], "noble", allow_plus=True))
     actor.card_id = card_id
     actor.true_name = data.get("true_name", data["name"])
+    actor.hidden_trump_id = data.get("hidden_trump")
     actor.gender = data.get("gender")
     actor.alignment = data.get("alignment", {})
     actor.tags.update(data.get("tags", []))
